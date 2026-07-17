@@ -1,0 +1,93 @@
+// 系统管理相关类型定义
+
+export interface Station {
+  id: string;
+  name: string;
+  address: string;
+  contact_phone: string | null;
+  business_hours: string | null;
+  floor_plan_url: string | null;
+  layout_config: StationLayoutConfig | null;
+  overdue_warn_days: number;
+  overdue_remind_days: number;
+  overdue_return_days: number;
+  sms_enabled: boolean;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 仓库户型 - 门口 */
+export interface LayoutDoor {
+  x: number;
+  y: number;
+  width: number;
+  label: string;
+}
+
+/** 仓库户型 - 内部尺寸 */
+export interface LayoutBounds {
+  width: number;
+  depth: number;
+}
+
+/** 仓库户型配置（含可选障碍物，供管理员后台编辑用） */
+export interface StationLayoutConfig {
+  bounds?: LayoutBounds;
+  doors?: LayoutDoor[];
+  obstacles?: Array<{
+    x: number;
+    y: number;
+    width: number;
+    depth: number;
+    height: number;
+    type: string;
+  }>;
+}
+
+export interface Staff {
+  id: string;
+  role: 'admin' | 'clerk' | 'viewer';
+  status: 'active' | 'disabled';
+  joinedAt: string;
+  userId: string;
+  phone: string;
+  email: string | null;
+  username: string;
+  avatarUrl: string | null;
+  userStatus: string | null;
+}
+
+export interface StaffWithPassword extends Staff {
+  initialPassword?: string | null;
+}
+
+export type ShelfSizeType = 'small' | 'medium' | 'large';
+
+export interface Shelf {
+  id: string;
+  number: number;
+  size_type: ShelfSizeType;
+  layers: number;
+  capacity_per_layer: number;
+  description: string | null;
+  status: 'active' | 'disabled';
+  pos_x: number | null;
+  pos_y: number | null;
+  rotation: number;
+  zone: string | null;
+  created_at: string;
+  in_stock_count: number;
+  remaining_capacity: number;
+}
+
+export interface CourierCompany {
+  id: string;
+  name: string;
+  code: string;
+  service_phone: string | null;
+  tracking_prefixes: string[] | null;
+  status: 'active' | 'disabled';
+  sort_order: number;
+  created_at: string;
+}

@@ -1,0 +1,546 @@
+import React, { useState, useEffect } from 'react';
+import * as inboundService from '@/services/inbound';
+import { useCouriers, useShelves } from '@/hooks/useDictionary';
+import type { InboundResult, ParcelSize } from '@/types/inbound';
+import type { Shelf } from '@/types/admin';
+import Icon from '@/components/ui/Icon';
+
+type Mode = 'scan' | 'manual' | 'batch';
+
+const SIZE_LABEL: Record<ParcelSize, string> = { small: '小件', medium: '中件', large: '大件' };
+const SIZE_ORDER: ParcelSize[] = ['small', 'medium', 'large'];
+
+// 入库管理页：扫码入库（主）/ 手动录入 / 批量导入（入口）
+const Inbound: React.FC = () => {
+  const [mode, setMode] = useState<Mode>('scan');
+  // 货架列表走 React Query 缓存（staleTime: Infinity），跨页面共享
+  const { data: shelves = [] } = useShelves();
+
+  return (
+    <div className="mx-auto max-w-3xl">
+      <h1 className="mb-4 text-lg font-semibold text-gray-800">入库管理</h1>
+
+      {/* 模式切换 */}
+      <div className="mb-4 flex gap-1 border-b border-gray-200">
+        {([
+          { key: 'scan', label: '扫码入库' },
+          { key: 'manual', label: '手动录入' },
+          { key: 'batch', label: '批量导入' },
+        ] as { key: Mode; label: string }[]).map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setMode(t.key)}
+            className={`border-b-2 px-4 py-2.5 text-sm transition-colors ${
+              mode === t.key
+                ? 'border-primary text-primary'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'scan' && <ScanInbound shelves={shelves} />}
+      {mode === 'manual' && <ManualInbound shelves={shelves} />}
+      {mode === 'batch' && <BatchInbound shelves={shelves} />}
+    </div>
+  );
+};
+
+// ============ 包裹大小选择器 ============
+// desc 动态显示该类型当前可用的货架号，货架归属可在系统管理中随时调整
+const SizeSelector: React.FC<{
+  value: ParcelSize;
+  onChange: (v: ParcelSize) => void;
+  disabled?: boolean;
+  shelves?: Shelf[];
+}> = ({ value, onChange, disabled, shelves }) => {
+  const options = SIZE_ORDER.map((size) => {
+    const nums = (shelves || [])
+      .filter((s) => s.status === 'active' && s.size_type === size)
+      .map((s) => s.number)
+      .sort((a, b) => a - b);
+    const desc = nums.length > 0 ? `${nums.join(',')} 号` : '暂无可用货架';
+    return { value: size, label: SIZE_LABEL[size], desc, empty: nums.length === 0 };
+  });
+  return (
+    <div>
+      <label className="mb-1 block text-sm text-gray-600">包裹大小 *</label>
+      <div className="flex gap-2">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            disabled={disabled}
+            className={`flex-1 rounded-md border px-3 py-2 text-sm transition-colors ${
+              value === opt.value
+                ? 'border-primary bg-primaryLight text-primary'
+                : 'border-gray-300 text-gray-600 hover:border-gray-400'
+            } disabled:opacity-60`}
+          >
+            <div className="font-medium">{opt.label}</div>
+            <div className={`text-xs ${opt.empty ? 'text-danger' : 'text-gray-400'}`}>{opt.desc}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ============ 入库成功结果展示 ============
+const InboundSuccess: React.FC<{ result: InboundResult }> = ({ result }) => (
+  <div className="rounded-lg border border-success/40 bg-success/5 p-5">
+    <h3 className="mb-3 flex items-center gap-1.5 text-base font-medium text-success">
+      <Icon name="check" size={18} />
+      入库成功
+    </h3>
+    <div className="space-y-2 text-sm">
+      <div className="flex gap-3">
+        <span className="w-24 text-gray-500">运单号</span>
+        <span className="font-medium text-gray-800">{result.trackingNumber}</span>
+      </div>
+      <div className="flex gap-3">
+        <span className="w-24 text-gray-500">取件码</span>
+        <span className="font-mono text-2xl font-bold tracking-widest text-primary">
+          {result.pickupCode}
+        </span>
+        <span className="self-center text-xs text-gray-400">
+          （第{result.shelfNumber}号货架 · 第{result.shelfLayer}层 · 第{result.shelfPosition}号）
+        </span>
+      </div>
+      {result.courierCompanyName && (
+        <div className="flex gap-3">
+          <span className="w-24 text-gray-500">快递公司</span>
+          <span className="text-gray-800">{result.courierCompanyName}</span>
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+// ============ 扫码入库 ============
+const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
+  const [trackingNumber, setTrackingNumber] = useState('');
+  const [recipientName, setRecipientName] = useState('');
+  const [recipientPhone, setRecipientPhone] = useState('');
+  const [size, setSize] = useState<ParcelSize>('small');
+  const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<InboundResult | null>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submitting) return;
+    setError('');
+    setResult(null);
+    if (!trackingNumber.trim()) {
+      setError('请扫描或输入运单号');
+      return;
+    }
+    if (!recipientName.trim() || !recipientPhone.trim()) {
+      setError('请填写收件人姓名和手机号');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await inboundService.inbound({
+        trackingNumber: trackingNumber.trim(),
+        recipientName: recipientName.trim(),
+        recipientPhone: recipientPhone.trim(),
+        size,
+        note: note.trim() || undefined,
+        inboundMethod: 'scan',
+      });
+      setResult(res);
+      // 清空表单，聚焦回运单号输入框，便于连续扫码
+      setTrackingNumber('');
+      setRecipientName('');
+      setRecipientPhone('');
+      setNote('');
+      inputRef.current?.focus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '入库失败');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-gray-200 bg-white p-5">
+        <div>
+          <label className="mb-1 block text-sm text-gray-600">运单号（扫码）</label>
+          <input
+            ref={inputRef}
+            type="text"
+            value={trackingNumber}
+            onChange={(e) => setTrackingNumber(e.target.value)}
+            placeholder="扫描或输入运单号"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+            disabled={submitting}
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">收件人姓名</label>
+            <input
+              type="text"
+              value={recipientName}
+              onChange={(e) => setRecipientName(e.target.value)}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={submitting}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">收件人手机号</label>
+            <input
+              type="tel"
+              value={recipientPhone}
+              onChange={(e) => setRecipientPhone(e.target.value)}
+              placeholder="11 位手机号"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={submitting}
+            />
+          </div>
+        </div>
+        <SizeSelector value={size} onChange={setSize} disabled={submitting} shelves={shelves} />
+        <div>
+          <label className="mb-1 block text-sm text-gray-600">备注（可选）</label>
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+            disabled={submitting}
+          />
+        </div>
+
+        {error && <div className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
+        >
+          {submitting ? '入库中...' : '确认入库'}
+        </button>
+        <p className="text-center text-xs text-gray-400">快递公司自动识别，货架按包裹大小自动分配</p>
+      </form>
+
+      {result && <InboundSuccess result={result} />}
+    </div>
+  );
+};
+
+// ============ 手动录入 ============
+const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
+  const [form, setForm] = useState({
+    trackingNumber: '',
+    courierCompanyId: '',
+    recipientName: '',
+    recipientPhone: '',
+    size: 'small' as ParcelSize,
+    shelfId: '',
+    note: '',
+  });
+  // 快递公司列表走 React Query 缓存；下拉仅展示启用中的公司
+  const { data: allCouriers = [] } = useCouriers();
+  const couriers = allCouriers.filter((c) => c.status === 'active');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<InboundResult | null>(null);
+
+  // 按当前选择的 size 过滤可选货架（仅显示启用中的货架）
+  const filteredShelves = shelves.filter((s) => s.status === 'active' && s.size_type === form.size);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submitting) return;
+    setError('');
+    setResult(null);
+    if (!form.trackingNumber.trim() || !form.recipientName.trim() || !form.recipientPhone.trim()) {
+      setError('运单号、收件人姓名、手机号不能为空');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await inboundService.inbound({
+        trackingNumber: form.trackingNumber.trim(),
+        courierCompanyId: form.courierCompanyId || undefined,
+        recipientName: form.recipientName.trim(),
+        recipientPhone: form.recipientPhone.trim(),
+        size: form.size,
+        shelfId: form.shelfId || undefined,
+        note: form.note.trim() || undefined,
+        inboundMethod: 'manual',
+      });
+      setResult(res);
+      setForm({
+        trackingNumber: '',
+        courierCompanyId: '',
+        recipientName: '',
+        recipientPhone: '',
+        size: 'small',
+        shelfId: '',
+        note: '',
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '入库失败');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-gray-200 bg-white p-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">运单号 *</label>
+            <input
+              type="text"
+              value={form.trackingNumber}
+              onChange={(e) => setForm({ ...form, trackingNumber: e.target.value })}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={submitting}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">快递公司（留空自动识别）</label>
+            <select
+              value={form.courierCompanyId}
+              onChange={(e) => setForm({ ...form, courierCompanyId: e.target.value })}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={submitting}
+            >
+              <option value="">自动识别</option>
+              {couriers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}（{c.code}）
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">收件人姓名 *</label>
+            <input
+              type="text"
+              value={form.recipientName}
+              onChange={(e) => setForm({ ...form, recipientName: e.target.value })}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={submitting}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">收件人手机号 *</label>
+            <input
+              type="tel"
+              value={form.recipientPhone}
+              onChange={(e) => setForm({ ...form, recipientPhone: e.target.value })}
+              placeholder="11 位手机号"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={submitting}
+            />
+          </div>
+        </div>
+        <SizeSelector
+          value={form.size}
+          onChange={(v) => setForm({ ...form, size: v, shelfId: '' })}
+          disabled={submitting}
+          shelves={shelves}
+        />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">
+              货架（留空自动分配，仅显示{form.size === 'small' ? '小件' : form.size === 'medium' ? '中件' : '大件'}货架）
+            </label>
+            <select
+              value={form.shelfId}
+              onChange={(e) => setForm({ ...form, shelfId: e.target.value })}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={submitting}
+            >
+              <option value="">自动分配</option>
+              {filteredShelves.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.number}号（{s.layers}层×{s.capacity_per_layer}件）
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">备注</label>
+            <input
+              type="text"
+              value={form.note}
+              onChange={(e) => setForm({ ...form, note: e.target.value })}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={submitting}
+            />
+          </div>
+        </div>
+
+        {error && <div className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="rounded-md bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
+        >
+          {submitting ? '入库中...' : '确认入库'}
+        </button>
+      </form>
+
+      {result && <InboundSuccess result={result} />}
+    </div>
+  );
+};
+
+// ============ 批量导入（CSV 粘贴） ============
+const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
+  const [csvText, setCsvText] = useState('');
+  const [defaultSize, setDefaultSize] = useState<ParcelSize>('small');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<{ succeeded: number; failed: number; total: number; errors: Array<{ index: number; error: string }> } | null>(null);
+
+  const handleSubmit = async () => {
+    if (submitting) return;
+    setError('');
+    setResult(null);
+    const lines = csvText.trim().split('\n').filter(Boolean);
+    if (lines.length === 0) {
+      setError('请粘贴至少一行数据');
+      return;
+    }
+    // 解析格式：运单号,收件人姓名,手机号[,备注]
+    const items: Array<{
+      trackingNumber: string;
+      recipientName: string;
+      recipientPhone: string;
+      size: ParcelSize;
+      note?: string;
+      inboundMethod: 'batch';
+    }> = [];
+    const parseErrors: Array<{ index: number; error: string }> = [];
+    lines.forEach((line, i) => {
+      const parts = line.split(',').map((s) => s.trim());
+      if (parts.length < 3) {
+        parseErrors.push({ index: i, error: '字段不足，需至少 运单号,姓名,手机号' });
+        return;
+      }
+      const [trackingNumber, recipientName, recipientPhone, note] = parts;
+      if (!trackingNumber || !recipientName || !recipientPhone) {
+        parseErrors.push({ index: i, error: '字段不能为空' });
+        return;
+      }
+      if (!/^1\d{10}$/.test(recipientPhone)) {
+        parseErrors.push({ index: i, error: '手机号格式不正确' });
+        return;
+      }
+      items.push({
+        trackingNumber,
+        recipientName,
+        recipientPhone,
+        size: defaultSize,
+        note: note || undefined,
+        inboundMethod: 'batch',
+      });
+    });
+
+    if (items.length === 0) {
+      setError(`无有效数据，${parseErrors.length} 行解析失败`);
+      setResult({ total: lines.length, succeeded: 0, failed: parseErrors.length, errors: parseErrors });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await inboundService.batchInbound(items);
+      setResult({
+        total: res.total,
+        succeeded: res.succeeded,
+        failed: res.failed + parseErrors.length,
+        errors: [...parseErrors, ...res.errors.map((e) => ({ index: e.index, error: e.error }))],
+      });
+      if (res.succeeded > 0) setCsvText('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '批量入库失败');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-gray-200 bg-white p-5">
+        <h2 className="mb-2 text-sm font-medium text-gray-700">批量导入（CSV 粘贴）</h2>
+        <p className="mb-3 text-xs text-gray-500">
+          每行一条，字段用英文逗号分隔：<code className="rounded bg-gray-100 px-1">运单号,收件人姓名,手机号,备注</code>
+          <br />
+          备注可选。快递公司自动识别，货架按下方选择的包裹大小统一分配。
+        </p>
+        <div className="mb-3">
+          <SizeSelector value={defaultSize} onChange={setDefaultSize} disabled={submitting} shelves={shelves} />
+        </div>
+        <textarea
+          value={csvText}
+          onChange={(e) => setCsvText(e.target.value)}
+          rows={8}
+          placeholder={'SF1234567890,张三,13800001234,易碎品\nZTO9876543210,李四,13900005678'}
+          className="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm outline-none focus:border-primary"
+          disabled={submitting}
+        />
+        {error && <div className="mt-3 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+        <button
+          onClick={handleSubmit}
+          disabled={submitting || !csvText.trim()}
+          className="mt-3 rounded-md bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
+        >
+          {submitting ? '导入中...' : '开始导入'}
+        </button>
+      </div>
+
+      {result && (
+        <div className="rounded-lg border border-gray-200 bg-white p-5">
+          <h3 className="mb-3 text-sm font-medium text-gray-700">导入结果</h3>
+          <div className="mb-3 flex gap-4 text-sm">
+            <span className="text-gray-600">总计：{result.total}</span>
+            <span className="text-success">成功：{result.succeeded}</span>
+            <span className="text-danger">失败：{result.failed}</span>
+          </div>
+          {result.errors.length > 0 && (
+            <div className="max-h-60 overflow-auto rounded-md border border-gray-200">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-500">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">行号</th>
+                    <th className="px-3 py-2 text-left font-medium">错误</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {result.errors.map((e, i) => (
+                    <tr key={i}>
+                      <td className="px-3 py-1.5 text-gray-600">{e.index + 1}</td>
+                      <td className="px-3 py-1.5 text-danger">{e.error}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Inbound;

@@ -1,0 +1,160 @@
+// 系统管理 API 服务
+import { get, post, put, patch } from './api';
+import type {
+  Station,
+  Staff,
+  StaffWithPassword,
+  Shelf,
+  CourierCompany,
+  StationLayoutConfig,
+  LayoutDoor,
+} from '@/types/admin';
+
+// ===== 驿站 =====
+export function fetchStation(): Promise<Station> {
+  return get<Station>('/api/admin/station');
+}
+
+export function updateStation(payload: Partial<Station>): Promise<Station> {
+  return put<Station>('/api/admin/station', payload);
+}
+
+// ===== 仓库 3D 布局配置 =====
+export function fetchLayoutConfig(): Promise<{
+  stationId: string;
+  stationName: string;
+  layoutConfig: StationLayoutConfig;
+}> {
+  return get('/api/admin/station/layout-config');
+}
+
+export function updateLayoutConfig(
+  payload: Partial<StationLayoutConfig>,
+): Promise<{ stationId: string; stationName: string; layoutConfig: StationLayoutConfig }> {
+  return put('/api/admin/station/layout-config', payload);
+}
+
+/**
+ * 仓库 3D 布局统一保存（单接口）
+ * 一次性提交：货架位置批量更新 + 仓库尺寸 + 门口列表
+ */
+export interface ShelfPositionItem {
+  id: string;
+  posX?: number | null;
+  posY?: number | null;
+  rotation?: number;
+  zone?: string | null;
+}
+
+export function saveStationLayout(payload: {
+  shelves?: ShelfPositionItem[];
+  bounds?: { width: number; depth: number };
+  doors?: LayoutDoor[];
+}): Promise<{ shelvesUpdated: number; layoutConfig: StationLayoutConfig }> {
+  return put('/api/admin/station/layout', payload);
+}
+
+// ===== 员工 =====
+export function listStaff(): Promise<Staff[]> {
+  return get<Staff[]>('/api/admin/staff');
+}
+
+export function createStaff(payload: {
+  phone: string;
+  username?: string;
+  password?: string;
+  role: 'admin' | 'clerk' | 'viewer';
+}): Promise<StaffWithPassword> {
+  return post<StaffWithPassword>('/api/admin/staff', payload);
+}
+
+export function updateStaff(
+  id: string,
+  payload: { role?: 'admin' | 'clerk' | 'viewer'; username?: string },
+): Promise<Staff | undefined> {
+  return put<Staff | undefined>(`/api/admin/staff/${id}`, payload);
+}
+
+export function setStaffStatus(
+  id: string,
+  status: 'active' | 'disabled',
+): Promise<{ id: string; status: string }> {
+  return patch<{ id: string; status: string }>(`/api/admin/staff/${id}/status`, { status });
+}
+
+export function resetStaffPassword(
+  id: string,
+  payload: { password?: string },
+): Promise<{ id: string; newPassword: string }> {
+  return patch<{ id: string; newPassword: string }>(
+    `/api/admin/staff/${id}/reset-password`,
+    payload,
+  );
+}
+
+// ===== 货架 =====
+export function listShelves(): Promise<Shelf[]> {
+  return get<Shelf[]>('/api/admin/shelves');
+}
+
+export function createShelf(payload: {
+  number: number;
+  sizeType: 'small' | 'medium' | 'large';
+  layers?: number;
+  capacityPerLayer?: number;
+  description?: string;
+}): Promise<Shelf> {
+  return post<Shelf>('/api/admin/shelves', payload);
+}
+
+export function updateShelf(
+  id: string,
+  payload: {
+    sizeType?: 'small' | 'medium' | 'large';
+    layers?: number;
+    capacityPerLayer?: number;
+    description?: string;
+    status?: 'active' | 'disabled';
+    posX?: number | null;
+    posY?: number | null;
+    rotation?: number;
+    zone?: string | null;
+  },
+): Promise<Shelf> {
+  return put<Shelf>(`/api/admin/shelves/${id}`, payload);
+}
+
+/** 更新货架位置（拖拽高频调用专用） */
+export function updateShelfPosition(
+  id: string,
+  payload: {
+    posX?: number | null;
+    posY?: number | null;
+    rotation?: number;
+    zone?: string | null;
+  },
+): Promise<Shelf> {
+  return put<Shelf>(`/api/admin/shelves/${id}/position`, payload);
+}
+
+// ===== 快递公司 =====
+export function listCouriers(): Promise<CourierCompany[]> {
+  return get<CourierCompany[]>('/api/admin/couriers');
+}
+
+export function createCourier(payload: {
+  name: string;
+  code: string;
+  servicePhone?: string;
+  trackingPrefixes?: string[];
+  sortOrder?: number;
+}): Promise<CourierCompany> {
+  return post<CourierCompany>('/api/admin/couriers', payload);
+}
+
+export function updateCourier(
+  id: string,
+  payload: Partial<Pick<CourierCompany, 'name' | 'service_phone' | 'tracking_prefixes' | 'sort_order' | 'status'>>,
+): Promise<CourierCompany> {
+  return put<CourierCompany>(`/api/admin/couriers/${id}`, payload);
+}
