@@ -194,7 +194,8 @@ export async function mockBusinessApis(page: Page) {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(ok(SHELVES)),
+      // 返回带坐标的货架（后端 listShelves 包含 pos_x/pos_y/rotation/zone 字段）
+      body: JSON.stringify(ok(SHELVES_WITH_POS)),
     });
   });
 
@@ -569,5 +570,152 @@ export async function mockUnauthorized(page: Page) {
 export async function mockServerError(page: Page, pattern: string, message = '服务器内部错误') {
   await page.route(pattern, (route) => {
     route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify(fail(message)) });
+  });
+}
+
+// ===== 1.2.0 仓库 3D 布局相关 mock =====
+
+// 默认仓库户型配置（含 1 个门口 + bounds + 1 个办公区 + 1 个揽收区）
+export const DEFAULT_LAYOUT_CONFIG = {
+  bounds: { width: 20, depth: 15 },
+  doors: [{ x: 0, y: 7.5, width: 1.2, label: '正门' }],
+  areas: [
+    {
+      id: 'area-office-1',
+      x: -7,
+      y: -5,
+      width: 3,
+      depth: 3,
+      height: 2.5,
+      type: 'office',
+      label: '办公区 1',
+    },
+    {
+      id: 'area-pickup-1',
+      x: 7,
+      y: -5,
+      width: 4,
+      depth: 2,
+      height: 2.5,
+      type: 'pickup',
+      label: '揽收区 1',
+    },
+  ],
+  obstacles: [],
+};
+
+// 带真实坐标的货架（posX/posY 已设置）
+export const SHELVES_WITH_POS = SHELVES.map((s, i) => ({
+  ...s,
+  pos_x: (i % 3) * 2 - 2,
+  pos_y: Math.floor(i / 3) * 2 - 2,
+  rotation: 0,
+  zone: s.size_type === 'small' ? 'A' : s.size_type === 'medium' ? 'B' : 'C',
+}));
+
+// mock 1.2.0 仓库布局相关接口（管理员端 + Kiosk 端）
+export async function mockLayoutApis(page: Page) {
+  // 管理员：获取驿站户型配置
+  await page.route('**/api/admin/station/layout-config', (route) => {
+    if (route.request().method() === 'GET') {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(
+          ok({
+            stationId: 'station-1',
+            stationName: '测试驿站一',
+            layoutConfig: DEFAULT_LAYOUT_CONFIG,
+          }),
+        ),
+      });
+    } else {
+      // PUT
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(
+          ok({
+            stationId: 'station-1',
+            stationName: '测试驿站一',
+            layoutConfig: { ...DEFAULT_LAYOUT_CONFIG, updated: true },
+          }),
+        ),
+      });
+    }
+  });
+
+  // 管理员：货架位置单独更新
+  await page.route('**/api/admin/shelves/*/position', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({ ok: true })),
+    });
+  });
+
+  // 管理员：仓库 3D 布局统一保存（货架 + bounds + doors + areas）
+  await page.route('**/api/admin/station/layout', (route) => {
+    if (route.request().method() === 'PUT') {
+      const body = route.request().postDataJSON() || {};
+      const shelvesUpdated = Array.isArray(body.shelves) ? body.shelves.length : 0;
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(
+          ok({
+            shelvesUpdated,
+            layoutConfig: {
+              bounds: body.bounds || DEFAULT_LAYOUT_CONFIG.bounds,
+              doors: body.doors || DEFAULT_LAYOUT_CONFIG.doors,
+              areas: body.areas || DEFAULT_LAYOUT_CONFIG.areas,
+            },
+          }),
+        ),
+      });
+    } else {
+      route.continue();
+    }
+  });
+
+  // 管理员：一键自动布局
+  await page.route('**/api/admin/shelves/auto-init-positions', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({ shelvesUpdated: SHELVES.length })),
+    });
+  });
+
+  // Kiosk：获取货架布局 + 户型配置（公开接口）
+  await page.route('**/api/kiosk/station/layout**', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        shelves: SHELVES_WITH_POS.map((s) => ({
+          number: s.number,
+          sizeType: s.size_type,
+          layers: s.layers,
+          description: s.description,
+          posX: s.pos_x,
+          posY: s.pos_y,
+          rotation: s.rotation,
+          zone: s.zone,
+        })),
+        station: {
+          // 驿站公开基础信息（1.2.0+ 起 /query 门户顶部展示）
+          name: '测试驿站一',
+          address: '北京市朝阳区测试路 1 号',
+          contactPhone: '010-12345678',
+          businessHours: '08:00-22:00',
+          layoutConfig: {
+            bounds: DEFAULT_LAYOUT_CONFIG.bounds,
+            doors: DEFAULT_LAYOUT_CONFIG.doors,
+            areas: DEFAULT_LAYOUT_CONFIG.areas,
+          },
+        },
+      })),
+    });
   });
 }

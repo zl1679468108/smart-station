@@ -26,7 +26,8 @@ async function clear(page: import('@playwright/test').Page) {
 test.describe('Query 页面结构', () => {
   test('显示三种查询方式 Tab', async ({ page }) => {
     await page.goto('/#/query');
-    await expect(page.getByText('智能快递驿站')).toBeVisible();
+    // header 中「智能快递驿站」出现在主标题 fallback 与副标题两处，取首个
+    await expect(page.getByText('智能快递驿站').first()).toBeVisible();
     await expect(page.getByRole('button', { name: '手机号' })).toBeVisible();
     await expect(page.getByRole('button', { name: '运单号' })).toBeVisible();
     await expect(page.getByRole('button', { name: '取件码' })).toBeVisible();

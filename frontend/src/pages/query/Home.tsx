@@ -18,9 +18,15 @@ const Home: React.FC = () => {
   const [items, setItems] = useState<KioskParcelItem[] | null>(null);
   const [toast, setToast] = useState<{ type: 'error' | 'success'; msg: string } | null>(null);
 
-  // 货架布局数据：页面进入预拉取，供 3D 平面图使用；失败静默不阻塞查询
+  // 货架布局数据 + 驿站信息：页面进入预拉取，供 3D 平面图与顶部展示使用；失败静默不阻塞查询
   const [shelves, setShelves] = useState<KioskShelf[]>([]);
   const [layoutConfig, setLayoutConfig] = useState<StationLayoutConfig | null>(null);
+  const [stationInfo, setStationInfo] = useState<{
+    name: string | null;
+    address: string | null;
+    contactPhone: string | null;
+    businessHours: string | null;
+  } | null>(null);
   useEffect(() => {
     let cancelled = false;
     kioskService
@@ -29,6 +35,15 @@ const Home: React.FC = () => {
         if (cancelled) return;
         setShelves(data?.shelves || []);
         setLayoutConfig(data?.station?.layoutConfig || null);
+        const st = data?.station;
+        if (st) {
+          setStationInfo({
+            name: st.name ?? null,
+            address: st.address ?? null,
+            contactPhone: st.contactPhone ?? null,
+            businessHours: st.businessHours ?? null,
+          });
+        }
       })
       .catch(() => {
         /* 平面图为辅助引导，拉取失败不影响查询主流程 */
@@ -66,13 +81,21 @@ const Home: React.FC = () => {
 
   return (
     <div className="flex min-h-screen flex-col">
-      {/* 顶部品牌栏 */}
-      <header className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-2 text-primary">
-          <Icon name="box" size={28} />
-          <span className="text-lg font-bold sm:text-xl">智能快递驿站</span>
+      {/* 顶部品牌栏 + 驿站信息（参考 admin 左上角简洁样式：图标 + 驿站名） */}
+      <header className="flex items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Icon name="box" size={28} className="shrink-0 text-primary" />
+          <div className="flex min-w-0 flex-col">
+            <span className="truncate text-base font-bold text-gray-900 sm:text-lg">
+              {stationInfo?.name || '智能快递驿站'}
+            </span>
+            <span className="truncate text-xs text-gray-500">
+              智能快递驿站
+              {stationInfo?.businessHours ? ` · ${stationInfo.businessHours}` : ''}
+            </span>
+          </div>
         </div>
-        <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+        <div className="flex shrink-0 gap-1 rounded-lg bg-gray-100 p-1">
           {([
             { key: 'phone', label: '手机号' },
             { key: 'tracking', label: '运单号' },
@@ -92,6 +115,24 @@ const Home: React.FC = () => {
           ))}
         </div>
       </header>
+
+      {/* 驿站详细信息条：地址 + 电话（H5 下隐藏，避免拥挤） */}
+      {(stationInfo?.address || stationInfo?.contactPhone) && (
+        <div className="hidden flex-wrap items-center gap-x-5 gap-y-1 border-b border-gray-100 bg-gray-50 px-4 py-1.5 text-xs text-gray-600 sm:flex sm:px-6 lg:px-8">
+          {stationInfo?.address && (
+            <span className="flex items-center gap-1">
+              <Icon name="box" size={12} className="text-gray-400" />
+              <span className="truncate">{stationInfo.address}</span>
+            </span>
+          )}
+          {stationInfo?.contactPhone && (
+            <span className="flex items-center gap-1">
+              <Icon name="phone" size={12} className="text-gray-400" />
+              <span>{stationInfo.contactPhone}</span>
+            </span>
+          )}
+        </div>
+      )}
 
       {/* 主区域：PC 左右双栏，平板/H5 上下 */}
       <main className="flex flex-1 flex-col overflow-hidden lg:flex-row">
@@ -422,17 +463,24 @@ const ResultView: React.FC<{
   shelves: KioskShelf[];
   layoutConfig: StationLayoutConfig | null;
 }> = ({ items, shelves, layoutConfig }) => {
-  // 提取所有需高亮的「货架号 + 层号」（按货架号去重，保留首个层号）
+  // 提取所有需高亮的「货架号 + 层号 + 包裹数」（按货架号去重，统计每个货架的包裹数）
   const highlights = useMemo(() => {
-    const map = new Map<number, number | null>();
+    const map = new Map<number, { layer: number | null; count: number }>();
     for (const it of items) {
       const num = parseShelfNumberFromCode(it.pickupCode);
       if (num === null) continue;
       if (!map.has(num)) {
-        map.set(num, parseLayerFromCode(it.pickupCode));
+        map.set(num, { layer: parseLayerFromCode(it.pickupCode), count: 1 });
+      } else {
+        const existing = map.get(num)!;
+        existing.count += 1;
       }
     }
-    return Array.from(map.entries()).map(([shelfNumber, layer]) => ({ shelfNumber, layer }));
+    return Array.from(map.entries()).map(([shelfNumber, info]) => ({
+      shelfNumber,
+      layer: info.layer,
+      count: info.count,
+    }));
   }, [items]);
 
   if (items.length === 0) {
@@ -459,7 +507,7 @@ const ResultView: React.FC<{
         <div className="rounded-xl bg-white p-3 shadow-sm">
           <div className="mb-2 flex items-center justify-between px-1">
             <h4 className="text-sm font-semibold text-gray-700">货架位置 3D 视图</h4>
-            <span className="text-xs text-gray-400">橙色为您的包裹所在货架</span>
+            <span className="text-xs text-gray-400">橙色为您的包裹所在货架，蓝色为办公区起点</span>
           </div>
           <ShelfMap3D
             shelves={shelves}

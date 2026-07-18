@@ -1,11 +1,15 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import * as adminService from '@/services/admin';
 import { useShelves, useInvalidateShelves } from '@/hooks/useDictionary';
 import { useAuth } from '@/utils/auth';
 import { canManageSystem } from '@/utils/permission';
 import Icon from '@/components/ui/Icon';
-import ShelfMap3DEditor, { EditorShelf } from '@/components/ShelfMapEditor';
-import type { Shelf, StationLayoutConfig, LayoutDoor } from '@/types/admin';
+import ShelfMap3DEditor, {
+  EditorShelf,
+  MODEL_LIBRARY,
+  findModelByType,
+} from '@/components/ShelfMapEditor';
+import type { Shelf, StationLayoutConfig, LayoutDoor, LayoutArea } from '@/types/admin';
 
 const SIZE_LABEL: Record<string, string> = {
   small: '小件',
@@ -42,7 +46,20 @@ function makeDefaultDoor(depth: number): LayoutDoor {
   return { x: 0, y: depth / 2, width: 1.2, label: '正门' };
 }
 
-// 仓库布局 Tab：管理员拖拽摆放货架 + 配置门口，统一保存
+// 生成区域唯一 ID（优先 crypto.randomUUID，兼容降级）
+function genAreaId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+// 计算同类型区域的下一个序号（用于默认标签）
+function nextAreaLabel(areas: LayoutArea[], type: 'office' | 'pickup'): string {
+  const prefix = type === 'office' ? '办公区' : '揽收区';
+  const count = areas.filter((a) => a.type === type).length;
+  return `${prefix} ${count + 1}`;
+}
+
+// 仓库布局 Tab：管理员拖拽摆放货架 + 拖拽模型库建模 + 统一保存
 const StationLayoutTab: React.FC = () => {
   const { user } = useAuth();
   const canEdit = canManageSystem(user?.role);
@@ -53,17 +70,18 @@ const StationLayoutTab: React.FC = () => {
   // 服务器端原始数据（用于 dirty 判断 + 重置）
   const [serverBounds, setServerBounds] = useState<{ width: number; depth: number } | null>(null);
   const [serverDoors, setServerDoors] = useState<LayoutDoor[]>([]);
+  const [serverAreas, setServerAreas] = useState<LayoutArea[]>([]);
 
   // 本地可编辑数据
   const [layoutConfig, setLayoutConfig] = useState<StationLayoutConfig | null>(null);
   const [boundsForm, setBoundsForm] = useState({ width: 20, depth: 15 });
-  const [doorForm, setDoorForm] = useState({ x: 0, y: 0, width: 1.2, label: '正门' });
   const [doors, setDoors] = useState<LayoutDoor[]>([]);
+  const [areas, setAreas] = useState<LayoutArea[]>([]);
   const [shelfOverrides, setShelfOverrides] = useState<Record<string, ShelfOverride>>({});
 
   // 选中项
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedType, setSelectedType] = useState<'shelf' | 'door' | null>(null);
+  const [selectedType, setSelectedType] = useState<'shelf' | 'door' | 'area' | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -100,6 +118,11 @@ const StationLayoutTab: React.FC = () => {
     };
   }, [selectedShelf, shelfOverrides]);
 
+  const selectedArea = useMemo(
+    () => areas.find((a) => a.id === selectedId) ?? null,
+    [areas, selectedId],
+  );
+
   // 拉取户型配置
   useEffect(() => {
     adminService
@@ -116,22 +139,25 @@ const StationLayoutTab: React.FC = () => {
         const finalDoors = ds.length > 0 ? ds : [makeDefaultDoor(b?.depth ?? boundsForm.depth)];
         setDoors(finalDoors);
         setServerDoors(finalDoors);
-        setDoorForm(finalDoors[0]);
+        const ars = res.layoutConfig.areas ?? [];
+        setAreas(ars);
+        setServerAreas(ars);
       })
       .catch((e) => {
         setMsg({ type: 'error', text: e.message || '加载户型配置失败' });
       });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // dirty 判断：货架有覆盖 / bounds 变了 / doors 变了
+  // dirty 判断：货架有覆盖 / bounds 变了 / doors 变了 / areas 变了
   const isDirty = useMemo(() => {
     if (Object.keys(shelfOverrides).length > 0) return true;
     if (serverBounds && (serverBounds.width !== boundsForm.width || serverBounds.depth !== boundsForm.depth)) {
       return true;
     }
     if (JSON.stringify(serverDoors) !== JSON.stringify(doors)) return true;
+    if (JSON.stringify(serverAreas) !== JSON.stringify(areas)) return true;
     return false;
-  }, [shelfOverrides, boundsForm, doors, serverBounds, serverDoors]);
+  }, [shelfOverrides, boundsForm, doors, areas, serverBounds, serverDoors, serverAreas]);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMsg({ type, text });
@@ -155,6 +181,46 @@ const StationLayoutTab: React.FC = () => {
     setDoors((prev) => prev.map((d, i) => (i === doorIndex ? { ...d, x, y } : d)));
   };
 
+  // 拖拽区域松手 → 只更新本地 areas
+  const handleAreaDragEnd = useCallback((areaId: string, x: number, z: number) => {
+    if (!canEdit) return;
+    setAreas((prev) => prev.map((a) => (a.id === areaId ? { ...a, x, y: z } : a)));
+  }, [canEdit]);
+
+  // 模型库拖入 3D 场景 → 创建新区域或门口
+  const handleDropFromLibrary = useCallback(
+    (modelType: string, x: number, z: number) => {
+      if (!canEdit) return;
+      const snappedX = Math.round(x / 0.5) * 0.5;
+      const snappedZ = Math.round(z / 0.5) * 0.5;
+      if (modelType === 'door') {
+        // 新门口：默认宽度 1.2m，标签按序号
+        setDoors((prev) => [
+          ...prev,
+          { x: snappedX, y: snappedZ, width: 1.2, label: `入口 ${prev.length + 1}` },
+        ]);
+        return;
+      }
+      const model = findModelByType(modelType);
+      if (!model) return;
+      const newArea: LayoutArea = {
+        id: genAreaId(),
+        x: snappedX,
+        y: snappedZ,
+        width: model.width,
+        depth: model.depth,
+        height: model.height,
+        type: model.type as 'office' | 'pickup',
+        label: nextAreaLabel(areas, model.type as 'office' | 'pickup'),
+      };
+      setAreas((prev) => [...prev, newArea]);
+      // 自动选中新加的区域
+      setSelectedId(newArea.id);
+      setSelectedType('area');
+    },
+    [canEdit, areas],
+  );
+
   // 输入框修改选中货架位置 → 只更新本地 override
   const updateSelectedShelfField = (field: keyof ShelfOverride, value: any) => {
     if (!selectedShelf || !canEdit) return;
@@ -173,14 +239,30 @@ const StationLayoutTab: React.FC = () => {
     }));
   };
 
-  // 添加门口 → 本地
-  const handleAddDoor = () => {
-    setDoors((prev) => [...prev, doorForm]);
+  // 输入框修改选中区域 → 只更新本地 areas
+  const updateSelectedAreaField = (field: keyof LayoutArea, value: any) => {
+    if (!selectedArea || !canEdit) return;
+    setAreas((prev) => prev.map((a) => (a.id === selectedArea.id ? { ...a, [field]: value } : a)));
   };
 
-  // 删除门口 → 本地
+  // 删除选中区域 → 本地
+  const handleRemoveArea = (areaId: string) => {
+    if (!canEdit) return;
+    setAreas((prev) => prev.filter((a) => a.id !== areaId));
+    if (selectedId === areaId) {
+      setSelectedId(null);
+      setSelectedType(null);
+    }
+  };
+
+  // 删除门口 → 本地（至少保留 1 个门）
   const handleRemoveDoor = (idx: number) => {
+    if (!canEdit || doors.length <= 1) return;
     setDoors((prev) => prev.filter((_, i) => i !== idx));
+    if (selectedType === 'door' && selectedId === `door-${idx}`) {
+      setSelectedId(null);
+      setSelectedType(null);
+    }
   };
 
   // ============ 统一保存 ============
@@ -189,8 +271,7 @@ const StationLayoutTab: React.FC = () => {
     if (!canEdit || saving || !isDirty) return;
     setSaving(true);
     try {
-      // 统一保存：提交所有货架当前位置 + 仓库尺寸 + 门口列表（保证至少一个门）
-      // 货架：提交所有货架的当前（override 合并后的）位置，未配置的传 null
+      // 统一保存：提交所有货架当前位置 + 仓库尺寸 + 门口列表 + 区域列表
       const shelves = editorShelves.map((s) => ({
         id: s.id,
         posX: s.posX,
@@ -206,6 +287,7 @@ const StationLayoutTab: React.FC = () => {
         shelves,
         bounds: boundsForm,
         doors: finalDoors,
+        areas,
       });
 
       // 刷新数据，重置本地状态
@@ -220,6 +302,9 @@ const StationLayoutTab: React.FC = () => {
       const finalDs = ds.length > 0 ? ds : [makeDefaultDoor(b?.depth ?? boundsForm.depth)];
       setServerDoors(finalDs);
       setDoors(finalDs);
+      const ars = res.layoutConfig.areas ?? [];
+      setServerAreas(ars);
+      setAreas(ars);
       setShelfOverrides({});
       showMsg('success', `仓库布局已保存（${res.shelvesUpdated} 个货架位置更新）`);
     } catch (e: any) {
@@ -234,6 +319,7 @@ const StationLayoutTab: React.FC = () => {
     setShelfOverrides({});
     if (serverBounds) setBoundsForm(serverBounds);
     setDoors(serverDoors);
+    setAreas(serverAreas);
   };
 
   if (isLoading) {
@@ -284,32 +370,68 @@ const StationLayoutTab: React.FC = () => {
             )}
           </>
         )}
-        {selectedShelf && (
-          <div className="text-xs text-gray-500">
-            选中：<span className="font-medium text-primary">#{selectedShelf.number} 号货架</span>
-          </div>
-        )}
         {!canEdit && (
           <div className="text-xs text-gray-400">店员角色只读，无法配置</div>
         )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-        {/* 左侧：3D 编辑器 */}
-        <div className="rounded-xl bg-white p-3 shadow-sm">
-          <ShelfMap3DEditor
-            shelves={editorShelves}
-            layoutConfig={layoutConfig ? { ...layoutConfig, bounds: boundsForm, doors } : null}
-            selectedId={selectedId}
-            selectedType={selectedType || 'shelf'}
-            onSelect={(id, type) => {
-              setSelectedId(id);
-              setSelectedType(type);
-            }}
-            onShelfDragEnd={canEdit ? handleShelfDragEnd : undefined}
-            onDoorDragEnd={canEdit ? handleDoorDragEnd : undefined}
-            height={520}
-          />
+        {/* 左侧：3D 编辑器 + 模型库 */}
+        <div className="space-y-3">
+          <div className="rounded-xl bg-white p-3 shadow-sm">
+            <ShelfMap3DEditor
+              shelves={editorShelves}
+              layoutConfig={
+                layoutConfig
+                  ? { ...layoutConfig, bounds: boundsForm, doors, areas }
+                  : null
+              }
+              selectedId={selectedId}
+              selectedType={selectedType || 'shelf'}
+              onSelect={(id, type) => {
+                setSelectedId(id);
+                setSelectedType(type);
+              }}
+              onShelfDragEnd={canEdit ? handleShelfDragEnd : undefined}
+              onDoorDragEnd={canEdit ? handleDoorDragEnd : undefined}
+              onAreaDragEnd={canEdit ? handleAreaDragEnd : undefined}
+              onDropFromLibrary={canEdit ? handleDropFromLibrary : undefined}
+              height={520}
+            />
+          </div>
+
+          {/* 模型库面板 */}
+          {canEdit && (
+            <div className="rounded-xl bg-white p-4 shadow-sm">
+              <h4 className="mb-1 text-sm font-semibold text-gray-700">模型库</h4>
+              <p className="mb-3 text-xs text-gray-400">
+                按住卡片拖到 3D 场景中即可创建模型，松手自动对齐 0.5m 网格
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {MODEL_LIBRARY.map((m) => (
+                  <div
+                    key={m.type}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/model-type', m.type);
+                      e.dataTransfer.effectAllowed = 'copy';
+                    }}
+                    className="cursor-grab select-none rounded-lg border-2 border-dashed border-gray-200 p-3 text-center transition-colors hover:border-primary hover:bg-primary/5 active:cursor-grabbing"
+                    title={`拖拽到 3D 场景创建${m.label}`}
+                  >
+                    <div
+                      className="mx-auto mb-2 h-8 w-8 rounded"
+                      style={{ background: m.color, opacity: 0.7 }}
+                    />
+                    <div className="text-xs font-medium text-gray-700">{m.label}</div>
+                    <div className="text-[10px] text-gray-400">
+                      {m.width}×{m.depth}×{m.height}m
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 右侧：配置面板 */}
@@ -329,7 +451,7 @@ const StationLayoutTab: React.FC = () => {
                     setBoundsForm((f) => ({ ...f, width: Number(e.target.value) }))
                   }
                   disabled={!canEdit}
-                  className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm disabled:bg-gray-50"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
                 />
               </label>
               <label className="text-xs text-gray-500">
@@ -343,117 +465,166 @@ const StationLayoutTab: React.FC = () => {
                     setBoundsForm((f) => ({ ...f, depth: Number(e.target.value) }))
                   }
                   disabled={!canEdit}
-                  className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm disabled:bg-gray-50"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
                 />
               </label>
             </div>
           </div>
 
-          {/* 门口管理 */}
+          {/* 区域列表 */}
           <div className="rounded-xl bg-white p-4 shadow-sm">
-            <h4 className="mb-3 text-sm font-semibold text-gray-700">门口列表</h4>
-            {doors.length === 0 ? (
-              <div className="mb-2 text-xs text-gray-400">暂无门口，请添加</div>
+            <h4 className="mb-3 text-sm font-semibold text-gray-700">
+              区域列表（{areas.length}）
+            </h4>
+            {areas.length === 0 ? (
+              <div className="text-xs text-gray-400">
+                暂无区域，从模型库拖入办公区/揽收区即可创建
+              </div>
             ) : (
-              <div className="mb-3 space-y-1">
-                {doors.map((d, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between rounded bg-gray-50 px-2 py-1.5 text-xs"
+              <div className="space-y-1.5">
+                {areas.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => {
+                      // 再点击当前已选中的区域 → 取消选中
+                      if (selectedType === 'area' && selectedId === a.id) {
+                        setSelectedId(null);
+                        setSelectedType(null);
+                      } else {
+                        setSelectedId(a.id);
+                        setSelectedType('area');
+                      }
+                    }}
+                    className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs transition-colors ${
+                      selectedType === 'area' && selectedId === a.id
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-gray-600 hover:bg-gray-50'
+                    }`}
                   >
-                    <span>
-                      <span className="font-medium text-gray-700">{d.label}</span>
-                      <span className="ml-2 text-gray-500">
-                        ({d.x}, {d.y}) · 宽 {d.width}m
-                      </span>
+                    <span
+                      className="h-3 w-3 rounded"
+                      style={{
+                        background: a.type === 'office' ? '#3B82F6' : '#8B5CF6',
+                        opacity: 0.7,
+                      }}
+                    />
+                    <span className="font-medium">{a.label}</span>
+                    <span className="ml-auto text-[10px] text-gray-400">
+                      ({a.x.toFixed(1)}, {a.y.toFixed(1)})
                     </span>
-                    {canEdit && (
-                      <button
-                        onClick={() => handleRemoveDoor(i)}
-                        className="text-danger hover:underline"
-                      >
-                        删除
-                      </button>
-                    )}
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
-            {canEdit && (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="text-xs text-gray-500">
-                    X 坐标
-                    <input
-                      type="number"
-                      step={0.5}
-                      value={doorForm.x}
-                      onChange={(e) =>
-                        setDoorForm((f) => ({ ...f, x: Number(e.target.value) }))
-                      }
-                      className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                    />
-                  </label>
-                  <label className="text-xs text-gray-500">
-                    Y 坐标
-                    <input
-                      type="number"
-                      step={0.5}
-                      value={doorForm.y}
-                      onChange={(e) =>
-                        setDoorForm((f) => ({ ...f, y: Number(e.target.value) }))
-                      }
-                      className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                    />
-                  </label>
-                  <label className="text-xs text-gray-500">
-                    宽度（米）
-                    <input
-                      type="number"
-                      min={0.5}
-                      step={0.1}
-                      value={doorForm.width}
-                      onChange={(e) =>
-                        setDoorForm((f) => ({ ...f, width: Number(e.target.value) }))
-                      }
-                      className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                    />
-                  </label>
-                  <label className="text-xs text-gray-500">
-                    标签
-                    <input
-                      type="text"
-                      maxLength={20}
-                      value={doorForm.label}
-                      onChange={(e) =>
-                        setDoorForm((f) => ({ ...f, label: e.target.value }))
-                      }
-                      className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                    />
-                  </label>
-                </div>
-                <button
-                  onClick={handleAddDoor}
-                  className="mt-2 w-full rounded-lg bg-success px-3 py-1.5 text-xs font-medium text-white hover:bg-success/90"
+          </div>
+
+          {/* 门口列表 */}
+          <div className="rounded-xl bg-white p-4 shadow-sm">
+            <h4 className="mb-3 text-sm font-semibold text-gray-700">
+              门口列表（{doors.length}）
+            </h4>
+            <div className="space-y-1.5">
+              {doors.map((d, i) => (
+                <div
+                  key={i}
+                  className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs ${
+                    selectedType === 'door' && selectedId === `door-${i}`
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
                 >
-                  + 添加门口
-                </button>
-              </>
+                  <button
+                    onClick={() => {
+                      // 再点击当前已选中的门口 → 取消选中
+                      if (selectedType === 'door' && selectedId === `door-${i}`) {
+                        setSelectedId(null);
+                        setSelectedType(null);
+                      } else {
+                        setSelectedId(`door-${i}`);
+                        setSelectedType('door');
+                      }
+                    }}
+                    className="flex flex-1 items-center gap-2 text-left"
+                  >
+                    <span className="font-medium">门 #{i + 1}</span>
+                    <span className="text-[10px] text-gray-400">{d.label}</span>
+                    <span className="ml-auto text-[10px] text-gray-400">
+                      ({d.x.toFixed(1)}, {d.y.toFixed(1)})
+                    </span>
+                  </button>
+                  {canEdit && doors.length > 1 && (
+                    <button
+                      onClick={() => handleRemoveDoor(i)}
+                      className="text-danger hover:text-danger/80"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {canEdit && (
+              <div className="mt-2 text-[10px] text-gray-400">
+                提示：从模型库拖入「门口」卡片可新增门口
+              </div>
             )}
           </div>
 
-          {/* 选中货架：位置展示 + 精调 */}
-          {selectedType === 'shelf' && selectedShelf && selectedShelfPos && (
-            <div className="rounded-xl bg-white p-4 shadow-sm">
-              <h4 className="mb-3 text-sm font-semibold text-gray-700">
-                选中货架 #{selectedShelf.number}
-                <span className="ml-2 text-xs font-normal text-gray-400">
-                  {SIZE_LABEL[selectedShelf.size_type]} · {selectedShelf.layers} 层 · 在库{' '}
-                  {selectedShelf.in_stock_count} 件
-                </span>
-              </h4>
-              <div className="mb-2 rounded bg-blue-50 px-3 py-2 text-xs text-blue-600">
-                💡 直接在 3D 视图中按住货架拖拽，或下方输入框精调，最后点顶部「保存全部改动」
+          {/* 货架列表 */}
+          <div className="rounded-xl bg-white p-4 shadow-sm">
+            <h4 className="mb-3 text-sm font-semibold text-gray-700">
+              货架列表（{shelfList.length}）
+            </h4>
+            <div className="max-h-64 space-y-1 overflow-y-auto">
+              {shelfList.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => {
+                    // 再点击当前已选中的货架 → 取消选中
+                    if (selectedType === 'shelf' && selectedId === s.id) {
+                      setSelectedId(null);
+                      setSelectedType(null);
+                    } else {
+                      setSelectedId(s.id);
+                      setSelectedType('shelf');
+                    }
+                  }}
+                  className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs transition-colors ${
+                    selectedId === s.id
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="font-medium">#{s.number}</span>
+                  <span className="text-[10px] text-gray-400">{SIZE_LABEL[s.size_type]}</span>
+                  <span className="ml-auto text-[10px] text-gray-400">
+                    {s.pos_x !== null ? `(${s.pos_x.toFixed(1)}, ${s.pos_y?.toFixed(1)})` : '未配置'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 选中货架：位置编辑（放在最下面，点击列表项后展开） */}
+          {selectedShelf && selectedType === 'shelf' && selectedShelfPos && (
+            <div className="rounded-xl border border-primary/30 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-gray-700">
+                  #{selectedShelf.number} 号货架
+                  <span className="ml-2 text-xs font-normal text-gray-400">
+                    {SIZE_LABEL[selectedShelf.size_type]} · {selectedShelf.layers} 层
+                  </span>
+                </h4>
+                <button
+                  onClick={() => {
+                    setSelectedId(null);
+                    setSelectedType(null);
+                  }}
+                  className="text-xs text-gray-400 hover:text-gray-600"
+                  title="取消编辑"
+                >
+                  收起 ✕
+                </button>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs text-gray-500">
@@ -469,8 +640,8 @@ const StationLayoutTab: React.FC = () => {
                       )
                     }
                     disabled={!canEdit}
-                    placeholder="未配置"
-                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm disabled:bg-gray-50"
+                    placeholder="未设置"
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
                   />
                 </label>
                 <label className="text-xs text-gray-500">
@@ -486,19 +657,17 @@ const StationLayoutTab: React.FC = () => {
                       )
                     }
                     disabled={!canEdit}
-                    placeholder="未配置"
-                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm disabled:bg-gray-50"
+                    placeholder="未设置"
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
                   />
                 </label>
                 <label className="text-xs text-gray-500">
                   朝向（度）
                   <select
                     value={selectedShelfPos.rotation}
-                    onChange={(e) =>
-                      updateSelectedShelfField('rotation', Number(e.target.value))
-                    }
+                    onChange={(e) => updateSelectedShelfField('rotation', Number(e.target.value))}
                     disabled={!canEdit}
-                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm disabled:bg-gray-50"
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
                   >
                     <option value={0}>0°</option>
                     <option value={90}>90°</option>
@@ -508,20 +677,19 @@ const StationLayoutTab: React.FC = () => {
                 </label>
                 <label className="text-xs text-gray-500">
                   区域
-                  <input
-                    type="text"
-                    maxLength={4}
+                  <select
                     value={selectedShelfPos.zone ?? ''}
                     onChange={(e) =>
-                      updateSelectedShelfField(
-                        'zone',
-                        e.target.value === '' ? null : e.target.value,
-                      )
+                      updateSelectedShelfField('zone', e.target.value === '' ? null : e.target.value)
                     }
                     disabled={!canEdit}
-                    placeholder="留空按类型推断"
-                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm disabled:bg-gray-50"
-                  />
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
+                  >
+                    <option value="">未分区</option>
+                    <option value="A">A 区</option>
+                    <option value="B">B 区</option>
+                    <option value="C">C 区</option>
+                  </select>
                 </label>
               </div>
               {canEdit && (
@@ -535,74 +703,112 @@ const StationLayoutTab: React.FC = () => {
             </div>
           )}
 
-          {/* 选中门口：信息展示 */}
-          {selectedType === 'door' && selectedId && (() => {
-            const doorIdx = Number(selectedId.replace('door-', ''));
-            const door = doors[doorIdx];
-            if (!door) return null;
-            return (
-              <div className="rounded-xl bg-white p-4 shadow-sm">
-                <h4 className="mb-3 text-sm font-semibold text-gray-700">
-                  选中门口：{door.label}
+          {/* 选中区域：信息 + 编辑（放在最下面） */}
+          {selectedType === 'area' && selectedArea && (
+            <div className="rounded-xl border border-primary/30 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-gray-700">
+                  {selectedArea.type === 'office' ? '办公区' : '揽收区'}
                 </h4>
-                <div className="mb-2 rounded bg-blue-50 px-3 py-2 text-xs text-blue-600">
-                  💡 直接在 3D 视图中按住门口拖拽，最后点顶部「保存全部改动」
-                </div>
-                <div className="space-y-1 text-xs text-gray-600">
-                  <div>X 坐标：{door.x.toFixed(2)} 米</div>
-                  <div>Y 坐标：{door.y.toFixed(2)} 米</div>
-                  <div>门宽：{door.width.toFixed(1)} 米</div>
+                <div className="flex items-center gap-3">
+                  {canEdit && (
+                    <button
+                      onClick={() => handleRemoveArea(selectedArea.id)}
+                      className="text-xs text-danger hover:text-danger/80"
+                    >
+                      删除
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setSelectedId(null);
+                      setSelectedType(null);
+                    }}
+                    className="text-xs text-gray-400 hover:text-gray-600"
+                    title="取消编辑"
+                  >
+                    收起 ✕
+                  </button>
                 </div>
               </div>
-            );
-          })()}
-
-          {/* 货架列表 */}
-          <div className="rounded-xl bg-white p-4 shadow-sm">
-            <h4 className="mb-3 text-sm font-semibold text-gray-700">货架列表</h4>
-            <div className="max-h-60 space-y-1 overflow-y-auto">
-              {editorShelves.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => {
-                    setSelectedId(s.id);
-                    setSelectedType('shelf');
-                  }}
-                  className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-xs transition-colors ${
-                    s.id === selectedId
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  <span>
-                    <span className="font-medium">#{s.number}</span>
-                    <span className="ml-2 text-gray-500">{SIZE_LABEL[s.sizeType]}</span>
-                  </span>
-                  <span className="text-gray-400">
-                    {s.posX !== null
-                      ? `(${s.posX.toFixed(1)}, ${s.posY?.toFixed(1)})`
-                      : '未配置'}
-                    {shelfOverrides[s.id] && (
-                      <span className="ml-1 text-warning">●</span>
-                    )}
-                  </span>
-                </button>
-              ))}
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-gray-500">
+                  X 坐标（米）
+                  <input
+                    type="number"
+                    step={0.5}
+                    value={selectedArea.x}
+                    onChange={(e) =>
+                      updateSelectedAreaField('x', Number(e.target.value))
+                    }
+                    disabled={!canEdit}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
+                  />
+                </label>
+                <label className="text-xs text-gray-500">
+                  Y 坐标（米）
+                  <input
+                    type="number"
+                    step={0.5}
+                    value={selectedArea.y}
+                    onChange={(e) =>
+                      updateSelectedAreaField('y', Number(e.target.value))
+                    }
+                    disabled={!canEdit}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
+                  />
+                </label>
+              </div>
+              <label className="mt-2 block text-xs text-gray-500">
+                标签
+                <input
+                  type="text"
+                  value={selectedArea.label}
+                  onChange={(e) => updateSelectedAreaField('label', e.target.value)}
+                  disabled={!canEdit}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
+                />
+              </label>
+              <div className="mt-2 text-[10px] text-gray-400">
+                尺寸（只读）：{selectedArea.width}×{selectedArea.depth}×{selectedArea.height}m
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
+          )}
 
-      {/* 操作说明 */}
-      <div className="rounded-lg bg-info/5 px-4 py-3 text-xs text-gray-500">
-        <p className="mb-1 font-medium text-gray-600">操作说明</p>
-        <ul className="ml-4 list-disc space-y-0.5">
-          <li>点击 3D 视图中的货架或门口选中（高亮蓝色 + 光圈）</li>
-          <li>按住选中的货架/门口拖拽即可移动，或右侧输入框精调</li>
-          <li>所有改动先在本地暂存（货架列表中 ● 标记改动项），点顶部「保存全部改动」一次性提交</li>
-          <li>未配置位置的货架由前端按 size_type 自动 fallback 排列，仅视觉占位不落库</li>
-          <li>查询页（/query）会读取这些配置，渲染真实位置 + 门口到货架的寻路路径</li>
-        </ul>
+          {/* 选中门口：信息展示 + 删除（放在最下面） */}
+          {selectedType === 'door' && selectedId && (
+            <div className="rounded-xl border border-primary/30 bg-white p-4 shadow-sm">
+              <div className="mb-2 flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-gray-700">
+                  门口 #{Number(selectedId.replace('door-', '')) + 1}
+                </h4>
+                <div className="flex items-center gap-3">
+                  {canEdit && doors.length > 1 && (
+                    <button
+                      onClick={() => handleRemoveDoor(Number(selectedId.replace('door-', '')))}
+                      className="text-xs text-danger hover:text-danger/80"
+                    >
+                      删除
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setSelectedId(null);
+                      setSelectedType(null);
+                    }}
+                    className="text-xs text-gray-400 hover:text-gray-600"
+                    title="取消编辑"
+                  >
+                    收起 ✕
+                  </button>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500">
+                拖拽门口调整位置，保存后生效。至少保留 1 个门口。
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

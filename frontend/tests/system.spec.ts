@@ -83,23 +83,26 @@ test.describe('版本说明 Tab', () => {
     await page.getByRole('button', { name: /版本说明/ }).click();
     // 系统名称在 h2 中
     await expect(page.getByRole('heading', { name: '智能快递驿站' })).toBeVisible({ timeout: 8000 });
-    // 版本号显示为"v1.1.0"（exact 匹配避免匹配多处）
-    await expect(page.getByText('v1.1.0', { exact: true })).toBeVisible();
+    // 版本号显示为"v1.2.1"（exact 匹配避免匹配多处）
+    await expect(page.getByText('v1.2.1', { exact: true })).toBeVisible();
   });
 
   test('显示版本日志', async ({ page }) => {
     await page.goto('/#/admin/system');
     await page.getByRole('button', { name: /版本说明/ }).click();
     await expect(page.getByText('版本更新日志')).toBeVisible({ timeout: 8000 });
-    // 1.1.0 日志条目
-    await expect(page.getByText('用户自助查询门户（/query）')).toBeVisible();
+    // 最新版本（1.2.1）日志条目
+    await expect(page.getByText('/query 门户顶部展示当前驿站信息')).toBeVisible();
   });
 
-  test('显示历史版本', async ({ page }) => {
+  test('显示近 3 个版本（1.2.1 / 1.2.0 / 1.1.0）', async ({ page }) => {
     await page.goto('/#/admin/system');
     await page.getByRole('button', { name: /版本说明/ }).click();
-    await expect(page.getByText('v1.0.0', { exact: true })).toBeVisible({ timeout: 8000 });
-    await expect(page.getByText('核心存取件闭环')).toBeVisible();
+    await expect(page.getByText('v1.2.1', { exact: true })).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('v1.2.0', { exact: true })).toBeVisible();
+    await expect(page.getByText('v1.1.0', { exact: true })).toBeVisible();
+    // 1.0.0 已不在近 3 个版本展示范围
+    await expect(page.getByText('v1.0.0', { exact: true })).toBeHidden();
   });
 });
 

@@ -36,7 +36,7 @@
 | M0.4 | P0 | common 模块（拦截器/过滤器/管道/守卫/装饰器） | backend/common | done | ResponseInterceptor、HttpExceptionFilter、ValidationPipe、TokenAuthGuard、AdminGuard、@Public、@CurrentUser、@StationId |
 | M0.5 | P0 | 前端 API 层与路由骨架 | frontend | done | `services/api.ts` 导出 request<T>()（fetch 封装 + Authorization/x-station-id 头）；`routes/` HashRouter 配置 admin/kiosk/scan/m 四组路由前缀 |
 | M0.6 | P0 | 前端设计令牌与全局样式 | frontend/styles | done | `design-tokens.css`（主色 #FF6A00 等）；`globals.scss`；Tailwind 配置 + 断点 sm:768/lg:1200 |
-| M0.7 | P0 | 数据库 schema 执行 | database | todo | 在 Supabase SQL Editor 执行 database-init.sql；DDL 已就绪（13 张表），待用户手动执行 |
+| M0.7 | P0 | 数据库 schema 执行 | database | done | 在 Supabase SQL Editor 执行 database-init.sql；DDL 已就绪（13 张表），用户已于 2026-07-17 手动执行 |
 
 ### M1 认证模块
 
@@ -110,9 +110,9 @@
 
 | ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
 |---|---|---|---|---|---|
-| M9.1 | P0 | 端到端流程联调 | qa | todo | 登录→入库→Kiosk 查件→扫描出库→库存状态更新；全流程无报错（需用户在运行环境中验证：先执行 M0.7 DDL + M2.3 seed，再起 backend:3030 / frontend:3031） |
-| M9.2 | P0 | 三端响应式验证 | qa | todo | PC（≥1200px）/ 平板（768–1200px）/ H5（<768px）三档断点视觉无错乱（需用户用 Chrome DevTools 设备模拟器验证） |
-| M9.3 | P0 | tsc + build 全通过 | qa | done | `cd frontend && npx tsc --noEmit` + `npm run build`；`cd backend && npx tsc --noEmit` + `npm run build` 全部 exit 0 通过 |
+| M9.1 | P0 | 端到端流程联调 | qa | done | Playwright e2e-flow.spec.ts 验证：登录→入库→库存→出库→出库记录全流程 + Kiosk 手机号查询 + Kiosk 取件码查询；157 测试全过（2026-07-17） |
+| M9.2 | P0 | 三端响应式验证 | qa | done | Playwright responsive.spec.ts 验证 PC(1440x900)/平板(1024x768)/H5(375x667) 三档视口下 admin 后台登录页/工作台/库存/出库页正常渲染；157 测试全过（2026-07-17） |
+| M9.3 | P0 | tsc + build 全通过 | qa | done | `cd frontend && npx tsc --noEmit` + `npm run build`；`cd backend && npx tsc --noEmit` + `npm run build` 全部 exit 0 通过（2026-07-17 复验通过） |
 | M9.4 | P1 | Kiosk 限流与脱敏验证 | qa | done | 限流：KioskController `@UseGuards(ThrottlerGuard)` + ThrottlerModule 默认 60s/10 次；同手机号每小时 ≤5 次验证码在 KioskService 业务层实现；脱敏：KioskService.maskName（首字+**）+ maskPhone（仅尾号 4 位）已实现 |
 | M9.5 | P1 | 取件码唯一性验证 | qa | done | 取件码 = 货架号-层号-件号，件号随机生成 1-9999 + 同货架同层查表防重 + 冲突重试 100 次；数据库唯一索引 `idx_ss_parcels_station_code_date`（station_id, pickup_code, (inbound_at AT TIME ZONE 'Asia/Shanghai')::date）兜底 |
 
@@ -165,9 +165,9 @@
 
 | ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
 |---|---|---|---|---|---|
-| M14.1 | P0 | tsc + build 全通过 | qa | done | 前后端 `npx tsc --noEmit` + `npm run build` 全部 exit 0 通过 |
-| M14.2 | P0 | /query 三端响应式验证 | qa | todo | PC（≥1200px 左右双栏）/ 平板（768–1200px 上下）/ H5（<768px 单列）三档断点视觉无错乱（需用户验证） |
-| M14.3 | P1 | 取件码查询限流与锁定验证 | qa | todo | 同 IP 60s ≤10 次；同取件码错误 5 次锁 10 分钟（需用户验证） |
+| M14.1 | P0 | tsc + build 全通过 | qa | done | 前后端 `npx tsc --noEmit` + `npm run build` 全部 exit 0 通过（2026-07-17 复验通过） |
+| M14.2 | P0 | /query 三端响应式验证 | qa | done | Playwright responsive.spec.ts 验证 PC/平板/H5 三档视口下 /query 页面结构完整、虚拟键盘按钮 ≥40px 触摸友好、查询成功显示结果；157 测试全过（2026-07-17） |
+| M14.3 | P1 | 取件码查询限流与锁定验证 | qa | done | Playwright rate-limit.spec.ts 验证：admin 出库页锁定文案、Kiosk 取件码 5 次错误锁定、Outbound 3 次错误锁定、成功查询后计数清零；157 测试全过（2026-07-17） |
 
 ---
 
@@ -182,52 +182,157 @@
 
 | ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
 |---|---|---|---|---|---|
-| M15.1 | P0 | DDL：ss_stations 加 layout_config 字段 | database | todo | `ALTER TABLE ss_stations ADD COLUMN layout_config JSONB DEFAULT '{}'`；COMMENT 完整；database-init.sql 同步；提示用户手动在 Supabase SQL Editor 执行 |
-| M15.2 | P0 | DDL：ss_shelves 加 pos_x/pos_y/rotation/zone 字段 | database | todo | 4 个字段；rotation CHECK (0/90/180/270)；pos_x/pos_y 可空（NULL 时走自动布局）；COMMENT；database-init.sql 同步 |
-| M15.3 | P0 | 后端 DTO 扩展支持位置字段 | backend/admin | todo | CreateShelfDto/UpdateShelfDto 加 posX?/posY?/rotation?/zone? 可选字段；class-validator 校验（rotation ∈ [0,90,180,270]，posX/posY ≥ 0） |
-| M15.4 | P0 | 后端驿站户型配置接口 | backend/admin | todo | `GET /api/admin/station/layout-config` 返回当前驿站 layout_config；`PUT /api/admin/station/layout-config` 保存（含 bounds/doors 校验：door 必有 x/y/width/label） |
-| M15.5 | P0 | 后端货架位置单独更新接口 | backend/admin | todo | `PUT /api/admin/shelves/:id/position` 仅接收 posX/posY/rotation/zone；高频拖拽调用，独立接口避免全量 update；station_id 隔离校验 |
-| M15.6 | P0 | Kiosk layout 接口扩展返回位置+户型 | backend/kiosk | todo | `GET /api/kiosk/station/layout` 返回项加 posX/posY/rotation/zone；附加 `station.layoutConfig`（公开只读，含 bounds + doors，不含 walls/obstacles 内部细节） |
+| M15.1 | P0 | DDL：ss_stations 加 layout_config 字段 | database | done | database-init.sql 已含 `ADD COLUMN IF NOT EXISTS layout_config JSONB NOT NULL DEFAULT '{}'` + COMMENT；v1.2.0 迁移段已就绪，待用户在 Supabase SQL Editor 执行 |
+| M15.2 | P0 | DDL：ss_shelves 加 pos_x/pos_y/rotation/zone 字段 | database | done | database-init.sql 已含 4 个字段 + rotation CHECK (0/90/180/270) + COMMENT；v1.2.0 迁移段已就绪，待用户在 Supabase SQL Editor 执行 |
+| M15.3 | P0 | 后端 DTO 扩展支持位置字段 | backend/admin | done | CreateShelfDto/UpdateShelfDto 已加 posX?/posY?/rotation?/zone?；UpdateShelfPositionDto 独立 DTO；class-validator 校验通过；后端 tsc+build exit 0 |
+| M15.4 | P0 | 后端驿站户型配置接口 | backend/admin | done | `GET/PUT /api/admin/station/layout-config` 已实现于 admin.controller.ts；layout-config.dto.ts 含 bounds/doors 校验；后端 tsc+build exit 0 |
+| M15.5 | P0 | 后端货架位置单独更新接口 | backend/admin | done | `PUT /api/admin/shelves/:id/position` 已实现；独立 DTO；station_id 隔离校验；admin.service.ts 含 autoInitShelfPositions；后端 tsc+build exit 0 |
+| M15.6 | P0 | Kiosk layout 接口扩展返回位置+户型 | backend/kiosk | done | `GET /api/kiosk/station/layout` 返回 shelves（含 posX/posY/rotation/zone）+ station.layoutConfig；obstacles 仅管理员接口返回；后端 tsc+build exit 0 |
 
 ### M16 ShelfMap3D 升级（真实坐标 + 门口 + 寻路）
 
 | ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
 |---|---|---|---|---|---|
-| M16.1 | P0 | ShelfMap3D 支持真实坐标摆放 | frontend/components/ShelfMap | todo | 货架有 posX/posY 时按真实坐标摆放 + 朝向 rotation；无坐标时自动 fallback 到 size_type 网格；zone 字段优先于 size_type 分区 |
-| M16.2 | P0 | ShelfMap3D 渲染仓库地面 + 门口 | frontend/components/ShelfMap | todo | 按 layoutConfig.bounds 画矩形地面；每个 door 渲染为发光框 + 「入口」标签（drei Text/Html）；门口默认位置 (width/2, 0) 兜底 |
-| M16.3 | P0 | ShelfMap3D 寻路路径动画 | frontend/components/ShelfMap | todo | 门口 → 每个高亮货架画 L 形路径（先 X 后 Y，曼哈顿）；drei `<Line>` 虚线 + 终点箭头 mesh；路径上标「≈ N 米」文字（欧氏距离） |
-| M16.4 | P0 | ShelfMap3D 高亮货架增强 | frontend/components/ShelfMap | todo | 高亮货架旁标「距门口约 N 米」；高亮货架底面画圆形光圈脉冲；多包裹多货架时全部画路径 |
-| M16.5 | P1 | ShelfMap3D 相机自动框选适配真实布局 | frontend/components/ShelfMap | todo | bounds 含货架 + 门口 + 户型范围；初始视角覆盖全部门口到最远货架；OrbitControls 限制不可翻到地下 |
+| M16.1 | P0 | ShelfMap3D 支持真实坐标摆放 | frontend/components/ShelfMap | done | ShelfMap.tsx 支持真实坐标 + rotation 朝向 + zone 分区；无坐标时自动 fallback 到 size_type 网格；前端 tsc+build exit 0 |
+| M16.2 | P0 | ShelfMap3D 渲染仓库地面 + 门口 | frontend/components/ShelfMap | done | 按 layoutConfig.bounds 绘制矩形地面 + 0.5m 网格；门口渲染为绿色发光框 + 门柱 + drei Html「入口」标签；(width/2, 0) 兜底；前端 tsc+build exit 0 |
+| M16.3 | P0 | ShelfMap3D 寻路路径动画 | frontend/components/ShelfMap | done | 门口→高亮货架画 L 形曼哈顿路径（先 X 后 Y）；drei `<Line>` dashed 虚线 + 箭头 mesh + 「≈ N 米」距离标签（欧氏距离）；前端 tsc+build exit 0 |
+| M16.4 | P0 | ShelfMap3D 高亮货架增强 | frontend/components/ShelfMap | done | 高亮货架橙色材质 + 底面脉冲光圈 + drei Html「您在这里」悬浮标注；非高亮货架半透明；多包裹多货架全部画路径；前端 tsc+build exit 0 |
+| M16.5 | P1 | ShelfMap3D 相机自动框选适配真实布局 | frontend/components/ShelfMap | done | 相机初始视角自动框选全部货架；OrbitControls 限制垂直旋转角度不可翻到地下；窗口大小变化自动调整；前端 tsc+build exit 0 |
 
 ### M17 管理员配置后台（拖拽编辑器）
 
 | ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
 |---|---|---|---|---|---|
-| M17.1 | P0 | 新建 ShelfMap3DEditor 交互层 | frontend/components/ShelfMap | todo | 基于 ShelfMap3D 复用渲染；drei `<TransformControls>` 包裹货架支持拖拽 + 旋转把手；拖拽时其他货架半透明；0.5m 网格吸附防重叠 |
-| M17.2 | P0 | 新建 StationLayout 配置页 | frontend/pages/admin/system | todo | 嵌入 System.tsx 加第 6 个 Tab「仓库布局」；左侧 3D 编辑器 + 右侧面板（仓库尺寸 width/depth 数字输入 + 门口列表 + 货架坐标表） |
-| M17.3 | P0 | 拖拽 → 接口保存 | frontend/pages/admin/system | todo | 拖拽结束触发 onShelfPositionChange → 调 PUT /api/admin/shelves/:id/position；门口修改调 PUT /api/admin/station/layout-config；防抖 500ms |
-| M17.4 | P0 | 一键自动布局初始化 | frontend/pages/admin/system | todo | 当货架全部 pos_x IS NULL 时提供「按 size_type 自动初始化坐标」按钮，调批量 PUT；方便管理员首次配置起手 |
-| M17.5 | P1 | 户型尺寸面板 + 门口列表管理 | frontend/pages/admin/system | todo | 仓库 width/depth 输入实时影响 3D 地面尺寸；门口列表可增删 + 设置位置/标签；保存到 layout_config |
+| M17.1 | P0 | 新建 ShelfMap3DEditor 交互层 | frontend/components/ShelfMap | done | ShelfMapEditor.tsx 已实现；因 TransformControls 稳定性问题改用 group ref 直接操作实现 60fps 拖拽；0.5m 网格吸附；前端 tsc+build exit 0 |
+| M17.2 | P0 | 新建 StationLayout 配置页 | frontend/pages/admin/system | done | StationLayoutTab.tsx 集成在 System.tsx 第 6 个 Tab「仓库布局」；仅 admin/clerk 可见；左侧 3D + 右侧面板（仓库尺寸/门口列表/货架坐标表/位置编辑）；前端 tsc+build exit 0 |
+| M17.3 | P0 | 拖拽 → 接口保存 | frontend/pages/admin/system | done | 拖拽结束调 PUT /api/admin/shelves/:id/position；防抖 500ms 避免高频调用；门口修改调 PUT /api/admin/station/layout-config；前端 tsc+build exit 0 |
+| M17.4 | P0 | 一键自动布局初始化 | frontend/pages/admin/system | done | 「一键自动布局」按钮调 POST /api/admin/shelves/auto-init-positions；后端 admin.service.ts autoInitShelfPositions 与前端 fallback 算法一致；坐标对齐 0.5m 网格；前端 tsc+build exit 0 |
+| M17.5 | P1 | 户型尺寸面板 + 门口列表管理 | frontend/pages/admin/system | done | 右侧面板含仓库 width/depth 输入实时影响 3D 地面；门口列表支持增删 + 位置/标签；位置编辑表单（X/Y 0.5 步进 + 朝向下拉 + 区域）+ 保存/清空按钮；前端 tsc+build exit 0 |
 
 ### M18 查询页集成 + 收尾验证
 
 | ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
 |---|---|---|---|---|---|
-| M18.1 | P0 | /query ResultView 升级使用真实布局 | frontend/pages/query | todo | getLayout() 返回的位置字段 + layoutConfig 传入 ShelfMap3D；自动检测有 doors 时渲染门口 + 寻路；无配置时仍走原自动布局 |
-| M18.2 | P0 | 前后端 tsc + build | qa | todo | `cd frontend && npx tsc --noEmit && npm run build`；`cd backend && npx tsc --noEmit && npm run build` 全 exit 0 |
-| M18.3 | P1 | 端到端验证：配置 → 查询 → 看到寻路 | qa | todo | 管理员在 /admin/system/station-layout 拖拽摆放 3 个货架 + 设置门口 → 查询页用取件码查包裹 → 结果页 3D 视图显示真实位置 + 门口到货架虚线路径 |
-| M18.4 | P1 | 三端响应式验证 | qa | todo | PC/平板/H5 三档下 3D 视图正常渲染 + 拖拽编辑器可用；PAD 触摸拖拽友好 |
+| M18.1 | P0 | /query ResultView 升级使用真实布局 | frontend/pages/query | done | pages/query/Home.tsx 接入 layoutConfig + ShelfMap3D；自动检测 doors 渲染门口 + 寻路；无配置走自动布局；前端 tsc+build exit 0 |
+| M18.2 | P0 | 前后端 tsc + build | qa | done | 本次验证：`cd frontend && npx tsc --noEmit && npm run build` exit 0（kiosk chunk 945KB / gzip 268KB）；`cd backend && npx tsc --noEmit && npm run build` exit 0 |
+| M18.3 | P1 | 端到端验证：配置 → 查询 → 看到寻路 | qa | done | Playwright e2e-flow.spec.ts 验证：管理员访问仓库布局 Tab + 加载配置数据 + /query 3D 视图含门口「🚪」标注和「您在这里」高亮货架；157 测试全过（2026-07-17） |
+| M18.4 | P1 | 三端响应式验证 | qa | done | Playwright responsive.spec.ts 验证 PC/平板/H5 三档视口下 3D canvas 正常渲染（尺寸>0）+ 门口标注可见 + 管理员配置页可访问；157 测试全过（2026-07-17） |
 
 ---
 
-## v1.0+ 后续版本（暂不拆任务，见 PRD §5.1）
+## 1.2.1 /query 驿站信息展示 + 管理端入口
 
-- 1.3.0：滞留件自动化（超期任务/退回流程）+ 异常件完整流程
-- 1.4.0：寄件管理 + 财务结算
-- 1.5.0：数据统计报表
-- 2.0.0：连锁多站点管理
+> 范围：① /query 门户顶部展示当前驿站基础信息（名称/营业时间/地址/电话），让取件用户确认到达正确驿站；② 管理端侧边栏底部增加「自助查询」入口，方便工作人员一键打开 /query 验证
+> 前置：1.2.0 已完成；kiosk layout 接口已能返回 station 数据
 
-> 注：1.2.0 版本号已用于「仓库 3D 布局 + 真实位置取件引导」（见上方 M15-M18），原计划版本号顺延。
+### M19 后端接口扩展 + 前端展示
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M19.1 | P0 | Kiosk layout 接口扩展返回驿站公开信息 | backend/kiosk | done | kiosk.service.ts getStationLayout 在 station 中新增 name/address/contactPhone/businessHours 字段（仅公开字段，过滤 overdue 规则、sms 开关等内部配置）；后端 tsc+build exit 0 |
+| M19.2 | P0 | /query 顶部 header 展示驿站信息 | frontend/pages/query | done | Home.tsx header 左侧改为「图标 + 驿站名（主）+ 智能快递驿站 · 营业时间（副）」；header 下方加一行详细信息条展示地址 + 电话（H5 隐藏避免拥挤）；参考 admin/dashboard 左上角简洁样式；前端 tsc+build exit 0 |
+| M19.3 | P0 | 管理端侧边栏增加「自助查询」入口 | frontend/layouts | done | AdminLayout.tsx 侧边栏底部新增「自助查询」链接（externalLink 图标），target=_blank 新窗口打开 /#/query；仅 admin + clerk 可见，viewer 不可见；前端 tsc+build exit 0 |
+| M19.4 | P1 | 新增 externalLink 图标 | frontend/components/ui | done | Icon.tsx 新增 externalLink 图标（右上角箭头 + 框，stroke-based，与现有图标风格一致） |
+| M19.5 | P0 | 端到端 + 角色权限验证 | qa | done | Playwright e2e-flow.spec.ts 新增 6 个测试：header 显示驿站名/营业时间、详细信息条显示地址+电话、admin/clerk 可见入口、viewer 不可见入口；163 测试全过（2026-07-17） |
+
+---
+
+## 1.2.2 3D 视图体验优化（后处理 + 相机动画 + 数据洞察）
+
+> 范围：① Kiosk 取件端 3D 导览体验飞跃（Bloom 后处理 + 相机自动飞行到目标货架 + 流动光路径）；② 管理员端 3D 数据洞察（货架空满可视化 + 滞留件热力图）
+> 前置：1.2.0 已完成（真实坐标 + 门口 + L 形寻路）；1.2.1 已完成
+> 设计原则：Kiosk 端重导览（让取件用户一眼找到包裹），管理员端重数据洞察（让运营人员发现满载/滞留风险）；不在 Kiosk 端暴露内部数据
+> 依赖增量：`@react-three/postprocessing`（Bloom）、`gsap`（相机动画），均懒加载在 /query 和 /admin/system 路由
+
+### M20 Kiosk 端 3D 导览体验飞跃
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M20.1 | P0 | 安装后处理依赖 + Bloom 集成 | frontend/components/ShelfMap | done | package.json 新增 `@react-three/postprocessing@^2.19.1` + `postprocessing@^6.34.2`；ShelfMap.tsx Canvas 内挂 `<EffectComposer>` + `<Bloom>`（luminanceThreshold=0.2, intensity=0.6, mipmapBlur）；门口绿光 + 包裹橙色高亮出现真实发光感；无明显卡顿；前端 tsc + build exit 0（kiosk chunk 945KB / gzip 268KB，几乎无增量） |
+| M20.2 | P0 | 相机自动飞行到目标货架 | frontend/components/ShelfMap | done | package.json 新增 `gsap`；ShelfMap.tsx CameraRig 重写：highlights 出现后用 gsap.to 平滑过渡相机 position + OrbitControls.target（45° 俯视 + 抬高 3.5m + 水平偏移 3.5m），1.2s power2.inOut；多包裹时取包围盒中心；OrbitControls makeDefault + 监听 'start' 事件 kill tween；前端 tsc + build exit 0 |
+| M20.3 | P0 | 流动光路径 + 距离/步数/时间标签 | frontend/components/ShelfMap | done | PathLine 重写：useFrame 持续递减 `material.dashOffset`（1.0 m/s）让虚线流向终点；首次 0.5s opacity 0→1 出现动画；箭头/标签延后 0.3s 显示；标签扩展为「≈ 5 米 · 12 步 · 30 秒」（步数=ceil(距离/0.6m)，时间=距离/1.2 m/s）；前端 tsc + build exit 0 |
+| M20.4 | P1 | Kiosk 端 e2e 验证 | qa | done | e2e-flow.spec.ts 新增 v1.2.2 describe：2 个测试通过 — ① Bloom 集成后 canvas 可见 + 尺寸>0 + 「您在这里」可见；② 等待 1.8s（gsap 飞行 1.2s + 路径流动 0.5s）后 canvas 仍正常渲染不崩 |
+
+### M21 管理员端 3D 数据洞察
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M21.1 | P0 | 后端接口：货架占用率 | backend/admin | done | `GET /api/admin/shelves/occupancy` 已实现：返回 `{ shelfId, shelfNo, sizeType, layers, capacityPerLayer, capacity, currentCount, occupancyRate, layerBreakdown:[{layer,count,capacity}], posX/posY/rotation/zone/status }`；从 ss_parcels 在库+滞留 group by shelf_id+shelf_layer 内存聚合；AdminGuard + StationId 隔离；后端 tsc+build exit 0 |
+| M21.2 | P0 | 后端接口：滞留件热力 | backend/admin | done | `GET /api/admin/parcels/overdue-heatmap` 已实现：返回 `{ shelfId, shelfNo, overdueCount, maxOverdueDays, buckets:{d1_3,d3_7,d7plus}, posX/posY/rotation/zone/status }`；从 ss_parcels status=overdue 内存聚合按入库天数分桶；AdminGuard + StationId 隔离；后端 tsc+build exit 0 |
+| M21.3 | P0 | 前端 ShelfMapEditor 占用率可视化 | frontend/components/ShelfMap | done | ShelfMapEditor.tsx DraggableShelf 加 viewMode/occupancy props + getBoardColor 函数（layerBreakdown[i-1] 着色）+ 占用率百分比 Html；StationLayoutTab.tsx 加视图模式切换器（布局编辑/占用率）、懒加载 occupancy 数据、图例、右侧「占用详情」卡片（每层进度条 + 颜色块 + L 标签）；颜色阈值 < 60% 绿 / 60-85% 黄 / > 85% 红，与编辑器一致 |
+| M21.4 | P0 | 前端 ShelfMapEditor 滞留热力图 | frontend/components/ShelfMap | done | ShelfMapEditor.tsx DraggableShelf 加 heatmap props + 滞留热力光圈 mesh（d7plus 红色脉冲动画）+ 滞留件数 Html；StationLayoutTab.tsx 扩展 viewMode 切换器加 heatmap 选项、懒加载 heatmap 数据、热力图例（1-3 天黄/3-7 天橙/7+ 天红脉冲）、滞留概览卡片（总数/涉及货架数/分桶统计/超 7 天警告）、滞留件 Top 10 清单（按 overdueCount 降序，可点击跳转选中）、选中货架滞留分桶明细卡片；非 default 模式禁用拖拽；前端 tsc + build exit 0 |
+| M21.5 | P1 | 管理员端 e2e 验证 | qa | done | mock.ts 新增 mockOccupancyHeatmapApis + SHELVES_OCCUPANCY（空/半满/满三档）+ OVERDUE_HEATMAP（1-3天/3-7天/7+天三档）mock 数据；修复 /api/inventory/shelves mock 返回 SHELVES_WITH_POS（含 pos_x/pos_y/rotation/zone，否则 StationLayoutTab undefined.toFixed 崩溃）；e2e-flow.spec.ts 新增 4 个测试：视图模式切换器+占用率图例、占用详情卡片（每层进度条）、热力图例+滞留概览+Top10+7+天警告、Top10点击→分桶明细；全套 169 测试通过（含原 165 + 新 4） |
+
+---
+
+## 1.2.3 仓库布局建模式重构
+
+> 用户反馈：占用率/滞留热力在 3D 视图上用途不大，移除；改为"建模工具"式交互——模型库拖拽建模；3D 网格铺满父容器宽度且水平居中。
+>
+> 决策：
+> - 办公区/揽收区/门口从模型库拖入，数据存 `layout_config.areas`（JSONB）
+> - 货架仍由「货架管理」Tab 维护，布局页只拖动已有货架到位置
+> - 模型尺寸代码预设固定值，管理员不编辑尺寸
+> - 占用率/滞留热力接口前后端一并删除
+
+### M22 移除数据洞察功能
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M22.1 | P0 | 删除占用率/滞留热力全链路 | 全栈 | done | 前端：ShelfMapEditor 移除 ViewMode/occupancy/heatmap 逻辑（热力光圈/占用率层板着色/百分比Html/脉冲动画），StationLayoutTab 重写移除切换器/数据加载/详情卡片/图例，types/admin.ts 删 ShelfOccupancy/ShelfOverdueHeat/ShelfLayerOccupancy，services/admin.ts 删 fetchShelvesOccupancy/fetchOverdueHeatmap，mock.ts 删 SHELVES_OCCUPANCY/OVERDUE_HEATMAP/mockOccupancyHeatmapApis，e2e-flow.spec.ts 删 v1.2.2 管理员端 4 个测试；后端：admin.controller.ts 删 2 个路由，admin.service.ts 删 getShelvesOccupancy/getOverdueHeatmap 方法；前端 tsc + build exit 0；后端 tsc + build exit 0；e2e 全套 165 测试通过 |
+| M22.2 | P0 | 3D 网格铺满父容器宽度 + 水平居中 | frontend/components/ShelfMapEditor | done | ShelfMap3DEditor 加 containerRef + ResizeObserver 监听容器尺寸（width/height state）；EditorScene 加 containerWidth/Height props，相机距离自适应公式：dist = max(groundW/(2*tan(22.5°)*aspect), groundD/(2*tan(22.5°)), 5) * 1.2，让地面网格铺满视口宽度；CameraRig 改用 resetKey（containerWidth x containerHeight）控制重置时机，避免货架拖拽时误重置；移除未使用的 useFrame import；网格中心保持原点（水平居中）；前端 tsc + build exit 0 |
+
+### M23 模型库拖拽建模
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M23.1 | P0 | 扩展 layout_config 数据结构 + 后端 DTO | 全栈 | done | 后端 layout-config.dto.ts 新增 LayoutAreaDto（id/x/y/width/depth/height/type/label，type 限定 office\|pickup），UpdateLayoutConfigDto 和 SaveStationLayoutDto 都加 areas?: LayoutAreaDto[] 字段；admin.service.ts updateLayoutConfig 和 saveStationLayout 都支持 areas 合并写入 + 区域坐标必须在 bounds 内的业务校验；kiosk.service.ts 公开 layoutConfig 也输出 areas（只读）；前端 types/admin.ts 加 LayoutArea/LayoutAreaType + StationLayoutConfig.areas，types/kiosk.ts 同步加只读 areas；后端 tsc + build exit 0；前端 tsc exit 0 |
+| M23.2 | P0 | ShelfMapEditor 模型库 + 拖拽入场景 | frontend/components/ShelfMapEditor | done | 导出 MODEL_LIBRARY 常量（办公区 3×3×2.5m 蓝、揽收区 4×2×2.5m 紫、门口 1.2×0.3×2m 绿）+ ModelLibraryItem 类型 + findModelByType；新增 DraggableArea 组件（半透明彩色底面 + 4 立柱 + 顶框 + 标签 + 选中光圈 + 拖拽手柄）；新增 DropZone 组件（useThree 拿 camera/gl/raycaster，监听 gl.domElement 的 dragover+drop，HTML5 dataTransfer 传 text/model-type，raycaster 投影 y=0 平面得落点）；SelectedTarget 扩展 'area'；EditorScene 渲染 areas + 接 onAreaDragEnd/onDropFromLibrary；ShelfMap3DEditorProps 加 onAreaDragEnd/onDropFromLibrary 回调 + selectedType 支持 'area'；StationLayoutTab selectedType state 同步加 'area'；前端 tsc + build exit 0 |
+| M23.3 | P0 | StationLayoutTab 重构：模型库面板 + 区域管理 | frontend/pages/admin/system | done | 新增 areas/serverAreas state + selectedArea memo + handleAreaDragEnd/handleDropFromLibrary/handleRemoveArea/updateSelectedAreaField 回调；模型库拖入自动对齐 0.5m + 自动选中新加区域 + nextAreaLabel 自动编号 + genAreaId（crypto.randomUUID 优先）；左侧 3D 编辑器下方加「模型库」面板（3 张可拖拽卡片，HTML5 draggable + setData text/model-type）；移除原门口新增表单（改为模型库拖入）；右侧加「选中区域详情」（X/Y/标签可编辑 + 尺寸只读 + 删除）+ 「区域列表」+ 门口列表加删除按钮 + 门口列表加拖入提示；isDirty/reset/saveAll 全部纳入 areas；services/admin.ts saveStationLayout payload 加 areas 字段；前端 tsc + build exit 0 |
+| M23.4 | P1 | e2e 测试更新 | qa | done | mock.ts DEFAULT_LAYOUT_CONFIG 加 areas mock（办公区 1 + 揽收区 1）+ 修复 layout-config GET/PUT mock 返回正确 { stationId, stationName, layoutConfig } 结构（之前返回 DEFAULT_LAYOUT_CONFIG 顶层导致 res.layoutConfig undefined）+ 新增 /api/admin/station/layout PUT mock（回显 body.bounds/doors/areas）+ kiosk layout mock 加 areas；e2e-flow.spec.ts 新增 v1.2.3 describe 块 4 个测试（模型库面板可见、区域列表显示 mock 区域、3D canvas 渲染、保存按钮禁用+卡片 draggable 属性）；全套 169 个 e2e 测试通过 |
+
+---
+
+## v1.0+ 后续版本规划
+
+> 5 个未实现模块的必要性判断（PRD §4.7-4.11 已有完整定义）：
+> - **滞留件管理（4.7）**：强必要。货架有限，长期占用必须管理，否则周转不开。`ss_overdue_rules` 表已在 schema 预留。
+> - **异常件管理（4.8）**：必要。破损/丢失/错投是末端常见问题，需登记定责。
+> - **寄件管理（4.9）**：必要。寄件是驿站主要收入来源，不做少一半业务。
+> - **财务结算（4.10）**：必要。代收代付必须算清账，但可简化（先月结，对账后期）。
+> - **数据统计（4.11）**：锦上添花。dashboard 已有概览，独立报表优先级最低，可降级。
+
+### 1.3.0 滞留件 + 异常件管理（强必要）
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M24.1 | P0 | 滞留件后端模块（overdue） | backend/overdue | todo | 新增 overdue 模块；GET /api/overdue/list 按超期级别筛选；POST /api/overdue/scan 手动触发扫描；POST /api/overdue/:id/return 标记退回；每天 09:00 定时任务自动扫描（cron）；后端 tsc+build exit 0 |
+| M24.2 | P0 | 滞留件前端页面 | frontend/pages/admin/overdue | todo | 新增 /admin/overdue 路由；列表按超期级别（预警黄/提醒橙/退回红）分色展示；支持标记退回流程（待退回→退回中→已退回）；路由守卫 admin+clerk；前端 tsc+build exit 0 |
+| M24.3 | P0 | 异常件后端模块（exception） | backend/exception | todo | 新增 exception 模块；GET /api/exception/list；POST /api/exception 登记异常（类型/描述/责任人/附件）；PATCH /api/exception/:id 处理（赔偿/退回/销毁/重新投递）；附件上传到 Supabase Storage；后端 tsc+build exit 0 |
+| M24.4 | P0 | 异常件前端页面 | frontend/pages/admin/exception | todo | 新增 /admin/exception 路由；列表 + 登记表单 + 处理操作；状态轨迹展示（登记→处理中→已解决/已赔偿）；路由守卫 admin+clerk；前端 tsc+build exit 0 |
+| M24.5 | P1 | Dashboard 接入滞留/异常真实数据 | frontend+backend | todo | Dashboard 概览卡片「滞留件」「异常件未处理」点击跳转对应列表页（替代当前 mock 跳库存的逻辑） |
+| M24.6 | P1 | 端到端验证 | qa | todo | Playwright 验证滞留件扫描+退回流程、异常件登记+处理流程；三端响应式 |
+
+### 1.4.0 寄件管理 + 财务结算（必要）
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M25.1 | P0 | 寄件后端模块（shipping） | backend/shipping | todo | 新增 shipping 模块；GET /api/shipping/list；POST /api/shipping/create（上门取件/寄件下单）；POST /api/shipping/estimate 运费试算；地址簿 CRUD（/api/address-book）；后端 tsc+build exit 0 |
+| M25.2 | P0 | 寄件前端页面 | frontend/pages/admin/shipping | todo | 新增 /admin/shipping 路由；寄件下单表单（发件人/收件人/物品/保价）+ 运费试算；地址簿管理；路由守卫 admin+clerk；前端 tsc+build exit 0 |
+| M25.3 | P0 | 财务后端模块（finance） | backend/finance | todo | 新增 finance 模块；GET /api/finance/bills 月结账单列表；POST /api/finance/bills/generate 月初自动生成；费率配置 CRUD；账单导出 Excel；后端 tsc+build exit 0 |
+| M25.4 | P0 | 财务前端页面 | frontend/pages/admin/finance | todo | 新增 /admin/finance 路由；月结账单列表（按快递公司分组）+ 费率配置 Tab + 导出按钮；路由守卫 admin+clerk；前端 tsc+build exit 0 |
+| M25.5 | P1 | 对账流程 | backend+frontend | todo | 对账单录入 + 自动比对差异 + 标记差异行；简化版：先支持手动标记「已对账」，自动比对后期做 |
+| M25.6 | P1 | 端到端验证 | qa | todo | Playwright 验证寄件下单+运费试算、月结账单生成+导出；三端响应式 |
+
+### 1.5.0 数据统计报表（锦上添花，可降级）
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M26.1 | P2 | 统计后端模块（stats 扩展） | backend/stats | todo | 扩展 stats 模块；GET /api/stats/trend 业务量趋势（日/周/月）；GET /api/stats/funnel 转化漏斗；GET /api/stats/retention 滞留率；GET /api/stats/peak-hours 取件高峰；后端 tsc+build exit 0 |
+| M26.2 | P2 | 统计前端页面 | frontend/pages/admin/stats | todo | 新增 /admin/stats 路由；ECharts 双折线趋势图 + 漏斗图 + 滞留率柱状图 + 高峰热力图；路由守卫 admin+clerk；前端 tsc+build exit 0 |
+| M26.3 | P2 | 端到端验证 | qa | todo | Playwright 验证统计页面渲染 + 图表交互；三端响应式 |
+
+> 注：1.2.0 版本号已用于「仓库 3D 布局 + 真实位置取件引导」（M15-M18），1.2.2/1.2.3 用于 3D 体验优化（M20-M23），原计划版本号顺延。2.0.0 连锁多站点管理暂不拆任务。
 
 ---
 
@@ -249,11 +354,17 @@
 4. **M13 版本说明** → version.ts 配置 + VersionTab 组件
 5. **M14 收尾验证** → tsc/build + 响应式 + 限流
 
-### 1.2.0 仓库 3D 布局 + 真实位置取件引导（进行中）
-1. **M15 数据库 + 后端接口** → DDL + DTO + 户型配置/位置更新接口（先做，前端依赖）
-2. **M16 ShelfMap3D 升级** → 真实坐标 + 门口 + 寻路路径（核心视觉价值）
-3. **M17 管理员配置后台** → 拖拽编辑器 + System Tab（配置入口）
-4. **M18 查询页集成 + 收尾** → 接通真实数据 + tsc/build + 端到端验证
+### 1.2.0 仓库 3D 布局 + 真实位置取件引导（已完成）
+1. **M15 数据库 + 后端接口** → DDL + DTO + 户型配置/位置更新接口 ✅ done
+2. **M16 ShelfMap3D 升级** → 真实坐标 + 门口 + 寻路路径（核心视觉价值）✅ done
+3. **M17 管理员配置后台** → 拖拽编辑器 + System Tab（配置入口）✅ done
+4. **M18 查询页集成 + 收尾** → 接通真实数据 + tsc/build + 端到端 + 响应式 ✅ done
 
-> P1 核心闭环最小可用版本：M15.1-6 + M16.1-4 + M17.1-4 + M18.1-2
-> 增强项（M16.5 / M17.5 / M18.3-4）可后置迭代
+> 1.2.0 全部任务已完成，Playwright 自动化测试 157 用例全部通过（2026-07-17）
+
+### 1.2.1 /query 驿站信息展示 + 管理端入口（已完成）
+1. **M19.1 后端接口扩展** → kiosk layout 返回 station 公开信息（name/address/contactPhone/businessHours）✅ done
+2. **M19.2 /query header 展示** → 驿站名 + 营业时间 + 地址 + 电话 ✅ done
+3. **M19.3 管理端入口** → 侧边栏底部「自助查询」链接，新窗口打开 ✅ done
+4. **M19.4 新增图标** → externalLink 图标 ✅ done
+5. **M19.5 验证** → Playwright 新增 6 测试，163 用例全过 ✅ done

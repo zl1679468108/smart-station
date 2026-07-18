@@ -1,28 +1,33 @@
-import React, { useMemo, useRef, Suspense } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import React, { useMemo, useRef, useState, Suspense, useEffect } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Html, Text, Line } from '@react-three/drei';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
+import gsap from 'gsap';
 import type {
   KioskShelf,
   ShelfSizeType,
   StationLayoutConfig,
   LayoutDoor,
+  LayoutArea,
 } from '@/types/kiosk';
 import { SHELF_ZONE_MAP } from '@/types/kiosk';
 
 /**
- * 货架 3D 平面图（v1.2.0 真实位置版）
- * --------------------------------------
+ * 货架 3D 平面图（v1.2.0 真实位置版，与管理端 ShelfMapEditor 渲染统一）
+ * ----------------------------------------------------------------
  * - 优先按货架 posX/posY 真实坐标摆放 + rotation 朝向
  * - 货架无坐标时自动 fallback 到 size_type 网格布局（向后兼容）
- * - 渲染仓库地面（bounds）+ 门口（发光框 + 「入口」标签）
- * - 高亮货架：橙色发光 + 「您在这里」悬浮 + 底面脉冲光圈 + 「距门口 N 米」
- * - 寻路路径：门口 → 每个高亮货架画 L 形虚线 + 箭头
+ * - 渲染仓库地面网格（bounds）+ 门口 + 区域（办公区/揽收区）+ 货架
+ * - 高亮货架：橙色发光 + 「该货架包裹（N）个」悬浮 + 底面脉冲光圈
+ * - 办公区：显示「您在这里」悬浮标注（作为寻路起点）
+ * - 寻路路径：办公区 → 每个高亮货架画 L 形虚线 + 箭头
  * - OrbitControls 旋转/缩放，限制角度不可翻到地下
+ * - 地面网格以原点为中心，相机对准原点，与管理端完全对齐
  *
  * 入参：
  *  - shelves：货架列表
- *  - layoutConfig：仓库户型（bounds + doors）
- *  - highlights：高亮项（货架号 + 可选层号，来自取件码前两段）
+ *  - layoutConfig：仓库户型（bounds + doors + areas）
+ *  - highlights：高亮项（货架号 + 可选层号 + 包裹数量，来自取件码前两段）
  */
 
 // ============ 布局常量（fallback 自动布局用，与后端 autoInit 一致） ============
@@ -41,8 +46,11 @@ const HIGHLIGHT_COLOR = '#FF6A00';
 const NORMAL_FRAME = '#94A3B8';
 const NORMAL_BOARD = '#E2E8F0';
 const GROUND_COLOR = '#F1F5F9';
+const GRID_COLOR = '#CBD5E1';
 const DOOR_COLOR = '#10B981';
 const PATH_COLOR = '#FF6A00';
+const AREA_OFFICE_COLOR = '#3B82F6';
+const AREA_PICKUP_COLOR = '#8B5CF6';
 
 // ============ 工具：fallback 自动布局计算 ============
 interface PlacedShelf {
@@ -157,6 +165,7 @@ interface ShelfMeshProps {
   rotationY: number;
   highlight: boolean;
   highlightLayer?: number | null;
+  highlightCount?: number;
   dimmed?: boolean;
 }
 
@@ -166,6 +175,7 @@ const ShelfRack: React.FC<ShelfMeshProps> = ({
   rotationY,
   highlight,
   highlightLayer,
+  highlightCount = 0,
   dimmed,
 }) => {
   const totalH = shelf.layers * LAYER_H + BOARD_T;
@@ -249,7 +259,7 @@ const ShelfRack: React.FC<ShelfMeshProps> = ({
         {`#${shelf.number}`}
       </Text>
 
-      {/* 高亮悬浮标注 */}
+      {/* 高亮悬浮标注：显示该货架包裹数量 */}
       {highlight && (
         <Html position={[0, totalH + 0.75, 0]} center distanceFactor={10}>
           <div
@@ -265,7 +275,7 @@ const ShelfRack: React.FC<ShelfMeshProps> = ({
               transform: 'translateY(-4px)',
             }}
           >
-            ▼ 您在这里
+            ▼ 该货架包裹（{highlightCount}）个
           </div>
         </Html>
       )}
@@ -330,11 +340,134 @@ const DoorMesh: React.FC<{ door: LayoutDoor; distanceLabel?: string }> = ({
   );
 };
 
-// ============ 寻路路径（L 形虚线 + 箭头） ============
+// ============ 网格地面（与管理端 ShelfMapEditor 统一） ============
+const GridFloor: React.FC<{ width: number; depth: number }> = ({ width, depth }) => {
+  const lines = useMemo(() => {
+    const arr: Array<[number, number, number, number, number, number]> = [];
+    const halfW = width / 2;
+    const halfD = depth / 2;
+    for (let x = -Math.ceil(halfW); x <= Math.ceil(halfW); x++) {
+      arr.push([x, 0.005, -halfD, x, 0.005, halfD]);
+    }
+    for (let z = -Math.ceil(halfD); z <= Math.ceil(halfD); z++) {
+      arr.push([-halfW, 0.005, z, halfW, 0.005, z]);
+    }
+    return arr;
+  }, [width, depth]);
+
+  return (
+    <group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
+        <planeGeometry args={[width, depth]} />
+        <meshStandardMaterial color={GROUND_COLOR} />
+      </mesh>
+      {lines.map((l, i) => (
+        <line key={`g-${i}`}>
+          <bufferGeometry attach="geometry">
+            <bufferAttribute
+              attach="attributes-position"
+              count={2}
+              array={new Float32Array(l)}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color={GRID_COLOR} transparent opacity={0.4} />
+        </line>
+      ))}
+    </group>
+  );
+};
+
+// ============ 区域（只读，办公区显示「您在这里」作为寻路起点） ============
+const AreaMesh: React.FC<{ area: LayoutArea; isStartPoint: boolean }> = ({
+  area,
+  isStartPoint,
+}) => {
+  const baseColor = area.type === 'office' ? AREA_OFFICE_COLOR : AREA_PICKUP_COLOR;
+  const totalH = area.height;
+
+  return (
+    <group position={[area.x, 0, area.y]}>
+      {/* 区域底面（半透明色块） */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} receiveShadow>
+        <planeGeometry args={[area.width, area.depth]} />
+        <meshStandardMaterial
+          color={baseColor}
+          transparent
+          opacity={isStartPoint ? 0.35 : 0.22}
+          emissive={baseColor}
+          emissiveIntensity={isStartPoint ? 0.3 : 0.15}
+        />
+      </mesh>
+
+      {/* 区域边框（4 立柱 + 顶框，与管理端统一） */}
+      {[
+        [-area.width / 2, 0, -area.depth / 2],
+        [area.width / 2, 0, -area.depth / 2],
+        [-area.width / 2, 0, area.depth / 2],
+        [area.width / 2, 0, area.depth / 2],
+      ].map((p, i) => (
+        <mesh key={`ap-${i}`} position={[p[0], totalH / 2, p[2]]}>
+          <boxGeometry args={[0.06, totalH, 0.06]} />
+          <meshStandardMaterial color={baseColor} transparent opacity={0.8} />
+        </mesh>
+      ))}
+      {[
+        { pos: [0, totalH, -area.depth / 2] as [number, number, number], size: [area.width, 0.05, 0.05] as [number, number, number] },
+        { pos: [0, totalH, area.depth / 2] as [number, number, number], size: [area.width, 0.05, 0.05] as [number, number, number] },
+        { pos: [-area.width / 2, totalH, 0] as [number, number, number], size: [0.05, 0.05, area.depth] as [number, number, number] },
+        { pos: [area.width / 2, totalH, 0] as [number, number, number], size: [0.05, 0.05, area.depth] as [number, number, number] },
+      ].map((b, i) => (
+        <mesh key={`ab-${i}`} position={b.pos}>
+          <boxGeometry args={b.size} />
+          <meshStandardMaterial color={baseColor} transparent opacity={0.8} />
+        </mesh>
+      ))}
+
+      {/* 区域标签 */}
+      <Text
+        position={[0, totalH + 0.35, 0]}
+        fontSize={0.32}
+        color={baseColor}
+        anchorX="center"
+        anchorY="middle"
+      >
+        {area.label}
+      </Text>
+
+      {/* 办公区作为寻路起点：显示「您在这里」悬浮标注 */}
+      {isStartPoint && (
+        <Html position={[0, totalH + 0.75, 0]} center distanceFactor={10}>
+          <div
+            style={{
+              background: baseColor,
+              color: '#fff',
+              padding: '3px 10px',
+              borderRadius: 12,
+              fontSize: 13,
+              fontWeight: 700,
+              whiteSpace: 'nowrap',
+              boxShadow: `0 2px 8px rgba(59,130,246,0.4)`,
+            }}
+          >
+            📍 您在这里
+          </div>
+        </Html>
+      )}
+    </group>
+  );
+};
+
+// ============ 寻路路径（L 形虚线 + 箭头 + 流动光效） ============
 const PathLine: React.FC<{
   from: [number, number];
   to: [number, number];
 }> = ({ from, to }) => {
+  const lineRef = useRef<any>(null);
+  const arrowRef = useRef<any>(null);
+  const labelRef = useRef<any>(null);
+  const startTime = useRef<number | null>(null);
+
   // L 形路径：先沿 X 走到目标 X，再沿 Z 走到目标 Z
   const points: [number, number, number][] = [
     [from[0], 0.05, from[1]],
@@ -342,35 +475,72 @@ const PathLine: React.FC<{
     [to[0], 0.05, to[1]],
   ];
 
-  // 距离标签（路径中点）
+  // 距离 / 步数 / 时间
   const dist = Math.sqrt((to[0] - from[0]) ** 2 + (to[1] - from[1]) ** 2);
+  const steps = Math.max(1, Math.ceil(dist / 0.6)); // 步距 0.6m
+  const seconds = dist / 1.2; // 步速 1.2 m/s
   const midX = (from[0] + to[0]) / 2;
   const midZ = (from[1] + to[1]) / 2;
-
-  // 箭头（在终点处，朝向终点方向）
   const arrowAngle = Math.atan2(to[1] - from[1], to[0] - from[0]);
+
+  useFrame((state, delta) => {
+    // 流动：dashOffset 持续递减让虚线"流向"终点
+    if (lineRef.current?.material) {
+      const mat = lineRef.current.material;
+      mat.dashOffset -= delta * 1.0;
+
+      // 出现动画：0.5s 内 opacity 0→1
+      if (startTime.current === null) startTime.current = state.clock.elapsedTime;
+      const elapsed = state.clock.elapsedTime - startTime.current;
+      const t = Math.min(1, elapsed / 0.5);
+      mat.opacity = t;
+      mat.transparent = true;
+    }
+    // 箭头 + 标签延后 0.3s 出现
+    const showExtras =
+      startTime.current !== null &&
+      state.clock.elapsedTime - startTime.current > 0.3;
+    if (arrowRef.current) arrowRef.current.visible = showExtras;
+    if (labelRef.current) labelRef.current.visible = showExtras;
+  });
 
   return (
     <group>
-      <Line points={points} color={PATH_COLOR} lineWidth={3} dashed dashScale={2} dashSize={0.3} gapSize={0.15} />
-      {/* 距离标签 */}
+      <Line
+        ref={lineRef}
+        points={points}
+        color={PATH_COLOR}
+        lineWidth={3}
+        dashed
+        dashScale={2}
+        dashSize={0.3}
+        gapSize={0.15}
+        transparent
+      />
+      {/* 距离/步数/时间标签 */}
       <Text
+        ref={labelRef}
         position={[midX, 0.3, midZ]}
-        fontSize={0.25}
+        fontSize={0.22}
         color={PATH_COLOR}
         anchorX="center"
         anchorY="middle"
         rotation={[-Math.PI / 2, 0, 0]}
       >
-        {`≈ ${dist.toFixed(1)} 米`}
+        {`≈ ${dist.toFixed(1)} 米 · ${steps} 步 · ${seconds.toFixed(0)} 秒`}
       </Text>
       {/* 终点箭头（小圆锥） */}
       <mesh
+        ref={arrowRef}
         position={[to[0], 0.15, to[1]]}
         rotation={[-Math.PI / 2, 0, arrowAngle + Math.PI / 2]}
       >
         <coneGeometry args={[0.18, 0.36, 4]} />
-        <meshStandardMaterial color={PATH_COLOR} emissive={PATH_COLOR} emissiveIntensity={0.5} />
+        <meshStandardMaterial
+          color={PATH_COLOR}
+          emissive={PATH_COLOR}
+          emissiveIntensity={0.5}
+        />
       </mesh>
     </group>
   );
@@ -380,16 +550,26 @@ const PathLine: React.FC<{
 interface SceneProps {
   shelves: KioskShelf[];
   layoutConfig: StationLayoutConfig | null;
-  highlights: Array<{ shelfNumber: number; layer?: number | null }>;
+  highlights: Array<{ shelfNumber: number; layer?: number | null; count?: number }>;
+  containerWidth: number;
+  containerHeight: number;
 }
 
-const Scene: React.FC<SceneProps> = ({ shelves, layoutConfig, highlights }) => {
+const Scene: React.FC<SceneProps> = ({
+  shelves,
+  layoutConfig,
+  highlights,
+  containerWidth,
+  containerHeight,
+}) => {
   const { placed, bounds } = useMemo(() => computeShelfPositions(shelves), [shelves]);
 
-  // 高亮映射：货架号 → 层号
+  // 高亮映射：货架号 → { 层号, 包裹数 }
   const highlightMap = useMemo(() => {
-    const m = new Map<number, number | null>();
-    for (const h of highlights) m.set(h.shelfNumber, h.layer ?? null);
+    const m = new Map<number, { layer: number | null; count: number }>();
+    for (const h of highlights) {
+      m.set(h.shelfNumber, { layer: h.layer ?? null, count: h.count ?? 1 });
+    }
     return m;
   }, [highlights]);
 
@@ -398,35 +578,64 @@ const Scene: React.FC<SceneProps> = ({ shelves, layoutConfig, highlights }) => {
     if (layoutConfig?.doors && layoutConfig.doors.length > 0) {
       return layoutConfig.doors;
     }
-    // 默认门口：bounds 前墙中央（y = 0 或 minZ）
     const doorX = (bounds.minX + bounds.maxX) / 2;
     const doorY = bounds.minZ;
     return [{ x: doorX, y: doorY, width: 1.2, label: '入口' }];
   }, [layoutConfig, bounds]);
 
+  // 区域列表
+  const areas: LayoutArea[] = useMemo(
+    () => layoutConfig?.areas ?? [],
+    [layoutConfig],
+  );
+
   // 地面尺寸：优先用 layoutConfig.bounds，否则用货架 bounds
-  // 注意：地面中心固定在原点 (0, 0)，与编辑器 ShelfMapEditor 保持一致
-  // 这样货架/门口的 posX/posY 真实坐标在两端渲染时位置完全对齐
   const groundW = layoutConfig?.bounds?.width || bounds.maxX - bounds.minX + 4;
   const groundD = layoutConfig?.bounds?.depth || bounds.maxZ - bounds.minZ + 4;
 
-  // 相机初始位置：覆盖全部货架 + 门口
+  // 寻路起点：优先选第一个办公区；无办公区时 fallback 到最近门口
+  const startPoint = useMemo<{ x: number; z: number } | null>(() => {
+    if (highlights.length === 0) return null;
+    const office = areas.find((a) => a.type === 'office');
+    if (office) return { x: office.x, z: office.y };
+    // 无办公区，用第一个门口
+    if (doors.length > 0) return { x: doors[0].x, z: doors[0].y };
+    return null;
+  }, [highlights, areas, doors]);
+
+  // 相机初始位置：对准原点（地面网格中心），与管理端统一
+  // 距离按容器宽高比自适应，让网格铺满视口宽度
   const cameraInit = useMemo(() => {
-    const cx = (bounds.minX + bounds.maxX) / 2;
-    const cz = (bounds.minZ + bounds.maxZ) / 2;
-    const w = bounds.maxX - bounds.minX;
-    const d = bounds.maxZ - bounds.minZ;
-    const size = Math.max(w, d, groundW, groundD, 4);
-    const dist = size * 1.1;
+    const halfFov = ((45 * Math.PI) / 180) / 2;
+    const aspect = containerWidth > 0 && containerHeight > 0
+      ? containerWidth / containerHeight
+      : 1.5;
+    const dHorizontal = groundW / (2 * Math.tan(halfFov) * aspect);
+    const dVertical = groundD / (2 * Math.tan(halfFov));
+    const dist = Math.max(dHorizontal, dVertical, 5) * 1.2;
     return {
-      target: [cx, 1, cz] as [number, number, number],
-      position: [cx + dist * 0.7, size * 0.9 + 2, cz + dist * 0.9] as [
-        number,
-        number,
-        number,
-      ],
+      target: [0, 1, 0] as [number, number, number],
+      position: [0, dist * 0.8, dist * 0.9] as [number, number, number],
     };
-  }, [bounds, groundW, groundD]);
+  }, [groundW, groundD, containerWidth, containerHeight]);
+
+  // 相机飞行目标：高亮货架包围盒中心（单个直飞，多个框选）
+  const focusTarget = useMemo<[number, number, number] | null>(() => {
+    if (highlights.length === 0) return null;
+    const targets = placed.filter((p) => highlightMap.has(p.shelf.number));
+    if (targets.length === 0) return null;
+    let minX = Infinity,
+      maxX = -Infinity,
+      minZ = Infinity,
+      maxZ = -Infinity;
+    for (const t of targets) {
+      minX = Math.min(minX, t.x);
+      maxX = Math.max(maxX, t.x);
+      minZ = Math.min(minZ, t.z);
+      maxZ = Math.max(maxZ, t.z);
+    }
+    return [(minX + maxX) / 2, 1, (minZ + maxZ) / 2];
+  }, [highlights, placed, highlightMap]);
 
   return (
     <>
@@ -440,15 +649,17 @@ const Scene: React.FC<SceneProps> = ({ shelves, layoutConfig, highlights }) => {
       />
       <hemisphereLight args={['#ffffff', '#cbd5e1', 0.4]} />
 
-      {/* 地面（中心固定在原点，与编辑器对齐） */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -0.02, 0]}
-        receiveShadow
-      >
-        <planeGeometry args={[groundW, groundD]} />
-        <meshStandardMaterial color={GROUND_COLOR} />
-      </mesh>
+      {/* 网格地面（中心固定在原点，与管理端对齐） */}
+      <GridFloor width={groundW} depth={groundD} />
+
+      {/* 区域（办公区/揽收区，办公区作为寻路起点高亮「您在这里」） */}
+      {areas.map((a) => (
+        <AreaMesh
+          key={a.id}
+          area={a}
+          isStartPoint={startPoint !== null && a.type === 'office' && a.x === startPoint.x && a.y === startPoint.z}
+        />
+      ))}
 
       {/* 门口 */}
       {doors.map((d, i) => (
@@ -457,8 +668,8 @@ const Scene: React.FC<SceneProps> = ({ shelves, layoutConfig, highlights }) => {
 
       {/* 货架 */}
       {placed.map((p) => {
-        const isHighlighted = highlightMap.has(p.shelf.number);
-        const layer = highlightMap.get(p.shelf.number) ?? null;
+        const info = highlightMap.get(p.shelf.number);
+        const isHighlighted = !!info;
         return (
           <ShelfRack
             key={p.shelf.number}
@@ -466,36 +677,29 @@ const Scene: React.FC<SceneProps> = ({ shelves, layoutConfig, highlights }) => {
             position={[p.x, 0, p.z]}
             rotationY={(p.shelf.rotation * Math.PI) / 180}
             highlight={isHighlighted}
-            highlightLayer={layer}
+            highlightLayer={info?.layer ?? null}
+            highlightCount={info?.count ?? 0}
             dimmed={highlights.length > 0 && !isHighlighted}
           />
         );
       })}
 
-      {/* 寻路路径：每个高亮货架画一条从最近门口出发的 L 形路径 */}
-      {highlights.map((h) => {
-        const target = placed.find((p) => p.shelf.number === h.shelfNumber);
-        if (!target) return null;
-        // 找最近的门口
-        let nearestDoor = doors[0];
-        let minDist = Infinity;
-        for (const d of doors) {
-          const dist = (d.x - target.x) ** 2 + (d.y - target.z) ** 2;
-          if (dist < minDist) {
-            minDist = dist;
-            nearestDoor = d;
-          }
-        }
-        return (
-          <PathLine
-            key={`path-${h.shelfNumber}`}
-            from={[nearestDoor.x, nearestDoor.y]}
-            to={[target.x, target.z]}
-          />
-        );
-      })}
+      {/* 寻路路径：从办公区出发到每个高亮货架画 L 形路径 */}
+      {startPoint &&
+        highlights.map((h) => {
+          const target = placed.find((p) => p.shelf.number === h.shelfNumber);
+          if (!target) return null;
+          return (
+            <PathLine
+              key={`path-${h.shelfNumber}`}
+              from={[startPoint.x, startPoint.z]}
+              to={[target.x, target.z]}
+            />
+          );
+        })}
 
       <OrbitControls
+        makeDefault
         target={cameraInit.target}
         enablePan={false}
         minDistance={3}
@@ -503,7 +707,22 @@ const Scene: React.FC<SceneProps> = ({ shelves, layoutConfig, highlights }) => {
         maxPolarAngle={Math.PI / 2.1}
         minPolarAngle={Math.PI / 6}
       />
-      <CameraRig position={cameraInit.position} target={cameraInit.target} />
+      <CameraRig
+        position={cameraInit.position}
+        target={cameraInit.target}
+        focusTarget={focusTarget}
+      />
+
+      {/* 后处理：Bloom 让门口绿光 + 包裹橙色高亮真实发光 */}
+      <EffectComposer>
+        <Bloom
+          luminanceThreshold={0.2}
+          luminanceSmoothing={0.4}
+          intensity={0.6}
+          mipmapBlur
+          radius={0.6}
+        />
+      </EffectComposer>
     </>
   );
 };
@@ -511,15 +730,89 @@ const Scene: React.FC<SceneProps> = ({ shelves, layoutConfig, highlights }) => {
 const CameraRig: React.FC<{
   position: [number, number, number];
   target: [number, number, number];
-}> = ({ position, target }) => {
+  focusTarget?: [number, number, number] | null;
+}> = ({ position, target, focusTarget }) => {
+  const { camera, controls } = useThree();
   const initialized = useRef(false);
-  useFrame((state) => {
+  const tweenRef = useRef<gsap.core.Tween | null>(null);
+
+  // 初始定位（仅一次）
+  useFrame(() => {
     if (!initialized.current) {
-      state.camera.position.set(position[0], position[1], position[2]);
-      state.camera.lookAt(target[0], target[1], target[2]);
+      camera.position.set(position[0], position[1], position[2]);
+      if (controls) {
+        (controls as any).target.set(target[0], target[1], target[2]);
+        (controls as any).update();
+      } else {
+        camera.lookAt(target[0], target[1], target[2]);
+      }
       initialized.current = true;
     }
   });
+
+  // 用户拖拽时取消飞行
+  useEffect(() => {
+    if (!controls) return;
+    const c = controls as any;
+    const onStart = () => {
+      if (tweenRef.current) {
+        tweenRef.current.kill();
+        tweenRef.current = null;
+      }
+    };
+    c.addEventListener('start', onStart);
+    return () => c.removeEventListener('start', onStart);
+  }, [controls]);
+
+  // 飞行到目标货架
+  useEffect(() => {
+    if (!focusTarget || !initialized.current || !controls) return;
+
+    const [tx, , tz] = focusTarget;
+    // 45° 俯视 + 距离 5m（抬高 3.5m，水平偏移 3.5m）
+    const horiz = 3.5;
+    const newPos = {
+      x: tx + horiz,
+      y: 3.5,
+      z: tz + horiz,
+    };
+
+    if (tweenRef.current) tweenRef.current.kill();
+
+    const obj = {
+      px: camera.position.x,
+      py: camera.position.y,
+      pz: camera.position.z,
+      tx: (controls as any).target.x,
+      ty: (controls as any).target.y,
+      tz: (controls as any).target.z,
+    };
+    tweenRef.current = gsap.to(obj, {
+      px: newPos.x,
+      py: newPos.y,
+      pz: newPos.z,
+      tx: tx,
+      ty: 1,
+      tz: tz,
+      duration: 1.2,
+      ease: 'power2.inOut',
+      onUpdate: () => {
+        camera.position.set(obj.px, obj.py, obj.pz);
+        (controls as any).target.set(obj.tx, obj.ty, obj.tz);
+        (controls as any).update();
+      },
+      onComplete: () => {
+        tweenRef.current = null;
+      },
+    });
+    return () => {
+      if (tweenRef.current) {
+        tweenRef.current.kill();
+        tweenRef.current = null;
+      }
+    };
+  }, [focusTarget, camera, controls]);
+
   return null;
 };
 
@@ -527,7 +820,7 @@ const CameraRig: React.FC<{
 export interface ShelfMap3DProps {
   shelves: KioskShelf[];
   layoutConfig?: StationLayoutConfig | null;
-  highlights: Array<{ shelfNumber: number; layer?: number | null }>;
+  highlights: Array<{ shelfNumber: number; layer?: number | null; count?: number }>;
   height?: number;
   className?: string;
 }
@@ -539,6 +832,21 @@ const ShelfMap3D: React.FC<ShelfMap3DProps> = ({
   height = 420,
   className,
 }) => {
+  // 监听容器尺寸变化，用于相机距离自适应（与管理端统一）
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => {
+      setContainerSize({ width: el.clientWidth, height: el.clientHeight });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   if (shelves.length === 0) {
     return (
       <div
@@ -552,6 +860,7 @@ const ShelfMap3D: React.FC<ShelfMap3DProps> = ({
 
   return (
     <div
+      ref={containerRef}
       className={`relative w-full overflow-hidden rounded-xl bg-white ${className || ''}`}
       style={{ height }}
     >
@@ -566,6 +875,8 @@ const ShelfMap3D: React.FC<ShelfMap3DProps> = ({
             shelves={shelves}
             layoutConfig={layoutConfig}
             highlights={highlights}
+            containerWidth={containerSize.width}
+            containerHeight={containerSize.height}
           />
         </Suspense>
       </Canvas>

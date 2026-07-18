@@ -60,16 +60,40 @@ export interface LayoutBounds {
   depth: number;
 }
 
-/** 仓库户型配置（公开只读，仅 bounds + doors） */
+/** 仓库户型 - 区域类型 */
+export type LayoutAreaType = 'office' | 'pickup';
+
+/** 仓库户型 - 区域（办公区/揽收区等，只读展示用） */
+export interface LayoutArea {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  depth: number;
+  height: number;
+  type: LayoutAreaType;
+  label: string;
+}
+
+/** 仓库户型配置（公开只读，仅 bounds + doors + areas） */
 export interface StationLayoutConfig {
   bounds?: LayoutBounds;
   doors?: LayoutDoor[];
+  areas?: LayoutArea[];
 }
 
 /** GET /api/kiosk/station/layout 返回结构（1.2.0 起） */
 export interface StationLayoutResponse {
   shelves: KioskShelf[];
   station: {
+    /** 驿站名（公开，用于 /query 门户顶部展示） */
+    name: string | null;
+    /** 地址（公开） */
+    address: string | null;
+    /** 联系电话（公开） */
+    contactPhone: string | null;
+    /** 营业时间（公开，如 "08:00-22:00"） */
+    businessHours: string | null;
     layoutConfig: StationLayoutConfig;
   };
 }

@@ -8,6 +8,7 @@ import type {
   CourierCompany,
   StationLayoutConfig,
   LayoutDoor,
+  LayoutArea,
 } from '@/types/admin';
 
 // ===== 驿站 =====
@@ -36,7 +37,7 @@ export function updateLayoutConfig(
 
 /**
  * 仓库 3D 布局统一保存（单接口）
- * 一次性提交：货架位置批量更新 + 仓库尺寸 + 门口列表
+ * 一次性提交：货架位置批量更新 + 仓库尺寸 + 门口列表 + 区域列表
  */
 export interface ShelfPositionItem {
   id: string;
@@ -50,6 +51,7 @@ export function saveStationLayout(payload: {
   shelves?: ShelfPositionItem[];
   bounds?: { width: number; depth: number };
   doors?: LayoutDoor[];
+  areas?: LayoutArea[];
 }): Promise<{ shelvesUpdated: number; layoutConfig: StationLayoutConfig }> {
   return put('/api/admin/station/layout', payload);
 }

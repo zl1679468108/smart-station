@@ -31,10 +31,34 @@ export interface LayoutBounds {
   depth: number;
 }
 
+/** 仓库户型 - 区域类型 */
+export type LayoutAreaType = 'office' | 'pickup';
+
+/** 仓库户型 - 区域（办公区/揽收区等） */
+export interface LayoutArea {
+  /** 区域唯一 ID（前端生成 uuid） */
+  id: string;
+  /** 中心点 X 坐标（米），地面中心为原点 */
+  x: number;
+  /** 中心点 Y 坐标（米），对应 3D 场景的 Z 轴 */
+  y: number;
+  /** 宽度（米） */
+  width: number;
+  /** 深度（米） */
+  depth: number;
+  /** 高度（米） */
+  height: number;
+  /** 区域类型：office 办公区 / pickup 揽收区 */
+  type: LayoutAreaType;
+  /** 显示标签 */
+  label: string;
+}
+
 /** 仓库户型配置（含可选障碍物，供管理员后台编辑用） */
 export interface StationLayoutConfig {
   bounds?: LayoutBounds;
   doors?: LayoutDoor[];
+  areas?: LayoutArea[];
   obstacles?: Array<{
     x: number;
     y: number;

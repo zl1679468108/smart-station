@@ -482,6 +482,7 @@ export class AdminService {
     const next: Record<string, unknown> = { ...prev };
     if (dto.bounds !== undefined) next.bounds = dto.bounds;
     if (dto.doors !== undefined) next.doors = dto.doors;
+    if (dto.areas !== undefined) next.areas = dto.areas;
     if (dto.obstacles !== undefined) next.obstacles = dto.obstacles;
 
     // 业务校验：门口坐标必须落在 bounds 内（若同时提供了 bounds）
@@ -495,6 +496,24 @@ export class AdminService {
         if (Math.abs(d.x) > halfW || Math.abs(d.y) > halfD) {
           throw new BadRequestException(
             `门口 (${d.x}, ${d.y}) 超出仓库范围 (${bounds.width} × ${bounds.depth})`,
+          );
+        }
+      }
+    }
+    // 业务校验：区域坐标必须落在 bounds 内（若同时提供了 bounds）
+    const areas = next.areas as
+      | Array<{ x: number; y: number; width: number; depth: number; label: string }>
+      | undefined;
+    if (bounds && areas) {
+      const halfW = bounds.width / 2;
+      const halfD = bounds.depth / 2;
+      for (const a of areas) {
+        if (
+          Math.abs(a.x) + a.width / 2 > halfW ||
+          Math.abs(a.y) + a.depth / 2 > halfD
+        ) {
+          throw new BadRequestException(
+            `区域 ${a.label} (${a.x}, ${a.y}) 超出仓库范围 (${bounds.width} × ${bounds.depth})`,
           );
         }
       }
@@ -519,8 +538,9 @@ export class AdminService {
   /**
    * 仓库 3D 布局统一保存（单个请求一次性提交所有改动）
    * - 货架位置批量更新（只更新 dto.shelves 中提供的项，其余保持不变）
-   * - 仓库尺寸 + 门口列表合并写入 ss_stations.layout_config
+   * - 仓库尺寸 + 门口列表 + 区域列表合并写入 ss_stations.layout_config
    * - 业务校验：门口坐标必须落在 bounds 内（地面中心在原点，范围 [-w/2, w/2] × [-d/2, d/2]）
+   * - 业务校验：区域坐标必须落在 bounds 内
    */
   async saveStationLayout(stationId: string, dto: SaveStationLayoutDto) {
     const client = this.supabase.getClient();
@@ -546,9 +566,11 @@ export class AdminService {
       }
     }
 
-    // 2. 合并 bounds + doors 写入 layout_config（未传字段保留旧值）
+    // 2. 合并 bounds + doors + areas 写入 layout_config（未传字段保留旧值）
+    const layoutNeedsUpdate =
+      dto.bounds !== undefined || dto.doors !== undefined || dto.areas !== undefined;
     let layoutConfig: Record<string, unknown> | null = null;
-    if (dto.bounds !== undefined || dto.doors !== undefined) {
+    if (layoutNeedsUpdate) {
       const { data: existing, error: queryErr } = await client
         .from('ss_stations')
         .select('layout_config')
@@ -561,6 +583,7 @@ export class AdminService {
       const next: Record<string, unknown> = { ...prev };
       if (dto.bounds !== undefined) next.bounds = dto.bounds;
       if (dto.doors !== undefined) next.doors = dto.doors;
+      if (dto.areas !== undefined) next.areas = dto.areas;
 
       // 业务校验：门口坐标必须落在 bounds 内
       const bounds = next.bounds as { width: number; depth: number } | undefined;
@@ -576,6 +599,24 @@ export class AdminService {
           }
         }
       }
+      // 业务校验：区域坐标必须落在 bounds 内
+      const areas = next.areas as
+        | Array<{ x: number; y: number; width: number; depth: number; label: string }>
+        | undefined;
+      if (bounds && areas) {
+        const halfW = bounds.width / 2;
+        const halfD = bounds.depth / 2;
+        for (const a of areas) {
+          if (
+            Math.abs(a.x) + a.width / 2 > halfW ||
+            Math.abs(a.y) + a.depth / 2 > halfD
+          ) {
+            throw new BadRequestException(
+              `区域 ${a.label} (${a.x}, ${a.y}) 超出仓库范围 (${bounds.width} × ${bounds.depth})`,
+            );
+          }
+        }
+      }
 
       const { data, error } = await client
         .from('ss_stations')
@@ -587,7 +628,7 @@ export class AdminService {
       if (!data) throw new NotFoundException('驿站不存在');
       layoutConfig = data.layout_config as Record<string, unknown>;
     } else {
-      // 没改 bounds/doors，直接读现有配置返回
+      // 没改 bounds/doors/areas，直接读现有配置返回
       const { data, error } = await client
         .from('ss_stations')
         .select('layout_config')

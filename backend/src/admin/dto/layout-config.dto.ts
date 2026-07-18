@@ -17,6 +17,7 @@ import {
  * 结构：
  *   bounds: { width, depth }   仓库内部尺寸（米）
  *   doors:  [{ x, y, width, label }]   门口列表
+ *   areas:  [{ id, x, y, width, depth, height, type, label }]   区域（办公区/揽收区等）
  *   obstacles?: [{ x, y, width, depth, height, type }]   障碍物（柱子/柜台，可选）
  */
 export class LayoutBoundsDto {
@@ -40,6 +41,37 @@ export class LayoutDoorDto {
   @IsNumber()
   @Min(0.5, { message: '门口宽度必须 ≥ 0.5 米' })
   width!: number;
+
+  @IsString()
+  @MaxLength(20)
+  label!: string;
+}
+
+export class LayoutAreaDto {
+  @IsString()
+  @MaxLength(36)
+  id!: string;
+
+  @IsNumber()
+  x!: number;
+
+  @IsNumber()
+  y!: number;
+
+  @IsNumber()
+  @Min(0.1)
+  width!: number;
+
+  @IsNumber()
+  @Min(0.1)
+  depth!: number;
+
+  @IsNumber()
+  @Min(0.1)
+  height!: number;
+
+  @IsIn(['office', 'pickup'], { message: '区域类型必须为 office 或 pickup' })
+  type!: string;
 
   @IsString()
   @MaxLength(20)
@@ -88,6 +120,12 @@ export class UpdateLayoutConfigDto {
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
+  @Type(() => LayoutAreaDto)
+  areas?: LayoutAreaDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
   @Type(() => LayoutObstacleDto)
   obstacles?: LayoutObstacleDto[];
 }
@@ -122,7 +160,7 @@ export class ShelfPositionItemDto {
 
 /**
  * 仓库 3D 布局统一保存 DTO
- * 一次性提交：货架位置批量更新 + 仓库尺寸 + 门口列表
+ * 一次性提交：货架位置批量更新 + 仓库尺寸 + 门口列表 + 区域列表
  * 后端在单个请求内串行处理，避免前端并发多请求
  */
 export class SaveStationLayoutDto {
@@ -142,4 +180,10 @@ export class SaveStationLayoutDto {
   @ValidateNested({ each: true })
   @Type(() => LayoutDoorDto)
   doors?: LayoutDoorDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LayoutAreaDto)
+  areas?: LayoutAreaDto[];
 }

@@ -127,6 +127,22 @@ const AdminLayout: React.FC = () => {
             </NavLink>
           ))}
         </nav>
+
+        {/* 自助查询入口：admin + clerk 可见，新窗口打开 /#/query（公开页面，无需登录） */}
+        {user.role && ['admin', 'clerk'].includes(user.role as Role) && (
+          <div className="border-t border-gray-200 p-3">
+            <a
+              href="/#/query"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-primary"
+              title="在新窗口打开取件自助查询页"
+            >
+              <Icon name="externalLink" size={18} />
+              <span>自助查询</span>
+            </a>
+          </div>
+        )}
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">

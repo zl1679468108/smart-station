@@ -136,12 +136,15 @@ export class KioskService {
   async getStationLayout(stationId?: string) {
     const client = this.supabase.getClient();
 
+    // 公开字段：仅返回 /query 门户展示所需的驿站基础信息（不含 overdue 规则、sms 开关等内部配置）
+    const STATION_PUBLIC_FIELDS = 'id, name, address, contact_phone, business_hours, layout_config';
+
     let targetStationId = stationId;
-    let stationLayoutConfig: Record<string, unknown> | null = null;
+    let stationRow: Record<string, unknown> | null = null;
     if (!targetStationId) {
       const { data: firstStation, error: stationErr } = await client
         .from('ss_stations')
-        .select('id, layout_config')
+        .select(STATION_PUBLIC_FIELDS)
         .eq('status', 'active')
         .order('created_at', { ascending: true })
         .limit(1)
@@ -149,16 +152,19 @@ export class KioskService {
       if (stationErr) throw new Error(`查询驿站失败: ${stationErr.message}`);
       if (!firstStation) throw new NotFoundException('未找到可用驿站');
       targetStationId = firstStation.id;
-      stationLayoutConfig = firstStation.layout_config;
+      stationRow = firstStation as Record<string, unknown>;
     } else {
       const { data: st, error: stErr } = await client
         .from('ss_stations')
-        .select('layout_config')
+        .select(STATION_PUBLIC_FIELDS)
         .eq('id', targetStationId)
         .maybeSingle();
       if (stErr) throw new Error(`查询驿站户型失败: ${stErr.message}`);
-      stationLayoutConfig = st?.layout_config ?? null;
+      stationRow = (st as Record<string, unknown>) ?? null;
     }
+
+    const stationLayoutConfig =
+      (stationRow?.layout_config as Record<string, unknown> | null) ?? null;
 
     const { data, error } = await client
       .from('ss_shelves')
@@ -168,11 +174,12 @@ export class KioskService {
       .order('number', { ascending: true });
     if (error) throw new Error(`查询货架失败: ${error.message}`);
 
-    // 公开返回的 layoutConfig 仅含 bounds + doors，过滤 obstacles 等内部细节
+    // 公开返回的 layoutConfig 仅含 bounds + doors + areas，过滤 obstacles 等内部细节
     const rawConfig = (stationLayoutConfig as Record<string, unknown> | null) || {};
     const publicLayoutConfig: Record<string, unknown> = {};
     if (rawConfig.bounds) publicLayoutConfig.bounds = rawConfig.bounds;
     if (rawConfig.doors) publicLayoutConfig.doors = rawConfig.doors;
+    if (rawConfig.areas) publicLayoutConfig.areas = rawConfig.areas;
 
     return {
       shelves: (data || []).map((s: any) => ({
@@ -186,6 +193,11 @@ export class KioskService {
         zone: s.zone ?? null,
       })),
       station: {
+        // 驿站公开基础信息（供 /query 门户顶部展示）
+        name: (stationRow?.name as string) ?? null,
+        address: (stationRow?.address as string) ?? null,
+        contactPhone: (stationRow?.contact_phone as string) ?? null,
+        businessHours: (stationRow?.business_hours as string) ?? null,
         layoutConfig: publicLayoutConfig,
       },
     };

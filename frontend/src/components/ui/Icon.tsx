@@ -26,7 +26,8 @@ export type IconName =
   | 'lock' // 密码
   | 'chevronDown' // 下拉
   | 'arrowLeft' // 返回
-  | 'scan'; // 扫描
+  | 'scan' // 扫描
+  | 'externalLink'; // 外部链接（新窗口打开）
 
 interface IconProps {
   name: IconName;
@@ -150,6 +151,14 @@ const paths: Record<IconName, React.ReactNode> = {
       <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
       <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
       <path d="M3 12h18" />
+    </>
+  ),
+  // 外部链接：右上角箭头 + 框
+  externalLink: (
+    <>
+      <path d="M15 3h6v6" />
+      <path d="M10 14 21 3" />
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
     </>
   ),
 };
