@@ -16,7 +16,7 @@ const MLayout: React.FC = () => {
           <span>返回</span>
         </button>
       </header>
-      <main className="flex-1 overflow-auto">
+      <main className="page-layout-main flex-1 overflow-auto">
         <Outlet />
       </main>
     </div>

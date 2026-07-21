@@ -361,17 +361,31 @@ export class AdminService {
   }
 
   async updateShelf(stationId: string, shelfId: string, dto: UpdateShelfDto) {
-    // 改大小类型前校验：货架上有在库包裹则拒绝（避免包裹 size 与货架类型不一致）
-    if (dto.sizeType !== undefined) {
+    // 改货架号或大小类型前校验：有在库/滞留包裹时拒绝，避免取件码位置语义失真。
+    if (dto.number !== undefined || dto.sizeType !== undefined) {
       const { data: sh } = await this.supabase
         .getClient()
         .from('ss_shelves')
-        .select('id, size_type, number')
+        .select('id, number, size_type')
         .eq('id', shelfId)
         .eq('station_id', stationId)
         .maybeSingle();
       if (!sh) throw new NotFoundException('货架不存在');
-      if (sh.size_type !== dto.sizeType) {
+      if (dto.number !== undefined && sh.number !== dto.number) {
+        const { count } = await this.supabase
+          .getClient()
+          .from('ss_parcels')
+          .select('id', { count: 'exact', head: true })
+          .eq('shelf_id', shelfId)
+          .eq('station_id', stationId)
+          .in('status', ['in_stock', 'overdue']);
+        if (count && count > 0) {
+          throw new BadRequestException(
+            `货架 ${sh.number} 号上还有 ${count} 件在库/滞留包裹，无法修改货架号，请先清空该货架或改派包裹后再调整`,
+          );
+        }
+      }
+      if (dto.sizeType !== undefined && sh.size_type !== dto.sizeType) {
         const { count } = await this.supabase
           .getClient()
           .from('ss_parcels')
@@ -388,6 +402,7 @@ export class AdminService {
     }
 
     const patch: Record<string, unknown> = {};
+    if (dto.number !== undefined) patch.number = dto.number;
     if (dto.sizeType !== undefined) patch.size_type = dto.sizeType;
     if (dto.layers !== undefined) patch.layers = dto.layers;
     if (dto.capacityPerLayer !== undefined) patch.capacity_per_layer = dto.capacityPerLayer;
@@ -410,7 +425,12 @@ export class AdminService {
         'id, number, size_type, layers, capacity_per_layer, description, status, pos_x, pos_y, rotation, zone, created_at',
       )
       .maybeSingle();
-    if (error) throw new Error(`更新货架失败: ${error.message}`);
+    if (error) {
+      if (error.code === '23505') {
+        throw new ConflictException('货架号已存在');
+      }
+      throw new Error(`更新货架失败: ${error.message}`);
+    }
     if (!data) throw new NotFoundException('货架不存在');
     return data;
   }

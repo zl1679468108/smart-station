@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import * as authService from '@/services/auth';
 import {
   setStationId as setStationIdHeader,
@@ -8,6 +9,7 @@ import {
   getToken,
 } from '@/services/api';
 import type { AuthUser, StationBrief } from '@/types/auth';
+import type { Profile } from '@/types/auth';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -21,8 +23,23 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+export const AUTH_PROFILE_KEY = ['auth', 'profile'] as const;
+const AUTH_PROFILE_STALE_TIME = 1000 * 60 * 30;
+
+function toAuthUser(profile: Profile): AuthUser {
+  return {
+    id: profile.id,
+    phone: profile.phone,
+    email: profile.email,
+    username: profile.username,
+    avatarUrl: profile.avatarUrl,
+    currentStationId: profile.currentStationId,
+    role: profile.role,
+  };
+}
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [stations, setStations] = useState<StationBrief[]>([]);
   const [currentStationId, setCurrentStationId] = useState<string | null>(null);
@@ -35,18 +52,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setInitializing(false);
       return;
     }
-    authService
-      .fetchProfile()
+    queryClient
+      .fetchQuery({
+        queryKey: AUTH_PROFILE_KEY,
+        queryFn: () => authService.fetchProfile(),
+        staleTime: AUTH_PROFILE_STALE_TIME,
+      })
       .then((profile) => {
-        setUser({
-          id: profile.id,
-          phone: profile.phone,
-          email: profile.email,
-          username: profile.username,
-          avatarUrl: profile.avatarUrl,
-          currentStationId: profile.currentStationId,
-          role: profile.role,
-        });
+        setUser(toAuthUser(profile));
         setStations(profile.stations);
         setCurrentStationId(profile.currentStationId);
         if (profile.currentStationId) {
@@ -57,7 +70,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         clearToken();
       })
       .finally(() => setInitializing(false));
-  }, []);
+  }, [queryClient]);
 
   const login = useCallback(async (account: string, password: string) => {
     const result = await authService.login({ account, password });
@@ -68,7 +81,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(result.user);
     setStations(result.stations);
     setCurrentStationId(result.user.currentStationId);
-  }, []);
+    queryClient.setQueryData<Profile>(AUTH_PROFILE_KEY, {
+      ...result.user,
+      stations: result.stations,
+    });
+  }, [queryClient]);
 
   const logout = useCallback(async () => {
     try {
@@ -81,7 +98,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(null);
     setStations([]);
     setCurrentStationId(null);
-  }, []);
+    queryClient.clear();
+  }, [queryClient]);
 
   const switchStation = useCallback(async (stationId: string) => {
     const result = await authService.switchStation(stationId);
@@ -93,22 +111,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setStations((prev) =>
       prev.map((s) => ({ ...s, isActive: s.id === stationId })),
     );
-  }, []);
+    queryClient.setQueryData<Profile>(AUTH_PROFILE_KEY, (old) =>
+      old
+        ? {
+            ...old,
+            currentStationId: stationId,
+            role: result.role,
+            stations: old.stations.map((s) => ({ ...s, isActive: s.id === stationId })),
+          }
+        : old,
+    );
+  }, [queryClient]);
 
   const refreshProfile = useCallback(async () => {
-    const profile = await authService.fetchProfile();
-    setUser({
-      id: profile.id,
-      phone: profile.phone,
-      email: profile.email,
-      username: profile.username,
-      avatarUrl: profile.avatarUrl,
-      currentStationId: profile.currentStationId,
-      role: profile.role,
+    const profile = await queryClient.fetchQuery({
+      queryKey: AUTH_PROFILE_KEY,
+      queryFn: () => authService.fetchProfile(),
+      staleTime: 0,
     });
+    setUser(toAuthUser(profile));
     setStations(profile.stations);
     setCurrentStationId(profile.currentStationId);
-  }, []);
+    if (profile.currentStationId) {
+      setStationIdHeader(profile.currentStationId);
+    }
+  }, [queryClient]);
 
   return (
     <AuthContext.Provider

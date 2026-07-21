@@ -51,8 +51,8 @@
 
 | ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
 |---|---|---|---|---|---|
-| M2.1 | P0 | 后端 Admin 模块（驿站/员工/货架/快递公司 CRUD） | backend/admin | done | `/api/admin/*` 接口全部 AdminGuard 保护；驿站 GET/PUT；员工列表/新增（复用或创建用户）/编辑/启停；货架 CRUD；快递公司 CRUD；后端 tsc+build 通过 |
-| M2.2 | P0 | 前端系统管理页 | frontend/pages/admin/system | done | `/admin/system` Tab 页：驿站信息、员工管理、货架管理、快递公司四个子 Tab，全部接入 API；前端 tsc+build 通过 |
+| M2.1 | P0 | 后端 Admin 模块（驿站/员工/货架/快递公司 CRUD） | backend/admin | done | `/api/admin/*` 接口全部 AdminGuard 保护；驿站 GET/PUT；员工列表/新增（复用或创建用户）/编辑/启停；货架 CRUD；货架号支持编辑，同驿站唯一且有在库/滞留包裹时拒绝改号；快递公司 CRUD；后端 tsc+build 通过 |
+| M2.2 | P0 | 前端系统管理页 | frontend/pages/admin/system | done | `/admin/system` Tab 页：驿站信息、员工管理、货架管理、快递公司四个子 Tab，全部接入 API；货架管理编辑态支持修改货架号；前端 tsc+build 通过 |
 | M2.3 | P1 | 数据库种子脚本 | scripts/seed | done | `docs/database-seed.sql`：1 驿站 + 管理员（13800000001 / station123）+ 3 货架 + 5 快递公司；ON CONFLICT 可重跑；bcrypt hash 已验证 |
 
 ### M3 入库管理
@@ -293,6 +293,143 @@
 
 ---
 
+## 1.2.4 3D 仓库质感与容量提示（已完成）
+
+> 范围：在不新增数据库字段的前提下，增强用户端/管理端 3D 仓库的数字孪生质感，并在管理端恢复轻量级货架容量提示（仅使用已有 shelves 列表中的在库/余量字段，不引入滞留热力与独立占用率接口）。
+
+### M27 3D 质感增强 + 轻量容量提示
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M27.1 | P1 | 用户端 3D 仓库视觉增强 | frontend/components/ShelfMap | done | ShelfMap.tsx 增强仓库外壳、低墙、灯带、地面层次、货架背板/侧边条、高亮包裹堆叠与补光；保持真实坐标、门口与路径逻辑不变；前端 tsc + build exit 0（2026-07-19） |
+| M27.2 | P1 | 管理端 3D 轻量容量提示 | frontend/components/ShelfMapEditor | done | ShelfMapEditor.tsx 基于已有 inStockCount/remainingCapacity 渲染占用率侧边条、层内灯带与在库/余量 Html；StationLayoutTab.tsx 增加整体在库/余量/容量/占用率概览与选中货架容量信息；不恢复 M21/M22 中已删除的独立占用率/滞留热力接口；前端 tsc + build exit 0（2026-07-19） |
+
+---
+
+## 1.2.5 3D 工作区收敛（已完成）
+
+> 范围：统一只读与编辑的仓库 3D 入口，消除重复相机/外壳策略；将布局编辑集中到工作台，系统设置只保留配置概览入口。
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M28.1 | P0 | 统一仓库 3D 公共入口与相机策略 | frontend/components/warehouse3d | done | 新增 Warehouse3D `mode=view/edit` 公共入口；查询页和工作台走只读模式，编辑模式复用同一入口；WarehouseShell 默认关闭顶部黄灯带，CameraRig 默认总览、有焦点才飞、编辑模式不因容器变化重置；前端 tsc + build exit 0（2026-07-19） |
+| M28.2 | P0 | 工作台仓库全屏 3D 与布局编辑入口 | frontend/pages/admin/Dashboard | done | Dashboard 接入库存占用只读 3D 总览（最大视口高度）；「调整布局」在工作台切换到完整编辑工作区并保留统一保存流程；前端 tsc + build exit 0（2026-07-19） |
+| M28.3 | P1 | 仓库布局 Tab 降级 | frontend/pages/admin/system | done | 系统管理「仓库布局」仅显示尺寸和对象数量配置概览，并提供「在工作台调整布局」入口；前端 tsc + build exit 0（2026-07-19） |
+
+---
+
+## 1.2.6 社区驿站微型数字孪生（已完成）
+
+> 范围：把 3D 场景从“大型仓库”语义收敛为“社区快递驿站门店”，用可配置模块表达不同门店真实布局；不新增数据库字段，继续复用 `layout_config.areas` JSON。
+> 设计原则：小空间、真实经营感、可拖拽定制；先用 Three.js 程序化模型搭建组件库，后续可替换为 GLB 真实资产。
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M29.1 | P0 | 扩展门店布局区域类型 | frontend+backend | done | `LayoutAreaType` 支持服务台、自提柜、异常件区、大件区等社区驿站模块；后端 DTO 校验同步放行；旧 office/pickup 配置兼容；前后端 tsc + build exit 0（2026-07-20） |
+| M29.2 | P0 | 新增驿站 3D 模型组件库 | frontend/components/warehouse3d | done | 新增 StationModels 程序化模型：服务台、待取件区、自提柜、异常件区、大件区、办公区；支持按区域尺寸生成并可被编辑器拖拽摆放；前端 tsc + build exit 0（2026-07-20） |
+| M29.3 | P0 | 只读/编辑 3D 场景接入真实门店模型 | frontend/components/ShelfMap* | done | 查询端和管理端共用真实门店模型；货架保留真实坐标与库存高亮；服务台/办公区作为寻路起点；前端 tsc + build exit 0（2026-07-20） |
+| M29.4 | P1 | 管理后台文案从仓库改为驿站门店布局 | frontend/pages/admin | done | 工作台、系统设置、布局面板文案改为门店/驿站语义；相关 Playwright 文案断言同步更新；前端 tsc + build exit 0（2026-07-20） |
+| M29.5 | P0 | 类型检查与构建验证 | qa | done | 前端 `npx tsc --noEmit` + `npm run build` 通过；后端 `npx tsc --noEmit` + `npm run build` 通过（2026-07-20） |
+
+---
+
+## 1.2.7 社区驿站 3D 首屏质感与加载稳定性（已完成）
+
+> 范围：修复布局接口加载期间 3D 半数据渲染导致的变形/跳变，并补足社区驿站门店环境细节，减少默认视图空旷和单调感。
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M30.1 | P0 | 布局接口加载期间禁止半数据渲染 3D 场景 | frontend/components/warehouse3d | done | `layoutLoading` 为 true 时只展示门店布局加载态，不挂载 ShelfMap/ShelfMapEditor Scene，避免 `/api/admin/station/layout-config` 未返回前按不完整数据计算 bounds/相机导致变形 |
+| M30.2 | P1 | 社区驿站默认布局收敛 | frontend/components/warehouse3d | done | 默认门店尺寸由大仓库尺度收敛为 14m × 9m；空 `layout_config` 自动提供服务台、待取件区、自提柜、大件区、异常件区默认模型；已保存的空区域数组仍保持为空 |
+| M30.3 | P1 | 门店环境细节增强 | frontend/components/warehouse3d | done | 公共 3D 外壳增加墙边储物柜、包裹陈列、门店灯箱、地面动线、排队栏杆与灯带；工作台/编辑器开启顶部灯带，减少大面积空白和单调感 |
+
+---
+
+## 1.2.8 已有功能健康度审计与优化计划（2026-07-22）
+
+> 审计范围：对照 PRD / TASKS / 当前代码，验证「核心存取件闭环 + 查询门户 + 门店 3D」是否可运行，并记录缺陷与可优化项。
+> 审计方式：文档交叉比对 + 全量源码结构盘点 + 前后端 `npx tsc --noEmit`（均 exit 0）+ 关键路径静态走查。**未在本轮重新跑全量 Playwright / 真机联调。**
+> 结论摘要：**1.0–1.2.7 已宣称完成的核心闭环在类型与模块层面可用；未发现阻断编译的硬伤。但有若干交互缺陷、公开接口防护缺口、文档漂移，以及 1.3+ 业务模块未开工。** 另：工作区存在大量未提交改动（约 65 项，含 `warehouse3d` 重构），需先固化再扩功能。
+
+### 审计结论总览
+
+| 模块 | 状态 | 说明 |
+|---|---|---|
+| 认证（登录/登出/资料/改密/切站） | 基本正常 | Token Session + RolesGuard 已落地；连续失败锁定已实现 |
+| 系统管理（驿站/员工/货架/快递公司） | 基本正常 | Admin CRUD + 角色显隐齐全 |
+| 入库（扫码/手动/批量 + 取件码） | 基本正常 | 防重 + 均衡分货架 + 通知 stub 写日志 |
+| 库存列表/详情 | 基本正常 | 多维筛选/分页/批量异常标记可用；**URL 状态深链未接通**（见 O1） |
+| 出库（人工两步 + 记录） | 基本正常 | search + manual 有角色守卫 |
+| 扫描机自助出库 `/scan` | 可用但偏弱 | `@Public` 自助出库**无限流**；运单跨站查询（单租户可接受） |
+| 查询门户 `/query` + H5 `/m` | 基本正常 | 脱敏/IP 限流/验证码小时限流已有；**查询包裹未按 station 隔离**；短信仍为 stub |
+| 工作台 Dashboard + 门店 3D | 基本可用 | 真实 stats + 3D 只读/编辑入口；WarehouseScreen 待办标题残留 `TODO` 文案；滞留/异常卡片跳库存深链失效 |
+| 滞留件 / 异常件完整流程 | **未实现** | 仅有 status 枚举与库存批量标异常；无 cron/退回/定责工作流（见 M24） |
+| 寄件 / 财务 / 独立统计报表 | **未实现** | 见 M25 / M26 |
+| 文档一致性 | 漂移 | `version.ts=1.2.1`、PRD 版本/路线落后、AGENTS 仍写 `/kiosk/*` |
+
+### 类型检查快照（2026-07-22）
+
+- `cd frontend && npx tsc --noEmit` → exit 0
+- `cd backend && npx tsc --noEmit` → exit 0
+- 后端已注册模块：Auth / Admin / Inbound / Inventory / Outbound / Kiosk / Stats / Notify / Health
+- 后端**未**注册：Overdue / Exception / Shipping / Finance（与 TASKS M24–M25 一致）
+- 前端路由实际前缀：`/admin/*` `/scan/*` `/m/*` `/query/*`（**无**独立 `/kiosk/*` 页面，已合并到 `/query`）
+
+### 已确认缺陷 / 风险（写入优化任务）
+
+| 编号 | 严重度 | 现象 | 根因线索 |
+|---|---|---|---|
+| B1 | P0 | 工作台「滞留件 / 异常件」点击跳 `/admin/inventory?status=...` 后筛选不生效 | `Inventory.tsx` 未读取 `useSearchParams` 初始化 `status` |
+| B2 | P0 | 工作区大量未提交变更 + `test-results` 残留失败痕迹 | 1.2.5–1.2.7 与 hooks/3D 重构未固化；需回归 e2e 后提交 |
+| B3 | P0 | `POST /api/outbound/self-service` 公开且无限流 | 控制器 `@Public()`，未挂 `ThrottlerGuard` |
+| B4 | P1 | `/query` 查件结果可能跨驿站混入 | `kiosk.service.queryInStockParcels` 未按 `station_id` 过滤；layout 却按站取 |
+| B5 | P1 | 版本说明仍显示 1.2.1 | `frontend/src/config/version.ts` 未跟到 1.2.5–1.2.7 |
+| B6 | P1 | 工作台全屏门店屏「待办速览」标题带 `TODO` | `WarehouseScreen.tsx` 文案占位未去掉（数据本身已接 liveData） |
+| B7 | P1 | AGENTS / PRD 与实现不一致 | 路由写 `/kiosk/*`；PRD 版本与路线仍像旧规划 |
+| B8 | P2 | 取件码错误锁定仅进程内 Map | 多实例部署不共享；重启失效 |
+| B9 | P2 | 短信通知 / 验证码未真发 | Notify stub + kiosk `console.log` 验证码 |
+| B10 | P2 | 3D 查询端 chunk 体积大 | R3F + postprocessing + gsap，历史构建约 ~945KB gzip~268KB |
+| B11 | P2 | 手机号直查（无验证码）易被撞库窥探（虽脱敏） | `query-by-phone-direct` 仅 IP 分钟级限流 |
+| B12 | 信息 | 滞留 count 恒为 0（无自动扫描写 status=overdue） | 待 M24 overdue 模块，非当前闭环 bug |
+
+### 优化任务清单（本轮新增，优先于扩功能）
+
+> 编号 `O*` = Optimization / hardening。完成一项后把状态改为 `done` 并补验收日期。
+> **建议执行顺序**：O1 → O2 → O3 → O5/O6 → O4/O7 → O8/O9 → O10+；完成 O1–O7 后再启动 M24。
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| O1 | P0 | 库存列表接通 URL 查询参数（至少 `status`，建议兼容 phone/trackingNumber/pickupCode） | frontend/pages/admin/inventory | done | 从 Dashboard 点「滞留/异常」进入后筛选自动选中且列表请求带对应 status；手动改 URL 刷新仍生效；重置清空 query string；前端 tsc exit 0 |
+| O2 | P0 | 固化未提交重构并全量回归 | qa + git | done | 梳理 65 项改动（warehouse3d/hooks/notification 等）；`frontend&backend tsc + build`；Playwright 全套绿；必要时更新 mock；再提交（本任务不强制发版） |
+| O3 | P0 | 自助出库公开接口加限流 + 可选驿站绑定 | backend/outbound + scan | done | `self-service` 挂 Throttler（建议同 IP ≤30/min 或更严）；支持 `VITE_KIOSK_STATION_ID` / body.stationId 限定 station；无匹配时明确错误；后端 tsc+build exit 0 |
+| O4 | P1 | 同步版本说明到当前能力水位 | frontend/config/version.ts | done | `currentVersion` ≥ 1.2.7；changelog 补 1.2.2–1.2.7 要点（3D 体验、门店孪生、工作台编辑入口、加载稳定性等）；VersionTab 可见 |
+| O5 | P1 | 去掉 WarehouseScreen「待办速览 TODO」占位，并支持点击跳转 | frontend/components/warehouse3d | done | 标题无 TODO；超期/异常条目可跳库存或未来 overdue/exception 页；与 Dashboard 待办语义一致 |
+| O6 | P1 | 修正 AGENTS.md 路由与模块描述 | AGENTS.md | done | 写明取件门户为 `/query`（原 kiosk 合并）；扫描 `/scan`；H5 `/m`；backend 实际模块列表与「无 overdue/exception/shipping/finance」现状一致 |
+| O7 | P1 | 同步 PRD 版本号与已交付路线 | docs/PRD.md | done | 版本字段对齐；附录路线区分「已交付 1.0–1.2.7」与「规划 1.3+」；删除/改写过时「1.2.0=滞留件」表述 |
+| O8 | P1 | Kiosk 查件按驿站隔离 | backend/kiosk + frontend | done | `query-by-*` / layout 统一使用 stationId（env 或 query）；包裹查询强制 `eq('station_id', ...)`；多站场景结果不串站；补充限流单测或 e2e mock 断言 |
+| O9 | P1 | Dashboard 待办与库存深链联调 + 空状态文案 | frontend | done | 在 O1 基础上：当前无 overdue 数据时展示「暂无滞留（自动扫描将在 1.3 提供）」类提示，避免「坏链」体验；异常批量入口可从库存到达 |
+| O10 | P2 | 取件码错误锁定持久化 | backend/kiosk + outbound | done | 与出库侧 `ss_pickup_code_attempts` 对齐或复用；多实例一致；进程重启不丢失 |
+| O11 | P2 | 短信通道可切换（stub / 真实供应商） | backend/notify | done | 环境变量开关；stub 保持写 `ss_sms_logs`；真实模式接口抽象预留；失败不阻断入库 |
+| O12 | P2 | 查询端 3D 体积与首屏性能 | frontend/warehouse3d | done | 路由级拆包 / 动态 import 已有则审计重复依赖；目标 query 首屏可交互时间与 chunk 体积可接受（记录前后对比） |
+| O13 | P2 | 部署脚本与环境模板补齐 | scripts + .env.example | done | `deploy-frontend.sh` / `deploy-backend.sh` 或文档化步骤；`.env.example` 标明 `VITE_KIOSK_STATION_ID`、限流相关说明 |
+| O14 | P2 | 手机号直查防刷增强 | backend/kiosk | done | 提高直查接口独立限流；或要求完整 11 位 + 图形/滑块验证码（产品确认后实施）；保留脱敏 |
+| O15 | P2 | 补充关键路径自动化测试缺口 | frontend/tests | done | 覆盖：库存 URL status 深链、self-service 限流（可用 mock 429）、query station 隔离、WarehouseScreen 无 TODO 文案 |
+
+
+### 1.2.8 完成记录（2026-07-22）
+
+- O1–O15 已全部落地：库存深链、自助出库限流/绑站、查件驿站隔离、取件码锁定持久化、短信 SMS_PROVIDER、3D 拆包、部署脚本、文档/版本对齐、e2e 补充。
+- 验证：前后端 `npx tsc --noEmit`；建议本地再跑 `cd frontend && npm test` 全量 Playwright。
+- 未做强制 git commit（按用户未要求提交）。
+
+### 与后续版本规划的关系
+
+- **不要**用新模块开发掩盖 O1–O3：深链失效与公开出库无限流属于线上风险。
+- M24（滞留/异常）启动后，O9 的跳转目标应从库存筛选项升级为 `/admin/overdue`、`/admin/exception`（对应原 M24.5）。
+- M25/M26 优先级保持 TASKS 原判断：寄件/财务 > 独立统计报表。
+
+---
+
 ## v1.0+ 后续版本规划
 
 > 5 个未实现模块的必要性判断（PRD §4.7-4.11 已有完整定义）：
@@ -332,7 +469,7 @@
 | M26.2 | P2 | 统计前端页面 | frontend/pages/admin/stats | todo | 新增 /admin/stats 路由；ECharts 双折线趋势图 + 漏斗图 + 滞留率柱状图 + 高峰热力图；路由守卫 admin+clerk；前端 tsc+build exit 0 |
 | M26.3 | P2 | 端到端验证 | qa | todo | Playwright 验证统计页面渲染 + 图表交互；三端响应式 |
 
-> 注：1.2.0 版本号已用于「仓库 3D 布局 + 真实位置取件引导」（M15-M18），1.2.2/1.2.3 用于 3D 体验优化（M20-M23），原计划版本号顺延。2.0.0 连锁多站点管理暂不拆任务。
+> 注：1.2.0 版本号已用于「仓库 3D 布局 + 真实位置取件引导」（M15-M18），1.2.2/1.2.3/1.2.4 用于 3D 体验优化（M20-M23、M27），原计划版本号顺延。2.0.0 连锁多站点管理暂不拆任务。
 
 ---
 
@@ -368,3 +505,12 @@
 3. **M19.3 管理端入口** → 侧边栏底部「自助查询」链接，新窗口打开 ✅ done
 4. **M19.4 新增图标** → externalLink 图标 ✅ done
 5. **M19.5 验证** → Playwright 新增 6 测试，163 用例全过 ✅ done
+
+### 1.2.8 稳定性与优化（当前优先）
+1. **O1 库存 URL 深链** → 修 Dashboard 待办跳转
+2. **O2 固化重构 + 全量 e2e** → 清未提交风险
+3. **O3 自助出库限流/绑站** → 堵住公开接口
+4. **O4–O7 版本与文档对齐** → version / AGENTS / PRD
+5. **O8–O9 查件隔离与待办体验** → 多租户正确性
+6. **O10+ 硬化项** 与 **M24 滞留/异常** 并行评估（建议先 O 后 M）
+

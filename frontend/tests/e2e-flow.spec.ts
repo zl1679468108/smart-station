@@ -88,10 +88,10 @@ test.describe('M9.1 端到端：核心存取件闭环', () => {
   });
 });
 
-// ============ M18.3 v1.2.0 仓库 3D 布局端到端 ============
+// ============ M18.3 v1.2.0 门店 3D 布局端到端 ============
 
-test.describe('M18.3 端到端：仓库 3D 布局配置 → 查询看寻路', () => {
-  test('管理员可访问仓库布局 Tab', async ({ page }) => {
+test.describe('M18.3 端到端：门店 3D 布局配置 → 查询看寻路', () => {
+  test('管理员可访问门店布局 Tab', async ({ page }) => {
     await mockLogin(page, 'admin');
     await mockBusinessApis(page);
     await mockLayoutApis(page);
@@ -100,10 +100,10 @@ test.describe('M18.3 端到端：仓库 3D 布局配置 → 查询看寻路', ()
     await page.goto('/#/admin/system');
     // 等待 Tab 渲染（useAuth 异步加载 profile 后 tabs 才稳定）
     await expect(page.getByRole('button', { name: /驿站信息/ })).toBeVisible({ timeout: 8000 });
-    // 第 6 个 Tab「仓库布局」应可见
-    await expect(page.getByRole('button', { name: /仓库布局/ })).toBeVisible({ timeout: 8000 });
+    // 第 6 个 Tab「门店布局」应可见
+    await expect(page.getByRole('button', { name: /门店布局/ })).toBeVisible({ timeout: 8000 });
     // 点击进入 Tab 内容
-    await page.getByRole('button', { name: /仓库布局/ }).click();
+    await page.getByRole('button', { name: /门店布局/ }).click();
     // Tab 内容渲染：应出现编辑器/面板相关元素（不严格断言具体文案，避免因 canEdit 状态影响）
     await expect(page.locator('body')).toBeVisible();
   });
@@ -115,8 +115,8 @@ test.describe('M18.3 端到端：仓库 3D 布局配置 → 查询看寻路', ()
     await setLoggedIn(page, 'admin');
 
     await page.goto('/#/admin/system');
-    await expect(page.getByRole('button', { name: /仓库布局/ })).toBeVisible({ timeout: 8000 });
-    await page.getByRole('button', { name: /仓库布局/ }).click();
+    await expect(page.getByRole('button', { name: /门店布局/ })).toBeVisible({ timeout: 8000 });
+    await page.getByRole('button', { name: /门店布局/ }).click();
     // 进入 Tab 后页面应正常渲染（canvas 或「暂无货架」提示任一出现都算成功）
     await expect(page.locator('body')).toBeVisible();
     // 等待片刻让异步数据加载，断言 canvas 或 fallback 文案之一
@@ -181,52 +181,91 @@ test.describe('M18.3 端到端：仓库 3D 布局配置 → 查询看寻路', ()
   });
 });
 
-// ============ v1.2.3 仓库布局建模式重构（模型库拖拽） ============
+// ============ v1.2.5 工作台门店 3D 工作区 ============
 
-test.describe('v1.2.3 管理员端模型库 + 区域管理', () => {
-  test('管理员配置页显示模型库面板（办公区/揽收区/门口三张卡片）', async ({ page }) => {
+test.describe('v1.2.5 工作台门店 3D 工作区', () => {
+  test('系统配置页只显示布局概览，并提供工作台入口', async ({ page }) => {
     await mockLogin(page, 'admin');
     await mockBusinessApis(page);
     await mockLayoutApis(page);
     await setLoggedIn(page, 'admin');
 
     await page.goto('/#/admin/system');
-    await expect(page.getByRole('button', { name: /仓库布局/ })).toBeVisible({ timeout: 8000 });
-    await page.getByRole('button', { name: /仓库布局/ }).click();
+    await expect(page.getByRole('button', { name: /门店布局/ })).toBeVisible({ timeout: 8000 });
+    await page.getByRole('button', { name: /门店布局/ }).click();
 
-    // 模型库面板标题
-    await expect(page.getByText('模型库', { exact: true })).toBeVisible({ timeout: 8000 });
-    // 三张可拖拽卡片
-    await expect(page.getByText('办公区', { exact: true })).toBeVisible({ timeout: 8000 });
-    await expect(page.getByText('揽收区', { exact: true })).toBeVisible({ timeout: 8000 });
-    await expect(page.getByText('门口', { exact: true })).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('驿站门店布局配置', { exact: true })).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole('button', { name: '在工作台调整门店布局' })).toBeVisible();
+    await expect(page.locator('canvas')).toHaveCount(0);
   });
 
-  test('管理员配置页加载 mock 区域并显示在区域列表', async ({ page }) => {
+  test('工作台默认显示只读驿站 3D 总览', async ({ page }) => {
     await mockLogin(page, 'admin');
     await mockBusinessApis(page);
     await mockLayoutApis(page);
     await setLoggedIn(page, 'admin');
 
-    await page.goto('/#/admin/system');
-    await page.getByRole('button', { name: /仓库布局/ }).click();
+    await page.goto('/#/admin/dashboard');
 
-    // 区域列表应显示 mock 的两个区域（标题带计数「区域列表（2）」）
-    await expect(page.getByText(/区域列表（2）/)).toBeVisible({ timeout: 8000 });
-    await expect(page.getByText('办公区 1', { exact: true })).toBeVisible({ timeout: 8000 });
-    await expect(page.getByText('揽收区 1', { exact: true })).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('驿站实时占用', { exact: true })).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('canvas')).toBeVisible({ timeout: 15000 });
   });
 
-  test('管理员配置页 3D canvas 渲染区域（含 mock 办公区/揽收区）', async ({ page }) => {
+  test('layout-config 未返回前不挂载 3D canvas', async ({ page }) => {
+    await mockLogin(page, 'admin');
+    await mockBusinessApis(page);
+    await setLoggedIn(page, 'admin');
+
+    let releaseLayout!: () => void;
+    const layoutWaiter = new Promise<void>((resolve) => {
+      releaseLayout = resolve;
+    });
+
+    await page.route('**/api/admin/station/layout-config', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await layoutWaiter;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          message: 'OK',
+          data: {
+            stationId: 'station-1',
+            stationName: '测试驿站一',
+            layoutConfig: {
+              bounds: { width: 12, depth: 8 },
+              doors: [{ x: 0, y: 4, width: 1.2, label: '正门' }],
+              areas: [],
+            },
+          },
+        }),
+      });
+    });
+
+    await page.goto('/#/admin/dashboard');
+
+    await expect(page.getByText('正在加载门店布局...')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('canvas')).toHaveCount(0);
+
+    releaseLayout();
+    await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15000 });
+  });
+
+  test('从工作台进入布局编辑工作区', async ({ page }) => {
     await mockLogin(page, 'admin');
     await mockBusinessApis(page);
     await mockLayoutApis(page);
     await setLoggedIn(page, 'admin');
 
-    await page.goto('/#/admin/system');
-    await page.getByRole('button', { name: /仓库布局/ }).click();
+    await page.goto('/#/admin/dashboard');
+    await page.getByRole('button', { name: '调整布局' }).click();
 
-    // 3D canvas 应可见
+    await expect(page.getByText('工作台 · 调整门店布局', { exact: true })).toBeVisible();
     await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15000 });
     const box = await page.locator('canvas').first().boundingBox();
     expect(box).not.toBeNull();
@@ -234,14 +273,13 @@ test.describe('v1.2.3 管理员端模型库 + 区域管理', () => {
     expect(box!.height).toBeGreaterThan(0);
   });
 
-  test('保存按钮在无改动时禁用，拖入模型后启用', async ({ page }) => {
+  test('编辑工作区初始保存按钮禁用且模型库可拖拽', async ({ page }) => {
     await mockLogin(page, 'admin');
     await mockBusinessApis(page);
     await mockLayoutApis(page);
     await setLoggedIn(page, 'admin');
 
-    await page.goto('/#/admin/system');
-    await page.getByRole('button', { name: /仓库布局/ }).click();
+    await page.goto('/#/admin/dashboard?layout=edit');
 
     // 初始状态保存按钮应禁用（无 dirty 改动）
     const saveBtn = page.getByRole('button', { name: /保存全部改动/ });

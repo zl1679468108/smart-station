@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as outboundService from '@/services/outbound';
+import { useInvalidateShelves } from '@/hooks/useDictionary';
+import { useInvalidateDashboard } from '@/hooks/useDashboardData';
+import { useInvalidateInventoryDetail, useInvalidateInventoryList } from '@/hooks/useInventoryData';
+import { useInvalidateOutboundRecords } from '@/hooks/useOutboundData';
 import type { OutboundResult } from '@/types/outbound';
 import Icon from '@/components/ui/Icon';
 
@@ -9,6 +13,11 @@ type Phase = 'scan' | 'submitting' | 'success' | 'error';
 // 扫码枪作为键盘输入设备会向 input 注入文本并回车，因此输入框是核心交互
 // 摄像头 BarcodeDetector 作为可选增强（部分浏览器支持）
 const Scan: React.FC = () => {
+  const invalidateShelves = useInvalidateShelves();
+  const invalidateDashboard = useInvalidateDashboard();
+  const invalidateInventoryDetail = useInvalidateInventoryDetail();
+  const invalidateInventoryList = useInvalidateInventoryList();
+  const invalidateOutboundRecords = useInvalidateOutboundRecords();
   const [phase, setPhase] = useState<Phase>('scan');
   const [trackingNumber, setTrackingNumber] = useState('');
   const [error, setError] = useState('');
@@ -104,12 +113,23 @@ const Scan: React.FC = () => {
     try {
       const res = await outboundService.selfServiceOutbound(tn);
       setResult(res);
+      invalidateShelves();
+      invalidateDashboard();
+      invalidateInventoryDetail();
+      invalidateInventoryList();
+      invalidateOutboundRecords();
       setPhase('success');
     } catch (err) {
       setError(err instanceof Error ? err.message : '出库失败');
       setPhase('error');
     }
-  }, []);
+  }, [
+    invalidateDashboard,
+    invalidateInventoryDetail,
+    invalidateInventoryList,
+    invalidateOutboundRecords,
+    invalidateShelves,
+  ]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

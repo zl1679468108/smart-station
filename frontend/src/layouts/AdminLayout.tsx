@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/utils/auth';
 import Icon, { IconName } from '@/components/ui/Icon';
+import Logo from '@/components/brand/Logo';
 
 type Role = 'admin' | 'clerk' | 'viewer';
 
@@ -69,8 +70,8 @@ const AdminLayout: React.FC = () => {
     try {
       await switchStation(stationId);
       setStationOpen(false);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '切换驿站失败');
+    } catch {
+      // 接口错误已由全局 notification 统一提示
     } finally {
       setSwitching(false);
     }
@@ -105,9 +106,8 @@ const AdminLayout: React.FC = () => {
     <div className="flex h-screen flex-col bg-gray-50 lg:flex-row">
       {/* PC 侧边栏 */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-gray-200 bg-white lg:flex">
-        <div className="flex h-14 items-center gap-2 px-5 text-lg font-bold text-primary">
-          <Icon name="box" size={24} />
-          <span>Smart Station</span>
+        <div className="flex h-14 items-center px-5">
+          <Logo variant="full" size={28} title="Smart Station" />
         </div>
         <nav className="flex-1 py-2">
           {visibleMenuItems.map((item) => (
@@ -155,7 +155,7 @@ const AdminLayout: React.FC = () => {
                 onClick={() => setStationOpen((v) => !v)}
                 className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
               >
-                <Icon name="box" size={16} className="text-primary" />
+                <Logo size={16} className="shrink-0" />
                 <span className="font-medium">
                   {currentStation?.name || '选择驿站'}
                 </span>
@@ -245,7 +245,7 @@ const AdminLayout: React.FC = () => {
         </header>
 
         {/* 主内容区 */}
-        <main className="flex-1 overflow-auto p-4 lg:p-6">
+        <main className="page-layout-main flex-1 overflow-auto">
           <Outlet />
         </main>
       </div>

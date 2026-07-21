@@ -80,7 +80,7 @@ const Home: React.FC = () => {
   // ===== 查询结果列表 =====
   if (result !== null) {
     return (
-      <div className="p-4">
+      <div>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-800">
             查询结果（尾号 {queriedPhoneTail}）
@@ -145,7 +145,7 @@ const Home: React.FC = () => {
 
   // ===== 查询表单 =====
   return (
-    <div className="p-4">
+    <div>
       <h1 className="mb-2 text-xl font-bold text-gray-800">取件查询</h1>
       <p className="mb-6 text-sm text-gray-500">输入手机号查询您的在库包裹</p>
 

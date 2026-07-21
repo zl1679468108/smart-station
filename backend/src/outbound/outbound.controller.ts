@@ -11,6 +11,7 @@ import { OutboundService } from './outbound.service';
 import { ManualOutboundDto, SelfServiceOutboundDto, OutboundSearchDto } from './dto/outbound.dto';
 import { TokenAuthGuard } from '../common/guards/token-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
+import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { StationId } from '../common/decorators/station-id.decorator';
@@ -26,7 +27,7 @@ import { UserPayload } from '../common/types/user-payload.type';
  * 角色权限（PRD 4.12.2）：search/manual/records 需 admin+clerk，viewer 不可出库
  * self-service 为 @Public，由取件码鉴权，不走角色校验
  *
- * 注：ThrottlerGuard 未全局启用，IP 限流在 M6 Kiosk 统一配置；
+ * 注：self-service 单独挂 ThrottlerGuard（30 次/分钟）；Kiosk 查询另有限流；
  *     取件码错误锁定（M5.4）在 service 层用 ss_pickup_code_attempts 表实现
  */
 @Controller('outbound')
@@ -57,6 +58,8 @@ export class OutboundController {
   }
 
   @Public()
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60000 } }) // 同 IP 每分钟 ≤30 次
   @Post('self-service')
   @HttpCode(200)
   async selfService(@Body() dto: SelfServiceOutboundDto) {

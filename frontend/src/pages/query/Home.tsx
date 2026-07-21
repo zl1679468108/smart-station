@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import * as kioskService from '@/services/kiosk';
+import { useKioskLayout } from '@/hooks/useKioskLayout';
 import type { KioskParcelItem, KioskShelf, StationLayoutConfig } from '@/types/kiosk';
 import Icon from '@/components/ui/Icon';
+import Logo from '@/components/brand/Logo';
 import EmptyState from '@/components/ui/EmptyState';
 import Keypad, { KeypadMode } from '@/components/ui/Keypad';
-import ShelfMap3D, {
+import {
   parseShelfNumberFromCode,
   parseLayerFromCode,
   getZoneLetter,
-} from '@/components/ShelfMap';
+} from '@/components/warehouse3d';
+
+const Warehouse3D = React.lazy(() => import('@/components/warehouse3d'));
 
 type QueryTab = 'phone' | 'tracking' | 'code';
 
@@ -18,40 +22,18 @@ const Home: React.FC = () => {
   const [items, setItems] = useState<KioskParcelItem[] | null>(null);
   const [toast, setToast] = useState<{ type: 'error' | 'success'; msg: string } | null>(null);
 
-  // 货架布局数据 + 驿站信息：页面进入预拉取，供 3D 平面图与顶部展示使用；失败静默不阻塞查询
-  const [shelves, setShelves] = useState<KioskShelf[]>([]);
-  const [layoutConfig, setLayoutConfig] = useState<StationLayoutConfig | null>(null);
-  const [stationInfo, setStationInfo] = useState<{
-    name: string | null;
-    address: string | null;
-    contactPhone: string | null;
-    businessHours: string | null;
-  } | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    kioskService
-      .getLayout()
-      .then((data) => {
-        if (cancelled) return;
-        setShelves(data?.shelves || []);
-        setLayoutConfig(data?.station?.layoutConfig || null);
-        const st = data?.station;
-        if (st) {
-          setStationInfo({
-            name: st.name ?? null,
-            address: st.address ?? null,
-            contactPhone: st.contactPhone ?? null,
-            businessHours: st.businessHours ?? null,
-          });
-        }
-      })
-      .catch(() => {
-        /* 平面图为辅助引导，拉取失败不影响查询主流程 */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // 货架布局数据 + 驿站信息走缓存；失败不阻塞查询主流程。
+  const { data: layoutData, isLoading: layoutLoading } = useKioskLayout();
+  const shelves = layoutData?.shelves || [];
+  const layoutConfig = layoutData?.station?.layoutConfig || null;
+  const stationInfo = layoutData?.station
+    ? {
+        name: layoutData.station.name ?? null,
+        address: layoutData.station.address ?? null,
+        contactPhone: layoutData.station.contactPhone ?? null,
+        businessHours: layoutData.station.businessHours ?? null,
+      }
+    : null;
 
   // 超时清空
   useEffect(() => {
@@ -84,7 +66,7 @@ const Home: React.FC = () => {
       {/* 顶部品牌栏 + 驿站信息（参考 admin 左上角简洁样式：图标 + 驿站名） */}
       <header className="flex items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-2.5">
-          <Icon name="box" size={28} className="shrink-0 text-primary" />
+          <Logo size={28} className="shrink-0" />
           <div className="flex min-w-0 flex-col">
             <span className="truncate text-base font-bold text-gray-900 sm:text-lg">
               {stationInfo?.name || '智能快递驿站'}
@@ -137,7 +119,7 @@ const Home: React.FC = () => {
       {/* 主区域：PC 左右双栏，平板/H5 上下 */}
       <main className="flex flex-1 flex-col overflow-hidden lg:flex-row">
         {/* 左侧/上部：输入区 + 结果 */}
-        <div className="flex-1 overflow-auto p-4 sm:p-6 lg:order-1">
+        <div className="page-layout-main flex-1 overflow-auto lg:order-1">
           <div className="mx-auto max-w-2xl">
             {tab === 'phone' && <PhoneQueryView onSubmit={handleResult} showToast={showToast} />}
             {tab === 'tracking' && (
@@ -151,13 +133,14 @@ const Home: React.FC = () => {
                 items={items}
                 shelves={shelves}
                 layoutConfig={layoutConfig}
+                layoutLoading={layoutLoading}
               />
             )}
           </div>
         </div>
 
         {/* 右侧/下部：虚拟键盘 */}
-        <div className="border-t border-gray-200 bg-white p-4 sm:p-6 lg:order-2 lg:w-[420px] lg:border-l lg:border-t-0">
+        <div className="page-layout-main border-t border-gray-200 bg-white lg:order-2 lg:w-[420px] lg:border-l lg:border-t-0">
           <KeypadPanel tab={tab} />
         </div>
       </main>
@@ -462,7 +445,8 @@ const ResultView: React.FC<{
   items: KioskParcelItem[];
   shelves: KioskShelf[];
   layoutConfig: StationLayoutConfig | null;
-}> = ({ items, shelves, layoutConfig }) => {
+  layoutLoading: boolean;
+}> = ({ items, shelves, layoutConfig, layoutLoading }) => {
   // 提取所有需高亮的「货架号 + 层号 + 包裹数」（按货架号去重，统计每个货架的包裹数）
   const highlights = useMemo(() => {
     const map = new Map<number, { layer: number | null; count: number }>();
@@ -507,14 +491,23 @@ const ResultView: React.FC<{
         <div className="rounded-xl bg-white p-3 shadow-sm">
           <div className="mb-2 flex items-center justify-between px-1">
             <h4 className="text-sm font-semibold text-gray-700">货架位置 3D 视图</h4>
-            <span className="text-xs text-gray-400">橙色为您的包裹所在货架，蓝色为办公区起点</span>
+            <span className="text-xs text-gray-400">橙色为您的包裹所在货架，蓝色为取件起点</span>
           </div>
-          <ShelfMap3D
-            shelves={shelves}
-            layoutConfig={layoutConfig}
-            highlights={highlights}
-            height={360}
-          />
+          <React.Suspense
+            fallback={
+              <div className="flex h-[360px] items-center justify-center text-sm text-gray-400">
+                正在加载 3D 视图...
+              </div>
+            }
+          >
+            <Warehouse3D
+              shelves={shelves}
+              layoutConfig={layoutConfig}
+              layoutLoading={layoutLoading}
+              highlights={highlights}
+              height={360}
+            />
+          </React.Suspense>
         </div>
       )}
 

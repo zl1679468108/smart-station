@@ -1,17 +1,90 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as inventoryService from '@/services/inventory';
 import { useCouriers, useShelves } from '@/hooks/useDictionary';
+import { useInvalidateDashboard } from '@/hooks/useDashboardData';
+import {
+  useInventoryList,
+  useInvalidateInventoryDetail,
+  useInvalidateInventoryList,
+} from '@/hooks/useInventoryData';
 import { useAuth } from '@/utils/auth';
 import { canWrite } from '@/utils/permission';
+import { notifyError } from '@/utils/notification';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
 import type {
   InventoryQuery,
-  InventoryListResult,
   ParcelListItem,
   ParcelStatus,
 } from '@/types/inventory';
+
+
+const FILTER_PARAM_KEYS = [
+  'phone',
+  'trackingNumber',
+  'pickupCode',
+  'courierCompanyId',
+  'shelfId',
+  'status',
+  'startDate',
+  'endDate',
+] as const;
+
+type FilterFormState = {
+  phone: string;
+  trackingNumber: string;
+  pickupCode: string;
+  courierCompanyId: string;
+  shelfId: string;
+  status: string;
+  startDate: string;
+  endDate: string;
+};
+
+const EMPTY_FILTER_FORM: FilterFormState = {
+  phone: '',
+  trackingNumber: '',
+  pickupCode: '',
+  courierCompanyId: '',
+  shelfId: '',
+  status: '',
+  startDate: '',
+  endDate: '',
+};
+
+function parseFiltersFromSearch(searchParams: URLSearchParams): FilterFormState {
+  const form: FilterFormState = { ...EMPTY_FILTER_FORM };
+  for (const key of FILTER_PARAM_KEYS) {
+    const value = searchParams.get(key);
+    if (value) form[key] = value;
+  }
+  return form;
+}
+
+function formToSearchParams(form: FilterFormState): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const key of FILTER_PARAM_KEYS) {
+    const value = form[key]?.trim();
+    if (value) params.set(key, value);
+  }
+  return params;
+}
+
+function formToInventoryQuery(form: FilterFormState, page = 1): InventoryQuery {
+  return {
+    phone: form.phone.trim() || undefined,
+    trackingNumber: form.trackingNumber.trim() || undefined,
+    pickupCode: form.pickupCode.trim() || undefined,
+    courierCompanyId: form.courierCompanyId || undefined,
+    shelfId: form.shelfId || undefined,
+    status: (form.status || undefined) as ParcelStatus | undefined,
+    startDate: form.startDate || undefined,
+    endDate: form.endDate || undefined,
+    page,
+    pageSize: 20,
+  };
+}
 
 const STATUS_META: Record<ParcelStatus, { label: string; cls: string }> = {
   in_stock: { label: '在库', cls: 'bg-info/10 text-info' },
@@ -24,13 +97,33 @@ const STATUS_META: Record<ParcelStatus, { label: string; cls: string }> = {
 // 库存查询页：筛选栏 + 表格 + 分页 + 批量操作
 const Inventory: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
+  const invalidateDashboard = useInvalidateDashboard();
+  const invalidateInventoryDetail = useInvalidateInventoryDetail();
+  const invalidateInventoryList = useInvalidateInventoryList();
   // 只读角色（viewer）不显示选择框 / 批量操作栏 / 批量标记异常弹窗
   const writable = canWrite(user.role);
-  const [query, setQuery] = useState<InventoryQuery>({ page: 1, pageSize: 20 });
-  const [data, setData] = useState<InventoryListResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  // URL 为筛选条件真相源（支持 Dashboard 深链 ?status=overdue 等）
+  // 依赖 query string 文本，避免 searchParams 对象引用变化导致分页被反复重置
+  const searchKey = searchParams.toString();
+  const appliedFilters = useMemo(
+    () => parseFiltersFromSearch(new URLSearchParams(searchKey)),
+    [searchKey],
+  );
+  const [page, setPage] = useState(1);
+  const query = useMemo(
+    () => formToInventoryQuery(appliedFilters, page),
+    [appliedFilters, page],
+  );
+  const {
+    data,
+    isLoading,
+    isFetching,
+    error: queryError,
+  } = useInventoryList(query);
+  const loading = isLoading && !data;
+  const error = queryError ? (queryError instanceof Error ? queryError.message : '加载失败') : '';
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // 筛选项字典数据走 React Query 缓存（staleTime: Infinity），跨页面共享
   const { data: couriers = [] } = useCouriers();
@@ -40,60 +133,38 @@ const Inventory: React.FC = () => {
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const [batchResult, setBatchResult] = useState<{ updated: number; skipped: number } | null>(null);
 
-  // 筛选表单临时状态
-  const [filterForm, setFilterForm] = useState({
-    phone: '',
-    trackingNumber: '',
-    pickupCode: '',
-    courierCompanyId: '',
-    shelfId: '',
-    status: '',
-    startDate: '',
-    endDate: '',
-  });
+  // 筛选表单草稿：编辑后点「查询」才写入 URL
+  const [filterForm, setFilterForm] = useState<FilterFormState>(() =>
+    parseFiltersFromSearch(searchParams),
+  );
 
-  const load = useCallback(() => {
-    setLoading(true);
-    setError('');
-    inventoryService
-      .fetchInventory(query)
-      .then(setData)
-      .catch((err) => setError(err instanceof Error ? err.message : '加载失败'))
-      .finally(() => setLoading(false));
-  }, [query]);
-
+  // URL 变化（Dashboard 跳转 / 浏览器前进后退）时同步草稿并回到第 1 页
   useEffect(() => {
-    load();
-  }, [load]);
+    setFilterForm(parseFiltersFromSearch(new URLSearchParams(searchKey)));
+    setPage(1);
+  }, [searchKey]);
 
   // 查询条件变化时重置选中
   useEffect(() => {
     setSelected(new Set());
   }, [query]);
 
+  const commitFiltersToUrl = useCallback(
+    (form: FilterFormState) => {
+      setSearchParams(formToSearchParams(form), { replace: true });
+      setPage(1);
+    },
+    [setSearchParams],
+  );
+
   const handleSearch = () => {
-    setQuery({
-      ...filterForm,
-      status: (filterForm.status || undefined) as ParcelStatus | undefined,
-      courierCompanyId: filterForm.courierCompanyId || undefined,
-      shelfId: filterForm.shelfId || undefined,
-      page: 1,
-      pageSize: 20,
-    });
+    commitFiltersToUrl(filterForm);
   };
 
   const handleReset = () => {
-    setFilterForm({
-      phone: '',
-      trackingNumber: '',
-      pickupCode: '',
-      courierCompanyId: '',
-      shelfId: '',
-      status: '',
-      startDate: '',
-      endDate: '',
-    });
-    setQuery({ page: 1, pageSize: 20 });
+    setFilterForm({ ...EMPTY_FILTER_FORM });
+    setSearchParams({}, { replace: true });
+    setPage(1);
   };
 
   const toggleSelect = (id: string) => {
@@ -118,7 +189,7 @@ const Inventory: React.FC = () => {
     if (batchSubmitting) return;
     setBatchResult(null);
     if (!batchReason.trim()) {
-      alert('请输入异常原因');
+      notifyError('请输入异常原因');
       return;
     }
     setBatchSubmitting(true);
@@ -131,16 +202,18 @@ const Inventory: React.FC = () => {
       setSelected(new Set());
       setShowBatch(false);
       setBatchReason('');
-      load();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '操作失败');
+      invalidateDashboard();
+      invalidateInventoryDetail();
+      invalidateInventoryList();
+    } catch {
+      // 接口错误已由全局 notification 统一提示
     } finally {
       setBatchSubmitting(false);
     }
   };
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="w-full">
       <h1 className="mb-4 text-lg font-semibold text-gray-800">库存查询</h1>
 
       {/* 筛选栏 */}
@@ -319,7 +392,16 @@ const Inventory: React.FC = () => {
           </table>
         </div>
       ) : (
-        <EmptyState title="暂无数据" description="未查询到符合条件的包裹" />
+        <EmptyState
+          title="暂无数据"
+          description={
+            appliedFilters.status === 'overdue'
+              ? '暂无滞留包裹（自动扫描将在 1.3 滞留件模块提供）'
+              : appliedFilters.status === 'exception'
+                ? '暂无异常包裹，可在列表中批量标记异常'
+                : '未查询到符合条件的包裹'
+          }
+        />
       )}
 
       {/* 分页 */}
@@ -329,8 +411,8 @@ const Inventory: React.FC = () => {
           totalPages={data.totalPages}
           total={data.total}
           pageSize={data.pageSize}
-          disabled={loading}
-          onChange={(p) => setQuery({ ...query, page: p })}
+          disabled={isFetching}
+          onChange={(p) => setPage(p)}
         />
       )}
 

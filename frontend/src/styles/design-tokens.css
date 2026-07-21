@@ -27,6 +27,9 @@
   --spacing-lg: 16px;
   --spacing-xl: 20px;
   --spacing-2xl: 24px;
+  --page-layout-main-padding: var(--spacing-md);
+  --page-layout-main-padding-sm: var(--spacing-lg);
+  --page-layout-main-padding-lg: var(--spacing-xl);
 
   /* 字号 */
   --font-size-xs: 12px;

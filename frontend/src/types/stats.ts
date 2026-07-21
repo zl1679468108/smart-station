@@ -30,3 +30,18 @@ export interface DashboardData {
   hourly: DashboardHourly[];
   todo: DashboardTodo;
 }
+
+
+/** 大屏实时动态事件 */
+export type DashboardEventTone = 'ok' | 'warn' | 'danger' | 'info';
+
+export interface DashboardEvent {
+  id: string;
+  eventType: string;
+  tone: DashboardEventTone;
+  text: string;
+  createdAt: string;
+  trackingNumber?: string | null;
+  pickupCode?: string | null;
+  shelfNumber?: number | null;
+}

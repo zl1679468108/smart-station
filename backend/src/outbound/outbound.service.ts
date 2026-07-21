@@ -134,19 +134,25 @@ export class OutboundService {
 
   /** 自助扫描出库（公开接口） */
   async selfServiceOutbound(dto: SelfServiceOutboundDto) {
-    // 不限定 station_id？实际扫描机在驿站内，运单号全局唯一性不足。
-    // 简化：查所有在库包裹中运单号匹配的（同运单号不同驿站理论上少见）
-    const { data: parcel, error } = await this.supabase
+    // 扫描机可绑定驿站（stationId）；未绑定时兼容单租户跨站运单匹配
+    let query = this.supabase
       .getClient()
       .from('ss_parcels')
       .select(
         'id, tracking_number, recipient_name, recipient_phone, pickup_code, status, inbound_at, station_id, shelf_layer, shelf_position, shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number), courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(id, name, code)',
       )
       .eq('tracking_number', dto.trackingNumber.trim().toUpperCase())
-      .eq('status', 'in_stock')
-      .maybeSingle();
+      .eq('status', 'in_stock');
+
+    if (dto.stationId) {
+      query = query.eq('station_id', dto.stationId);
+    }
+
+    const { data: parcel, error } = await query.maybeSingle();
     if (error || !parcel) {
-      throw new NotFoundException('未找到匹配的在库包裹');
+      throw new NotFoundException(
+        dto.stationId ? '未找到本驿站匹配的在库包裹' : '未找到匹配的在库包裹',
+      );
     }
 
     return this.executeOutbound(parcel, {

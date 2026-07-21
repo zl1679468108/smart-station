@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/utils/auth';
+import { notifyError } from '@/utils/notification';
 import * as authService from '@/services/auth';
 
 // 个人资料页：展示手机号/邮箱（只读），可编辑用户名和头像 URL
@@ -8,7 +9,6 @@ const Profile: React.FC = () => {
   const [username, setUsername] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -20,21 +20,16 @@ const Profile: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (saving) return;
-    setMessage(null);
     if (!username.trim()) {
-      setMessage({ type: 'error', text: '用户名不能为空' });
+      notifyError('用户名不能为空');
       return;
     }
     setSaving(true);
     try {
       await authService.updateProfile({ username: username.trim(), avatarUrl: avatarUrl.trim() || undefined });
       await refreshProfile();
-      setMessage({ type: 'success', text: '资料已更新' });
-    } catch (err) {
-      setMessage({
-        type: 'error',
-        text: err instanceof Error ? err.message : '更新失败',
-      });
+    } catch {
+      // 接口错误已由全局 notification 统一提示
     } finally {
       setSaving(false);
     }
@@ -50,8 +45,8 @@ const Profile: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <h1 className="mb-6 text-lg font-semibold text-gray-800">个人资料</h1>
+    <div className="w-full max-w-2xl">
+      <h1 className="mb-4 text-lg font-semibold text-gray-800">个人资料</h1>
 
       <div className="space-y-6">
         {/* 只读信息卡 */}
@@ -111,18 +106,6 @@ const Profile: React.FC = () => {
               />
               <p className="mt-1 text-xs text-gray-400">留空使用默认首字母头像</p>
             </div>
-
-            {message && (
-              <div
-                className={`rounded-md px-3 py-2 text-sm ${
-                  message.type === 'success'
-                    ? 'bg-success/10 text-success'
-                    : 'bg-danger/10 text-danger'
-                }`}
-              >
-                {message.text}
-              </div>
-            )}
 
             <div className="flex justify-end">
               <button

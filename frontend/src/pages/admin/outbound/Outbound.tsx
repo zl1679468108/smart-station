@@ -1,7 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import * as outboundService from '@/services/outbound';
+import { useInvalidateShelves } from '@/hooks/useDictionary';
+import { useInvalidateDashboard } from '@/hooks/useDashboardData';
+import { useInvalidateInventoryDetail, useInvalidateInventoryList } from '@/hooks/useInventoryData';
+import { useInvalidateOutboundRecords, useOutboundRecords } from '@/hooks/useOutboundData';
+import { notifyError } from '@/utils/notification';
 import type {
-  OutboundRecordListResult,
   OutboundRecordQuery,
   OutboundSearchItem,
 } from '@/types/outbound';
@@ -16,7 +20,7 @@ const Outbound: React.FC = () => {
   const [tab, setTab] = useState<Tab>('manual');
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="w-full">
       <h1 className="mb-4 text-lg font-semibold text-gray-800">出库管理</h1>
 
       <div className="mb-4 flex gap-1 border-b border-gray-200">
@@ -46,15 +50,14 @@ const Outbound: React.FC = () => {
 
 // ============ 人工辅助出库（查询 + 确认两步流程） ============
 const ManualOutbound: React.FC = () => {
+  const invalidateShelves = useInvalidateShelves();
+  const invalidateDashboard = useInvalidateDashboard();
+  const invalidateInventoryDetail = useInvalidateInventoryDetail();
+  const invalidateInventoryList = useInvalidateInventoryList();
+  const invalidateOutboundRecords = useInvalidateOutboundRecords();
   const [queryTab, setQueryTab] = useState<QueryTab>('phone');
   const [items, setItems] = useState<OutboundSearchItem[] | null>(null);
-  const [toast, setToast] = useState<{ type: 'error' | 'success'; msg: string } | null>(null);
   const [confirming, setConfirming] = useState<OutboundSearchItem | null>(null);
-
-  const showToast = (type: 'error' | 'success', msg: string) => {
-    setToast({ type, msg });
-    setTimeout(() => setToast(null), 2500);
-  };
 
   const handleResult = (res: { items?: OutboundSearchItem[] }) => {
     setItems(res.items || []);
@@ -72,12 +75,16 @@ const ManualOutbound: React.FC = () => {
         trackingNumber: item.trackingNumber,
         pickupCode: item.pickupCode || undefined,
       });
+      invalidateShelves();
+      invalidateDashboard();
+      invalidateInventoryDetail();
+      invalidateInventoryList();
+      invalidateOutboundRecords();
       // 从列表移除
       setItems((prev) => (prev ? prev.filter((i) => i.id !== item.id) : prev));
       setConfirming(null);
-      showToast('success', `运单号 ${item.trackingNumber} 已出库`);
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : '出库失败');
+    } catch {
+      // 接口错误已由全局 notification 统一提示
       setConfirming(null);
     }
   };
@@ -106,11 +113,9 @@ const ManualOutbound: React.FC = () => {
       </div>
 
       {/* 查询表单 */}
-      {queryTab === 'phone' && <PhoneSearchView onSubmit={handleResult} showToast={showToast} />}
-      {queryTab === 'tracking' && (
-        <TrackingSearchView onSubmit={handleResult} showToast={showToast} />
-      )}
-      {queryTab === 'code' && <CodeSearchView onSubmit={handleResult} showToast={showToast} />}
+      {queryTab === 'phone' && <PhoneSearchView onSubmit={handleResult} />}
+      {queryTab === 'tracking' && <TrackingSearchView onSubmit={handleResult} />}
+      {queryTab === 'code' && <CodeSearchView onSubmit={handleResult} />}
 
       {/* 查询结果 */}
       {items !== null && (
@@ -129,18 +134,6 @@ const ManualOutbound: React.FC = () => {
         />
       )}
 
-      {/* Toast */}
-      {toast && (
-        <div className="fixed left-1/2 top-6 z-50 -translate-x-1/2">
-          <div
-            className={`rounded-lg px-5 py-2.5 text-sm shadow-lg ${
-              toast.type === 'error' ? 'bg-danger text-white' : 'bg-success text-white'
-            }`}
-          >
-            {toast.msg}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -148,8 +141,7 @@ const ManualOutbound: React.FC = () => {
 // ============ 手机号查询 ============
 const PhoneSearchView: React.FC<{
   onSubmit: (res: { items?: OutboundSearchItem[] }) => void;
-  showToast: (type: 'error' | 'success', msg: string) => void;
-}> = ({ onSubmit, showToast }) => {
+}> = ({ onSubmit }) => {
   const [phone, setPhone] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -157,15 +149,15 @@ const PhoneSearchView: React.FC<{
     e.preventDefault();
     if (submitting) return;
     if (!/^1\d{10}$/.test(phone)) {
-      showToast('error', '请输入正确的 11 位手机号');
+      notifyError('请输入正确的 11 位手机号');
       return;
     }
     setSubmitting(true);
     try {
       const res = await outboundService.searchParcels({ phone });
       onSubmit(res);
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : '查询失败');
+    } catch {
+      // 接口错误已由全局 notification 统一提示
     } finally {
       setSubmitting(false);
     }
@@ -199,8 +191,7 @@ const PhoneSearchView: React.FC<{
 // ============ 运单号查询 ============
 const TrackingSearchView: React.FC<{
   onSubmit: (res: { items?: OutboundSearchItem[] }) => void;
-  showToast: (type: 'error' | 'success', msg: string) => void;
-}> = ({ onSubmit, showToast }) => {
+}> = ({ onSubmit }) => {
   const [trackingNumber, setTrackingNumber] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -208,15 +199,15 @@ const TrackingSearchView: React.FC<{
     e.preventDefault();
     if (submitting) return;
     if (!trackingNumber.trim()) {
-      showToast('error', '请输入运单号');
+      notifyError('请输入运单号');
       return;
     }
     setSubmitting(true);
     try {
       const res = await outboundService.searchParcels({ trackingNumber: trackingNumber.trim() });
       onSubmit(res);
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : '查询失败');
+    } catch {
+      // 接口错误已由全局 notification 统一提示
     } finally {
       setSubmitting(false);
     }
@@ -250,8 +241,7 @@ const TrackingSearchView: React.FC<{
 // ============ 取件码查询 ============
 const CodeSearchView: React.FC<{
   onSubmit: (res: { items?: OutboundSearchItem[] }) => void;
-  showToast: (type: 'error' | 'success', msg: string) => void;
-}> = ({ onSubmit, showToast }) => {
+}> = ({ onSubmit }) => {
   const [code, setCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -259,15 +249,15 @@ const CodeSearchView: React.FC<{
     e.preventDefault();
     if (submitting) return;
     if (!/^\d{1,2}-[1-9]-\d{4}$/.test(code)) {
-      showToast('error', '取件码格式不正确，如 22-9-2132');
+      notifyError('取件码格式不正确，如 22-9-2132');
       return;
     }
     setSubmitting(true);
     try {
       const res = await outboundService.searchParcels({ pickupCode: code });
       onSubmit(res);
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : '查询失败');
+    } catch {
+      // 接口错误已由全局 notification 统一提示
     } finally {
       setSubmitting(false);
     }
@@ -396,28 +386,19 @@ const ConfirmDialog: React.FC<{
 // ============ 出库记录列表 ============
 const OutboundRecords: React.FC = () => {
   const [query, setQuery] = useState<OutboundRecordQuery>({ page: 1, pageSize: 20 });
-  const [data, setData] = useState<OutboundRecordListResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const {
+    data,
+    isLoading,
+    isFetching,
+    error: queryError,
+  } = useOutboundRecords(query);
+  const loading = isLoading && !data;
+  const error = queryError ? (queryError instanceof Error ? queryError.message : '加载失败') : '';
   const [filterForm, setFilterForm] = useState({
     startDate: '',
     endDate: '',
     method: '',
   });
-
-  const load = useCallback(() => {
-    setLoading(true);
-    setError('');
-    outboundService
-      .listOutboundRecords(query)
-      .then(setData)
-      .catch((err) => setError(err instanceof Error ? err.message : '加载失败'))
-      .finally(() => setLoading(false));
-  }, [query]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
 
   const handleSearch = () => {
     setQuery({
@@ -536,14 +517,14 @@ const OutboundRecords: React.FC = () => {
           <div className="flex gap-2">
             <button
               onClick={() => setQuery({ ...query, page: (query.page || 1) - 1 })}
-              disabled={(query.page || 1) <= 1}
+              disabled={(query.page || 1) <= 1 || isFetching}
               className="rounded-md border border-gray-300 px-3 py-1 text-gray-600 hover:bg-gray-50 disabled:opacity-40"
             >
               上一页
             </button>
             <button
               onClick={() => setQuery({ ...query, page: (query.page || 1) + 1 })}
-              disabled={(query.page || 1) >= data.totalPages}
+              disabled={(query.page || 1) >= data.totalPages || isFetching}
               className="rounded-md border border-gray-300 px-3 py-1 text-gray-600 hover:bg-gray-50 disabled:opacity-40"
             >
               下一页

@@ -123,6 +123,174 @@ export class StatsService {
     };
   }
 
+
+  /**
+   * 大屏实时动态：优先读 ss_parcel_events（按驿站过滤），
+   * 无事件时回退到今日入库/出库包裹合成动态。
+   */
+  async getRecentEvents(stationId: string, limit = 20) {
+    const safeLimit = Math.min(50, Math.max(1, Number(limit) || 20));
+
+    // 1) 轨迹表（inner join 包裹以按 station 过滤）
+    const eventsRes = await this.supabase
+      .getClient()
+      .from('ss_parcel_events')
+      .select(
+        `id, event_type, description, created_at, metadata,
+         parcel:ss_parcels!inner(
+           id, tracking_number, pickup_code, station_id, status,
+           shelf:ss_shelves(number)
+         )`,
+      )
+      .eq('parcel.station_id', stationId)
+      .order('created_at', { ascending: false })
+      .limit(safeLimit);
+
+    if (!eventsRes.error && eventsRes.data && eventsRes.data.length > 0) {
+      return (eventsRes.data as any[]).map((row) => {
+        const parcel = Array.isArray(row.parcel) ? row.parcel[0] : row.parcel;
+        const shelf = parcel?.shelf
+          ? Array.isArray(parcel.shelf)
+            ? parcel.shelf[0]
+            : parcel.shelf
+          : null;
+        return this.normalizeEvent({
+          id: row.id,
+          eventType: row.event_type,
+          description: row.description,
+          createdAt: row.created_at,
+          trackingNumber: parcel?.tracking_number ?? null,
+          pickupCode: parcel?.pickup_code ?? row.metadata?.pickup_code ?? null,
+          shelfNumber: shelf?.number ?? row.metadata?.shelf_number ?? null,
+          metadata: row.metadata ?? null,
+        });
+      });
+    }
+
+    // 2) 回退：最近入库/出库包裹
+    const { todayStart } = this.getDateRange();
+    const [inboundRes, outboundRes] = await Promise.all([
+      this.supabase
+        .getClient()
+        .from('ss_parcels')
+        .select(
+          'id, tracking_number, pickup_code, inbound_at, status, shelf:ss_shelves(number)',
+        )
+        .eq('station_id', stationId)
+        .gte('inbound_at', todayStart)
+        .order('inbound_at', { ascending: false })
+        .limit(safeLimit),
+      this.supabase
+        .getClient()
+        .from('ss_parcels')
+        .select(
+          'id, tracking_number, pickup_code, outbound_at, status, shelf:ss_shelves(number)',
+        )
+        .eq('station_id', stationId)
+        .eq('status', 'out_stock')
+        .not('outbound_at', 'is', null)
+        .gte('outbound_at', todayStart)
+        .order('outbound_at', { ascending: false })
+        .limit(safeLimit),
+    ]);
+
+    const merged: any[] = [];
+    for (const row of (inboundRes.data as any[]) || []) {
+      const shelf = Array.isArray(row.shelf) ? row.shelf[0] : row.shelf;
+      merged.push(
+        this.normalizeEvent({
+          id: `in-${row.id}`,
+          eventType: 'inbound',
+          description: `入库，取件码 ${row.pickup_code || '-'}`,
+          createdAt: row.inbound_at,
+          trackingNumber: row.tracking_number,
+          pickupCode: row.pickup_code,
+          shelfNumber: shelf?.number ?? null,
+          metadata: null,
+        }),
+      );
+    }
+    for (const row of (outboundRes.data as any[]) || []) {
+      const shelf = Array.isArray(row.shelf) ? row.shelf[0] : row.shelf;
+      merged.push(
+        this.normalizeEvent({
+          id: `out-${row.id}`,
+          eventType: 'outbound',
+          description: `出库，取件码 ${row.pickup_code || '-'}`,
+          createdAt: row.outbound_at,
+          trackingNumber: row.tracking_number,
+          pickupCode: row.pickup_code,
+          shelfNumber: shelf?.number ?? null,
+          metadata: null,
+        }),
+      );
+    }
+
+    merged.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+    return merged.slice(0, safeLimit);
+  }
+
+  private normalizeEvent(input: {
+    id: string;
+    eventType: string;
+    description: string | null;
+    createdAt: string;
+    trackingNumber: string | null;
+    pickupCode: string | null;
+    shelfNumber: number | null;
+    metadata: any;
+  }) {
+    const tone = this.eventTone(input.eventType);
+    const text =
+      input.description ||
+      this.defaultEventText(input.eventType, input.pickupCode, input.shelfNumber);
+    return {
+      id: input.id,
+      eventType: input.eventType,
+      tone,
+      text,
+      createdAt: input.createdAt,
+      trackingNumber: input.trackingNumber,
+      pickupCode: input.pickupCode,
+      shelfNumber: input.shelfNumber,
+    };
+  }
+
+  private eventTone(eventType: string): 'ok' | 'warn' | 'danger' | 'info' {
+    if (eventType === 'outbound') return 'ok';
+    if (eventType === 'inbound') return 'info';
+    if (eventType?.startsWith('overdue')) return 'warn';
+    if (eventType?.startsWith('exception') || eventType?.startsWith('return')) return 'danger';
+    return 'info';
+  }
+
+  private defaultEventText(
+    eventType: string,
+    pickupCode: string | null,
+    shelfNumber: number | null,
+  ) {
+    const code = pickupCode || '-';
+    const shelf = shelfNumber != null ? `#${shelfNumber}` : '货架';
+    switch (eventType) {
+      case 'inbound':
+        return `入库 ${code} → ${shelf}`;
+      case 'outbound':
+        return `出库 ${code}`;
+      case 'overdue_warn':
+        return `超期预警 ${code}`;
+      case 'overdue_remind':
+        return `超期提醒 ${code}`;
+      case 'exception_register':
+        return `异常登记 ${code}`;
+      case 'exception_resolve':
+        return `异常处理完成 ${code}`;
+      default:
+        return eventType || '业务动态';
+    }
+  }
+
   private getDateRange() {
     // 数据库存储 UTC，北京时间 00:00 = UTC 16:00 前一天
     // 这里用本地时间（服务器默认北京时间）算边界，转 ISO 串给 supabase

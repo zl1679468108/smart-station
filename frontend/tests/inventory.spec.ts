@@ -184,3 +184,28 @@ test.describe('库存接口错误', () => {
     await expect(page.getByText('查询失败')).toBeVisible({ timeout: 8000 });
   });
 });
+
+test.describe('库存 URL 深链（O1）', () => {
+  test('?status=overdue 自动选中滞留并只展示滞留件', async ({ page }) => {
+    await page.goto('/#/admin/inventory?status=overdue');
+    await expect(page.getByRole('heading', { name: '库存查询' })).toBeVisible();
+    // 状态下拉为筛选栏第一个 select
+    await expect(page.locator('select').first()).toHaveValue('overdue');
+    await expect(page.locator('td').filter({ hasText: '滞留' }).first()).toBeVisible({ timeout: 8000 });
+    // mock 过滤后不应出现在库行
+    await expect(page.locator('td').filter({ hasText: '在库' })).toHaveCount(0);
+  });
+
+  test('?status=exception 自动筛选异常件', async ({ page }) => {
+    await page.goto('/#/admin/inventory?status=exception');
+    await expect(page.locator('select').first()).toHaveValue('exception');
+    await expect(page.locator('td').filter({ hasText: '异常' }).first()).toBeVisible({ timeout: 8000 });
+  });
+
+  test('重置清空 URL query string', async ({ page }) => {
+    await page.goto('/#/admin/inventory?status=overdue');
+    await page.getByRole('button', { name: '重置' }).click();
+    await expect.poll(() => page.url()).toMatch(/#\/admin\/inventory\/?$/);
+    await expect(page.locator('select').first()).toHaveValue('');
+  });
+});

@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import * as inventoryService from '@/services/inventory';
-import type { ParcelDetail, ParcelStatus } from '@/types/inventory';
+import { useParcelDetail } from '@/hooks/useInventoryData';
+import type { ParcelStatus } from '@/types/inventory';
 
 const STATUS_META: Record<ParcelStatus, { label: string; cls: string }> = {
   in_stock: { label: '在库', cls: 'bg-info/10 text-info' },
@@ -40,28 +40,22 @@ const OUTBOUND_METHOD_LABEL: Record<string, string> = {
 const ParcelDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [detail, setDetail] = useState<ParcelDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { data: detail, isLoading, error } = useParcelDetail(id);
 
-  useEffect(() => {
-    if (!id) return;
-    setLoading(true);
-    inventoryService
-      .fetchParcelDetail(id)
-      .then(setDetail)
-      .catch((err) => setError(err instanceof Error ? err.message : '加载失败'))
-      .finally(() => setLoading(false));
-  }, [id]);
-
-  if (loading) return <div className="py-10 text-center text-sm text-gray-500">加载中...</div>;
-  if (error) return <div className="py-10 text-center text-sm text-danger">{error}</div>;
+  if (isLoading) return <div className="py-10 text-center text-sm text-gray-500">加载中...</div>;
+  if (error) {
+    return (
+      <div className="py-10 text-center text-sm text-danger">
+        {error instanceof Error ? error.message : '加载失败'}
+      </div>
+    );
+  }
   if (!detail) return <div className="py-10 text-center text-sm text-gray-400">包裹不存在</div>;
 
   const statusMeta = STATUS_META[detail.status];
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="w-full max-w-3xl">
       <div className="mb-4 flex items-center justify-between">
         <button
           onClick={() => navigate('/admin/inventory')}

@@ -47,5 +47,7 @@ export function fetchParcelDetail(id: string): Promise<ParcelDetail> {
 }
 
 export function batchMarkException(ids: string[], reason: string): Promise<{ updated: number; skipped: number }> {
-  return post<{ updated: number; skipped: number }>('/api/inventory/batch-exception', { ids, reason });
+  return post<{ updated: number; skipped: number }>('/api/inventory/batch-exception', { ids, reason }, {
+    successMessage: '异常标记已提交',
+  });
 }

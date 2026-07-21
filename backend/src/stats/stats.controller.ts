@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { StatsService } from './stats.service';
 import { TokenAuthGuard } from '../common/guards/token-auth.guard';
 import { StationId } from '../common/decorators/station-id.decorator';
@@ -15,5 +15,14 @@ export class StatsController {
   @Get('dashboard')
   async dashboard(@StationId() stationId: string) {
     return this.statsService.getDashboard(stationId);
+  }
+
+  /** 大屏实时动态 */
+  @Get('dashboard/events')
+  async recentEvents(
+    @StationId() stationId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.statsService.getRecentEvents(stationId, limit ? Number(limit) : 20);
   }
 }

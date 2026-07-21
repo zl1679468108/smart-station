@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import * as inboundService from '@/services/inbound';
-import { useCouriers, useShelves } from '@/hooks/useDictionary';
+import { useCouriers, useInvalidateShelves, useShelves } from '@/hooks/useDictionary';
+import { useInvalidateDashboard } from '@/hooks/useDashboardData';
+import { useInvalidateInventoryList } from '@/hooks/useInventoryData';
 import type { InboundResult, ParcelSize } from '@/types/inbound';
 import type { Shelf } from '@/types/admin';
 import Icon from '@/components/ui/Icon';
@@ -17,7 +19,7 @@ const Inbound: React.FC = () => {
   const { data: shelves = [] } = useShelves();
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="w-full">
       <h1 className="mb-4 text-lg font-semibold text-gray-800">入库管理</h1>
 
       {/* 模式切换 */}
@@ -41,9 +43,11 @@ const Inbound: React.FC = () => {
         ))}
       </div>
 
-      {mode === 'scan' && <ScanInbound shelves={shelves} />}
-      {mode === 'manual' && <ManualInbound shelves={shelves} />}
-      {mode === 'batch' && <BatchInbound shelves={shelves} />}
+      <div className="max-w-3xl">
+        {mode === 'scan' && <ScanInbound shelves={shelves} />}
+        {mode === 'manual' && <ManualInbound shelves={shelves} />}
+        {mode === 'batch' && <BatchInbound shelves={shelves} />}
+      </div>
     </div>
   );
 };
@@ -122,6 +126,9 @@ const InboundSuccess: React.FC<{ result: InboundResult }> = ({ result }) => (
 
 // ============ 扫码入库 ============
 const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
+  const invalidateShelves = useInvalidateShelves();
+  const invalidateDashboard = useInvalidateDashboard();
+  const invalidateInventoryList = useInvalidateInventoryList();
   const [trackingNumber, setTrackingNumber] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('');
@@ -160,6 +167,9 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         inboundMethod: 'scan',
       });
       setResult(res);
+      invalidateShelves();
+      invalidateDashboard();
+      invalidateInventoryList();
       // 清空表单，聚焦回运单号输入框，便于连续扫码
       setTrackingNumber('');
       setRecipientName('');
@@ -242,6 +252,9 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
 
 // ============ 手动录入 ============
 const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
+  const invalidateShelves = useInvalidateShelves();
+  const invalidateDashboard = useInvalidateDashboard();
+  const invalidateInventoryList = useInvalidateInventoryList();
   const [form, setForm] = useState({
     trackingNumber: '',
     courierCompanyId: '',
@@ -283,6 +296,9 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         inboundMethod: 'manual',
       });
       setResult(res);
+      invalidateShelves();
+      invalidateDashboard();
+      invalidateInventoryList();
       setForm({
         trackingNumber: '',
         courierCompanyId: '',
@@ -406,6 +422,9 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
 
 // ============ 批量导入（CSV 粘贴） ============
 const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
+  const invalidateShelves = useInvalidateShelves();
+  const invalidateDashboard = useInvalidateDashboard();
+  const invalidateInventoryList = useInvalidateInventoryList();
   const [csvText, setCsvText] = useState('');
   const [defaultSize, setDefaultSize] = useState<ParcelSize>('small');
   const [submitting, setSubmitting] = useState(false);
@@ -471,7 +490,12 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         failed: res.failed + parseErrors.length,
         errors: [...parseErrors, ...res.errors.map((e) => ({ index: e.index, error: e.error }))],
       });
-      if (res.succeeded > 0) setCsvText('');
+      if (res.succeeded > 0) {
+        setCsvText('');
+        invalidateShelves();
+        invalidateDashboard();
+        invalidateInventoryList();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '批量入库失败');
     } finally {

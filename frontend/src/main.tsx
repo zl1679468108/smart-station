@@ -5,12 +5,19 @@ import { HashRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './utils/auth';
 import { LoadingProvider } from './utils/loading';
+import { NotificationProvider } from './utils/notification';
 import './styles/globals.scss';
 
 // React Query：默认缓存 5 分钟，避免短时间内重复请求
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 5 * 60 * 1000, refetchOnWindowFocus: false },
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      refetchOnWindowFocus: false,
+      // 默认 3 次重试 + 全局错误 toast 会叠加多条 Failed to fetch
+      retry: 1,
+      retryDelay: 1200,
+    },
   },
 });
 
@@ -22,9 +29,11 @@ createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={queryClient}>
     <HashRouter>
       <AuthProvider>
-        <LoadingProvider>
-          <App />
-        </LoadingProvider>
+        <NotificationProvider>
+          <LoadingProvider>
+            <App />
+          </LoadingProvider>
+        </NotificationProvider>
       </AuthProvider>
     </HashRouter>
   </QueryClientProvider>,

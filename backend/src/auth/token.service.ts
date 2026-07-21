@@ -56,16 +56,17 @@ export class TokenService {
     const tokenHash = TokenService.hashToken(rawToken);
     const expiresAt = new Date(Date.now() + TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-    const { error } = await this.supabase
-      .getClient()
-      .from('ss_user_sessions')
-      .insert({
-        user_id: opts.userId,
-        token_hash: tokenHash,
-        expires_at: expiresAt,
-        user_agent: opts.userAgent ?? null,
-        ip_address: opts.ipAddress ?? null,
-      });
+    const { error } = await this.supabase.withRetry(
+      (client) =>
+        client.from('ss_user_sessions').insert({
+          user_id: opts.userId,
+          token_hash: tokenHash,
+          expires_at: expiresAt,
+          user_agent: opts.userAgent ?? null,
+          ip_address: opts.ipAddress ?? null,
+        }),
+      { maxRetries: 1, timeoutMs: 10000 },
+    );
 
     if (error) {
       throw new Error(`创建会话失败: ${error.message}`);
@@ -77,11 +78,10 @@ export class TokenService {
   /** 登出：删除当前 token 对应的会话 */
   async destroySessionByToken(rawToken: string): Promise<void> {
     const tokenHash = TokenService.hashToken(rawToken);
-    const { error } = await this.supabase
-      .getClient()
-      .from('ss_user_sessions')
-      .delete()
-      .eq('token_hash', tokenHash);
+    const { error } = await this.supabase.withRetry(
+      (client) => client.from('ss_user_sessions').delete().eq('token_hash', tokenHash),
+      { maxRetries: 1, timeoutMs: 10000 },
+    );
     if (error) {
       throw new Error(`登出失败: ${error.message}`);
     }
@@ -89,11 +89,10 @@ export class TokenService {
 
   /** 销毁某用户全部会话（修改密码/重置时调用） */
   async destroyAllSessionsOfUser(userId: string): Promise<void> {
-    const { error } = await this.supabase
-      .getClient()
-      .from('ss_user_sessions')
-      .delete()
-      .eq('user_id', userId);
+    const { error } = await this.supabase.withRetry(
+      (client) => client.from('ss_user_sessions').delete().eq('user_id', userId),
+      { maxRetries: 1, timeoutMs: 10000 },
+    );
     if (error) {
       throw new Error(`销毁会话失败: ${error.message}`);
     }
@@ -104,12 +103,15 @@ export class TokenService {
    */
   async recordLoginFailure(userId: string): Promise<{ locked: boolean }> {
     // 先取当前计数
-    const { data, error } = await this.supabase
-      .getClient()
-      .from('ss_users')
-      .select('failed_login_count')
-      .eq('id', userId)
-      .maybeSingle();
+    const { data, error } = await this.supabase.withRetry(
+      (client) =>
+        client
+          .from('ss_users')
+          .select('failed_login_count')
+          .eq('id', userId)
+          .maybeSingle(),
+      { maxRetries: 1, timeoutMs: 10000 },
+    );
     if (error || !data) {
       return { locked: false };
     }
@@ -121,21 +123,23 @@ export class TokenService {
     if (locked) {
       patch.locked_until = new Date(Date.now() + LOCK_MINUTES * 60 * 1000).toISOString();
     }
-    await this.supabase
-      .getClient()
-      .from('ss_users')
-      .update(patch)
-      .eq('id', userId);
+    await this.supabase.withRetry(
+      (client) => client.from('ss_users').update(patch).eq('id', userId),
+      { maxRetries: 1, timeoutMs: 10000 },
+    );
     return { locked };
   }
 
   /** 登录成功：重置失败计数与锁定 */
   async resetLoginFailure(userId: string): Promise<void> {
-    await this.supabase
-      .getClient()
-      .from('ss_users')
-      .update({ failed_login_count: 0, locked_until: null })
-      .eq('id', userId);
+    await this.supabase.withRetry(
+      (client) =>
+        client
+          .from('ss_users')
+          .update({ failed_login_count: 0, locked_until: null })
+          .eq('id', userId),
+      { maxRetries: 1, timeoutMs: 10000 },
+    );
   }
 }
 

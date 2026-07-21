@@ -39,18 +39,17 @@ const Password: React.FC = () => {
       await authService.changePassword({ oldPassword, newPassword });
       // 后端已销毁全部会话，前端清除本地态并跳登录页
       await logout();
-      alert('密码修改成功，请重新登录');
       navigate('/admin/login', { replace: true });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '修改失败');
+    } catch {
+      // 接口错误已由全局 notification 统一提示
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="mx-auto max-w-md">
-      <h1 className="mb-6 text-lg font-semibold text-gray-800">修改密码</h1>
+    <div className="w-full max-w-md">
+      <h1 className="mb-4 text-lg font-semibold text-gray-800">修改密码</h1>
 
       <section className="rounded-lg border border-gray-200 bg-white p-5">
         <form onSubmit={handleSubmit} className="space-y-4">

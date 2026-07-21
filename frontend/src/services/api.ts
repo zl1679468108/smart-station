@@ -2,9 +2,47 @@
 // 后端响应格式：{ success, message, data }，request<T> 直接返回 data 部分
 
 import { showGlobalLoading, hideGlobalLoading } from '@/utils/loading';
+import { notifyError, notifySuccess } from '@/utils/notification';
 
 const TOKEN_KEY = 'ss_token';
 const STATION_ID_KEY = 'ss_station_id';
+
+// 短时去重：React Query 重试 / 多接口并发失败时避免刷屏
+const ERROR_NOTIFY_DEDUP_MS = 2500;
+let lastErrorNotifyAt = 0;
+let lastErrorNotifyMessage = '';
+
+function formatRequestError(err: unknown): string {
+  if (!(err instanceof Error) || !err.message) {
+    return '请求失败，请稍后重试';
+  }
+  const msg = err.message;
+  // 浏览器原生网络错误（后端未启动、代理断开、DNS 失败等）
+  if (
+    msg === 'Failed to fetch' ||
+    msg === 'NetworkError when attempting to fetch resource.' ||
+    msg === 'Load failed' ||
+    msg === 'Network request failed' ||
+    /Failed to fetch/i.test(msg)
+  ) {
+    return '网络连接失败，请确认后端服务已启动（默认 3030）后重试';
+  }
+  if (err.name === 'AbortError' || /aborted/i.test(msg)) {
+    return '请求已取消，请重试';
+  }
+  return msg;
+}
+
+function notifyRequestError(message: string): void {
+  const now = Date.now();
+  if (message === lastErrorNotifyMessage && now - lastErrorNotifyAt < ERROR_NOTIFY_DEDUP_MS) {
+    return;
+  }
+  lastErrorNotifyAt = now;
+  lastErrorNotifyMessage = message;
+  notifyError(message);
+}
+
 
 interface ApiResponse<T> {
   success: boolean;
@@ -19,6 +57,16 @@ const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 export interface RequestOptions extends RequestInit {
   /** 设为 true 可跳过全局 loading toast（默认对 POST/PUT/PATCH/DELETE 自动显示） */
   skipLoading?: boolean;
+  /** 设为 true 可跳过全局 notification（默认错误都提醒，写操作成功提醒） */
+  skipNotify?: boolean;
+  /** 覆盖成功提示文案；false 可关闭本次成功提示 */
+  successMessage?: string | false;
+  /** 覆盖错误提示文案；false 可关闭本次错误提示 */
+  errorMessage?: string | false;
+  /** GET 默认不提示成功；写操作默认提示成功，可用此项显式控制 */
+  notifySuccess?: boolean;
+  /** 默认所有接口错误都提示，可用此项显式控制 */
+  notifyError?: boolean;
 }
 
 // ===== Token 与驿站 ID 管理 =====
@@ -69,7 +117,9 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
 
   // 对变更类方法（POST/PUT/PATCH/DELETE）自动显示全局 loading toast
   const method = (options.method || 'GET').toUpperCase();
-  const shouldShowLoading = !options.skipLoading && MUTATION_METHODS.has(method);
+  const isMutation = MUTATION_METHODS.has(method);
+  const shouldShowLoading = !options.skipLoading && isMutation;
+  const shouldNotify = !options.skipNotify;
   if (shouldShowLoading) showGlobalLoading();
 
   try {
@@ -84,13 +134,33 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
       throw new Error('未授权，请重新登录');
     }
 
-    const result: ApiResponse<T> = await response.json();
+    const result = (await response.json().catch(() => null)) as ApiResponse<T> | null;
 
-    if (!result.success) {
-      throw new Error(result.message || '请求失败');
+    if (!response.ok) {
+      throw new Error(result?.message || `请求失败（${response.status}）`);
+    }
+
+    if (!result || !result.success) {
+      throw new Error(result?.message || '请求失败');
+    }
+
+    const showSuccess = options.notifySuccess ?? isMutation;
+    if (shouldNotify && showSuccess && options.successMessage !== false) {
+      const message =
+        options.successMessage ||
+        (result.message && result.message !== 'success' ? result.message : '操作成功');
+      notifySuccess(message);
     }
 
     return result.data;
+  } catch (err) {
+    const showError = options.notifyError ?? true;
+    const friendly = formatRequestError(err);
+    // 用友好文案重抛，页面内联 error 与 toast 一致（避免展示英文 Failed to fetch）
+    if (shouldNotify && showError && options.errorMessage !== false) {
+      notifyRequestError(options.errorMessage || friendly);
+    }
+    throw new Error(friendly);
   } finally {
     if (shouldShowLoading) hideGlobalLoading();
   }

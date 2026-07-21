@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MaxLength, Matches } from 'class-validator';
+import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 /**
  * 更新当前驿站信息 DTO
@@ -29,14 +29,17 @@ export class UpdateStationDto {
   floorPlanUrl?: string;
 
   @IsOptional()
-  @Matches(/^\d+$/, { message: '预警天数必须为整数' })
+  @IsInt({ message: '预警天数必须为整数' })
+  @Min(1, { message: '预警天数必须大于 0' })
   overdueWarnDays?: number;
 
   @IsOptional()
-  @Matches(/^\d+$/, { message: '提醒天数必须为整数' })
+  @IsInt({ message: '提醒天数必须为整数' })
+  @Min(1, { message: '提醒天数必须大于 0' })
   overdueRemindDays?: number;
 
   @IsOptional()
-  @Matches(/^\d+$/, { message: '退回天数必须为整数' })
+  @IsInt({ message: '退回天数必须为整数' })
+  @Min(1, { message: '退回天数必须大于 0' })
   overdueReturnDays?: number;
 }

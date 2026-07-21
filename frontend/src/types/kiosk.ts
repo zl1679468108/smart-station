@@ -60,8 +60,14 @@ export interface LayoutBounds {
   depth: number;
 }
 
-/** 仓库户型 - 区域类型 */
-export type LayoutAreaType = 'office' | 'pickup';
+/** 驿站门店布局 - 可配置区域类型 */
+export type LayoutAreaType =
+  | 'office'
+  | 'pickup'
+  | 'counter'
+  | 'outboundRecord'
+  | 'exception'
+  | 'oversize';
 
 /** 仓库户型 - 区域（办公区/揽收区等，只读展示用） */
 export interface LayoutArea {

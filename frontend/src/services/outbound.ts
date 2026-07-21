@@ -10,7 +10,7 @@ import type {
 
 /** 出库前查询在库包裹（1.1.0 新增，不脱敏，工作人员核验用） */
 export function searchParcels(params: OutboundSearchParams): Promise<OutboundSearchResult> {
-  return post<OutboundSearchResult>('/api/outbound/search', params);
+  return post<OutboundSearchResult>('/api/outbound/search', params, { notifySuccess: false });
 }
 
 /** 人工辅助出库（凭运单号或取件码） */
@@ -18,12 +18,21 @@ export function manualOutbound(payload: {
   trackingNumber?: string;
   pickupCode?: string;
 }): Promise<OutboundResult> {
-  return post<OutboundResult>('/api/outbound/manual', payload);
+  return post<OutboundResult>('/api/outbound/manual', payload, { successMessage: '包裹已出库' });
 }
 
-/** 自助扫描出库（公开接口，仅凭运单号） */
-export function selfServiceOutbound(trackingNumber: string): Promise<OutboundResult> {
-  return post<OutboundResult>('/api/outbound/self-service', { trackingNumber });
+/** 自助扫描出库（公开接口；可绑 VITE_KIOSK_STATION_ID 限定驿站） */
+export function selfServiceOutbound(
+  trackingNumber: string,
+  stationId?: string,
+): Promise<OutboundResult> {
+  const payload: { trackingNumber: string; stationId?: string } = { trackingNumber };
+  const envStation = import.meta.env.VITE_KIOSK_STATION_ID as string | undefined;
+  const boundStationId = stationId || envStation;
+  if (boundStationId) payload.stationId = boundStationId;
+  return post<OutboundResult>('/api/outbound/self-service', payload, {
+    successMessage: '包裹已出库',
+  });
 }
 
 /** 出库记录列表 */

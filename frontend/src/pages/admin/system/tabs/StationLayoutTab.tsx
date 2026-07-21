@@ -1,15 +1,22 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import * as adminService from '@/services/admin';
 import { useShelves, useInvalidateShelves } from '@/hooks/useDictionary';
+import {
+  useLayoutConfig,
+  useSetLayoutConfigCache,
+} from '@/hooks/useSystemAdmin';
+import { useInvalidateKioskLayout } from '@/hooks/useKioskLayout';
 import { useAuth } from '@/utils/auth';
 import { canManageSystem } from '@/utils/permission';
 import Icon from '@/components/ui/Icon';
-import ShelfMap3DEditor, {
-  EditorShelf,
+import Warehouse3D, {
+  type WarehouseEditableShelf,
   MODEL_LIBRARY,
   findModelByType,
-} from '@/components/ShelfMapEditor';
-import type { Shelf, StationLayoutConfig, LayoutDoor, LayoutArea } from '@/types/admin';
+  DEFAULT_STATION_LAYOUT,
+  normalizeLayoutArea,
+} from '@/components/warehouse3d';
+import type { Shelf, StationLayoutConfig, LayoutDoor, LayoutArea, LayoutAreaType } from '@/types/admin';
 
 const SIZE_LABEL: Record<string, string> = {
   small: '小件',
@@ -17,8 +24,8 @@ const SIZE_LABEL: Record<string, string> = {
   large: '大件',
 };
 
-// 把后台 Shelf 数据转成 EditorShelf（KioskShelf + id）
-function toEditorShelf(s: Shelf): EditorShelf {
+// 把后台 Shelf 数据转成统一 3D 编辑货架数据
+function toEditorShelf(s: Shelf): WarehouseEditableShelf {
   return {
     id: s.id,
     number: s.number,
@@ -29,6 +36,9 @@ function toEditorShelf(s: Shelf): EditorShelf {
     posY: s.pos_y,
     rotation: s.rotation,
     zone: s.zone,
+    inStockCount: s.in_stock_count,
+    remainingCapacity: s.remaining_capacity,
+    capacityPerLayer: s.capacity_per_layer,
   };
 }
 
@@ -43,7 +53,7 @@ interface ShelfOverride {
 // 生成默认门：放在前墙中央（+Y 方向墙，y = depth/2）
 // 地面中心在原点，bounds 范围 [-w/2, w/2] × [-d/2, d/2]
 function makeDefaultDoor(depth: number): LayoutDoor {
-  return { x: 0, y: depth / 2, width: 1.2, label: '正门' };
+  return { x: 0, y: depth / 2, width: DEFAULT_STATION_LAYOUT.doors[0].width, label: '正门' };
 }
 
 // 生成区域唯一 ID（优先 crypto.randomUUID，兼容降级）
@@ -53,19 +63,33 @@ function genAreaId(): string {
 }
 
 // 计算同类型区域的下一个序号（用于默认标签）
-function nextAreaLabel(areas: LayoutArea[], type: 'office' | 'pickup'): string {
-  const prefix = type === 'office' ? '办公区' : '揽收区';
+function nextAreaLabel(areas: LayoutArea[], type: LayoutAreaType): string {
+  const preset = findModelByType(type);
+  const prefix = preset?.type !== 'door' ? preset?.label : '功能区';
   const count = areas.filter((a) => a.type === type).length;
   return `${prefix} ${count + 1}`;
 }
 
-// 仓库布局 Tab：管理员拖拽摆放货架 + 拖拽模型库建模 + 统一保存
-const StationLayoutTab: React.FC = () => {
+// 驿站门店布局：管理员拖拽摆放货架 + 拖拽模型库建模 + 统一保存
+interface StationLayoutTabProps {
+  /** 系统设置仅展示配置概览；完整 3D 编辑器嵌入工作台。 */
+  panelOnly?: boolean;
+}
+
+const StationLayoutTab: React.FC<StationLayoutTabProps> = ({ panelOnly = false }) => {
   const { user } = useAuth();
   const canEdit = canManageSystem(user?.role);
 
-  const { data: shelfList = [], isLoading } = useShelves();
+  const { data: shelfList = [], isLoading: shelvesLoading } = useShelves();
   const invalidateShelves = useInvalidateShelves();
+  // 布局配置走 React Query 缓存；保存后 setQueryData 同步
+  const {
+    data: layoutRes,
+    isLoading: layoutQueryLoading,
+    error: layoutQueryError,
+  } = useLayoutConfig();
+  const setLayoutConfigCache = useSetLayoutConfigCache();
+  const invalidateKioskLayout = useInvalidateKioskLayout();
 
   // 服务器端原始数据（用于 dirty 判断 + 重置）
   const [serverBounds, setServerBounds] = useState<{ width: number; depth: number } | null>(null);
@@ -74,7 +98,7 @@ const StationLayoutTab: React.FC = () => {
 
   // 本地可编辑数据
   const [layoutConfig, setLayoutConfig] = useState<StationLayoutConfig | null>(null);
-  const [boundsForm, setBoundsForm] = useState({ width: 20, depth: 15 });
+  const [boundsForm, setBoundsForm] = useState({ ...DEFAULT_STATION_LAYOUT.bounds });
   const [doors, setDoors] = useState<LayoutDoor[]>([]);
   const [areas, setAreas] = useState<LayoutArea[]>([]);
   const [shelfOverrides, setShelfOverrides] = useState<Record<string, ShelfOverride>>({});
@@ -123,30 +147,47 @@ const StationLayoutTab: React.FC = () => {
     [areas, selectedId],
   );
 
-  // 拉取户型配置
+  const shelfSummary = useMemo(() => {
+    const totalStock = shelfList.reduce((sum, s) => sum + (s.in_stock_count ?? 0), 0);
+    const totalRemaining = shelfList.reduce((sum, s) => sum + (s.remaining_capacity ?? 0), 0);
+    const totalCapacity = totalStock + totalRemaining;
+    const occupancy = totalCapacity > 0 ? Math.round((totalStock / totalCapacity) * 100) : 0;
+    return { totalStock, totalRemaining, totalCapacity, occupancy };
+  }, [shelfList]);
+
+  // 缓存数据同步到本地可编辑状态（staleTime Infinity，仅首次加载或写后 setQueryData 会变）
   useEffect(() => {
-    adminService
-      .fetchLayoutConfig()
-      .then((res) => {
-        setLayoutConfig(res.layoutConfig);
-        const b = res.layoutConfig.bounds;
-        if (b) {
-          setBoundsForm(b);
-          setServerBounds(b);
-        }
-        // 默认保证至少一个门：如果没门，用默认门（前墙中央）
-        const ds = res.layoutConfig.doors ?? [];
-        const finalDoors = ds.length > 0 ? ds : [makeDefaultDoor(b?.depth ?? boundsForm.depth)];
-        setDoors(finalDoors);
-        setServerDoors(finalDoors);
-        const ars = res.layoutConfig.areas ?? [];
-        setAreas(ars);
-        setServerAreas(ars);
-      })
-      .catch((e) => {
-        setMsg({ type: 'error', text: e.message || '加载户型配置失败' });
+    if (!layoutRes) return;
+    const cfg = layoutRes.layoutConfig || {};
+    setLayoutConfig(cfg);
+    const b = cfg.bounds ?? DEFAULT_STATION_LAYOUT.bounds;
+    setBoundsForm(b);
+    setServerBounds(b);
+    // 默认保证至少一个门：如果没门，用默认门（前墙中央）
+    const ds = cfg.doors ?? [];
+    const finalDoors = ds.length > 0 ? ds : [makeDefaultDoor(b?.depth ?? DEFAULT_STATION_LAYOUT.bounds.depth)];
+    setDoors(finalDoors);
+    setServerDoors(finalDoors);
+    const ars = Array.isArray(cfg.areas)
+      ? cfg.areas.map((area) => normalizeLayoutArea(area as any) as LayoutArea)
+      : DEFAULT_STATION_LAYOUT.areas.map((area) => ({ ...area }));
+    setAreas(ars);
+    setServerAreas(ars);
+  }, [layoutRes]);
+
+  useEffect(() => {
+    if (layoutQueryError) {
+      setMsg({
+        type: 'error',
+        text:
+          layoutQueryError instanceof Error
+            ? layoutQueryError.message
+            : '加载户型配置失败',
       });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }
+  }, [layoutQueryError]);
+
+  const layoutLoading = layoutQueryLoading && !layoutRes;
 
   // dirty 判断：货架有覆盖 / bounds 变了 / doors 变了 / areas 变了
   const isDirty = useMemo(() => {
@@ -202,7 +243,7 @@ const StationLayoutTab: React.FC = () => {
         return;
       }
       const model = findModelByType(modelType);
-      if (!model) return;
+      if (!model || model.type === 'door') return;
       const newArea: LayoutArea = {
         id: genAreaId(),
         x: snappedX,
@@ -210,8 +251,8 @@ const StationLayoutTab: React.FC = () => {
         width: model.width,
         depth: model.depth,
         height: model.height,
-        type: model.type as 'office' | 'pickup',
-        label: nextAreaLabel(areas, model.type as 'office' | 'pickup'),
+        type: model.type,
+        label: nextAreaLabel(areas, model.type),
       };
       setAreas((prev) => [...prev, newArea]);
       // 自动选中新加的区域
@@ -271,7 +312,7 @@ const StationLayoutTab: React.FC = () => {
     if (!canEdit || saving || !isDirty) return;
     setSaving(true);
     try {
-      // 统一保存：提交所有货架当前位置 + 仓库尺寸 + 门口列表 + 区域列表
+      // 统一保存：提交所有货架当前位置 + 门店尺寸 + 门口列表 + 区域列表
       const shelves = editorShelves.map((s) => ({
         id: s.id,
         posX: s.posX,
@@ -287,11 +328,13 @@ const StationLayoutTab: React.FC = () => {
         shelves,
         bounds: boundsForm,
         doors: finalDoors,
-        areas,
+        areas: areas.map((area) => normalizeLayoutArea(area as any) as LayoutArea),
       });
 
-      // 刷新数据，重置本地状态
+      // 刷新货架缓存 + 写入布局缓存，重置本地状态
       await invalidateShelves();
+      setLayoutConfigCache(res.layoutConfig);
+      invalidateKioskLayout();
       setLayoutConfig(res.layoutConfig);
       const b = res.layoutConfig.bounds;
       if (b) {
@@ -302,11 +345,11 @@ const StationLayoutTab: React.FC = () => {
       const finalDs = ds.length > 0 ? ds : [makeDefaultDoor(b?.depth ?? boundsForm.depth)];
       setServerDoors(finalDs);
       setDoors(finalDs);
-      const ars = res.layoutConfig.areas ?? [];
+      const ars = (res.layoutConfig.areas ?? []).map((area) => normalizeLayoutArea(area as any) as LayoutArea);
       setServerAreas(ars);
       setAreas(ars);
       setShelfOverrides({});
-      showMsg('success', `仓库布局已保存（${res.shelvesUpdated} 个货架位置更新）`);
+      showMsg('success', `门店布局已保存（${res.shelvesUpdated} 个货架位置更新）`);
     } catch (e: any) {
       showMsg('error', e.message || '保存失败');
     } finally {
@@ -322,10 +365,52 @@ const StationLayoutTab: React.FC = () => {
     setAreas(serverAreas);
   };
 
-  if (isLoading) {
+  // panelOnly 只依赖布局配置；完整编辑器还要等货架字典
+  const pageLoading = panelOnly
+    ? layoutLoading
+    : layoutLoading || (shelvesLoading && shelfList.length === 0);
+
+  if (pageLoading) {
     return (
       <div className="flex h-64 items-center justify-center text-sm text-gray-400">
         加载中...
+      </div>
+    );
+  }
+
+  if (panelOnly) {
+    return (
+      <div className="max-w-2xl space-y-4">
+        <div className="border-b border-gray-200 pb-4">
+          <h2 className="text-base font-semibold text-gray-800">驿站门店布局配置</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            布局建模和货架位置调整已集中到工作台，适合按每家社区驿站的真实空间单独配置。
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="border border-gray-200 bg-white p-4">
+            <div className="text-xs text-gray-500">门店尺寸</div>
+            <div className="mt-1 text-lg font-semibold text-gray-800">
+              {boundsForm.width}m × {boundsForm.depth}m
+            </div>
+          </div>
+          <div className="border border-gray-200 bg-white p-4">
+            <div className="text-xs text-gray-500">布局对象</div>
+            <div className="mt-1 text-lg font-semibold text-gray-800">
+              {shelfList.length} 个货架 · {doors.length} 个入口 · {areas.length} 个区域
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            window.location.hash = '#/admin/dashboard?layout=edit';
+          }}
+          className="flex items-center gap-1.5 bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primaryHover"
+        >
+          <Icon name="inbox" size={16} />
+          在工作台调整门店布局
+        </button>
       </div>
     );
   }
@@ -375,17 +460,39 @@ const StationLayoutTab: React.FC = () => {
         )}
       </div>
 
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl bg-white p-4 shadow-sm">
+          <div className="text-xs text-gray-400">在库件数</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{shelfSummary.totalStock}</div>
+        </div>
+        <div className="rounded-xl bg-white p-4 shadow-sm">
+          <div className="text-xs text-gray-400">剩余容量</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">
+            {shelfSummary.totalRemaining}
+          </div>
+        </div>
+        <div className="rounded-xl bg-white p-4 shadow-sm">
+          <div className="text-xs text-gray-400">总容量</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{shelfSummary.totalCapacity}</div>
+        </div>
+        <div className="rounded-xl bg-white p-4 shadow-sm">
+          <div className="text-xs text-gray-400">整体占用率</div>
+          <div className="mt-1 text-2xl font-semibold text-gray-900">{shelfSummary.occupancy}%</div>
+        </div>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         {/* 左侧：3D 编辑器 + 模型库 */}
         <div className="space-y-3">
           <div className="rounded-xl bg-white p-3 shadow-sm">
-            <ShelfMap3DEditor
+            <Warehouse3D
+              mode="edit"
               shelves={editorShelves}
               layoutConfig={
-                layoutConfig
-                  ? { ...layoutConfig, bounds: boundsForm, doors, areas }
-                  : null
+                { ...(layoutConfig ?? {}), bounds: boundsForm, doors, areas }
               }
+              layoutLoading={layoutLoading}
+              showCeilingLights
               selectedId={selectedId}
               selectedType={selectedType || 'shelf'}
               onSelect={(id, type) => {
@@ -436,9 +543,9 @@ const StationLayoutTab: React.FC = () => {
 
         {/* 右侧：配置面板 */}
         <div className="space-y-3">
-          {/* 仓库尺寸 */}
+          {/* 门店尺寸 */}
           <div className="rounded-xl bg-white p-4 shadow-sm">
-            <h4 className="mb-3 text-sm font-semibold text-gray-700">仓库尺寸（米）</h4>
+            <h4 className="mb-3 text-sm font-semibold text-gray-700">门店尺寸（米）</h4>
             <div className="grid grid-cols-2 gap-2">
               <label className="text-xs text-gray-500">
                 宽度
@@ -478,7 +585,7 @@ const StationLayoutTab: React.FC = () => {
             </h4>
             {areas.length === 0 ? (
               <div className="text-xs text-gray-400">
-                暂无区域，从模型库拖入办公区/揽收区即可创建
+                暂无区域，从模型库拖入服务台、出库记录区或功能区即可创建
               </div>
             ) : (
               <div className="space-y-1.5">
@@ -504,7 +611,7 @@ const StationLayoutTab: React.FC = () => {
                     <span
                       className="h-3 w-3 rounded"
                       style={{
-                        background: a.type === 'office' ? '#3B82F6' : '#8B5CF6',
+                        background: findModelByType(a.type)?.color ?? '#8B5CF6',
                         opacity: 0.7,
                       }}
                     />
@@ -598,7 +705,7 @@ const StationLayoutTab: React.FC = () => {
                   <span className="font-medium">#{s.number}</span>
                   <span className="text-[10px] text-gray-400">{SIZE_LABEL[s.size_type]}</span>
                   <span className="ml-auto text-[10px] text-gray-400">
-                    {s.pos_x !== null ? `(${s.pos_x.toFixed(1)}, ${s.pos_y?.toFixed(1)})` : '未配置'}
+                    {s.in_stock_count}/{s.remaining_capacity}
                   </span>
                 </button>
               ))}
@@ -625,6 +732,17 @@ const StationLayoutTab: React.FC = () => {
                 >
                   收起 ✕
                 </button>
+              </div>
+              <div className="mb-2 grid grid-cols-3 gap-2 text-[11px] text-gray-500">
+                <div className="rounded-lg bg-gray-50 px-2 py-1.5">
+                  在库 {selectedShelf.in_stock_count}
+                </div>
+                <div className="rounded-lg bg-gray-50 px-2 py-1.5">
+                  余量 {selectedShelf.remaining_capacity}
+                </div>
+                <div className="rounded-lg bg-gray-50 px-2 py-1.5">
+                  容量 {selectedShelf.in_stock_count + selectedShelf.remaining_capacity}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs text-gray-500">
@@ -708,7 +826,7 @@ const StationLayoutTab: React.FC = () => {
             <div className="rounded-xl border border-primary/30 bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-center justify-between">
                 <h4 className="text-sm font-semibold text-gray-700">
-                  {selectedArea.type === 'office' ? '办公区' : '揽收区'}
+                  {findModelByType(selectedArea.type)?.label ?? '功能区'}
                 </h4>
                 <div className="flex items-center gap-3">
                   {canEdit && (

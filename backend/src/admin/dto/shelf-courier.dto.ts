@@ -56,6 +56,11 @@ export class CreateShelfDto {
 
 export class UpdateShelfDto {
   @IsOptional()
+  @IsInt()
+  @Min(1, { message: '货架号必须大于 0' })
+  number?: number;
+
+  @IsOptional()
   @IsString()
   @IsIn(['small', 'medium', 'large'], { message: '大小类型必须为 small/medium/large' })
   sizeType?: 'small' | 'medium' | 'large';

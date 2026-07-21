@@ -1,157 +1,63 @@
 import React, { useMemo, useRef, useState, useEffect, Suspense } from 'react';
 import { Canvas, useThree, ThreeEvent } from '@react-three/fiber';
+import LightingRig from './LightingRig';
 import { OrbitControls, Html, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import type {
-  KioskShelf,
-  ShelfSizeType,
   StationLayoutConfig,
   LayoutDoor,
   LayoutArea,
 } from '@/types/kiosk';
-import { SHELF_ZONE_MAP } from '@/types/kiosk';
+import WarehouseShell from './WarehouseShell';
+import CameraRig from './CameraRig';
+import { computeShelfPositions, computeCameraInit } from './layout';
+import { normalizeStationLayout } from './layoutConfig';
+import {
+  ParcelBox,
+  StationAreaModel,
+  getStationAreaPalette,
+} from './StationModels';
+import { GltfModel, shelfAssetKey } from './assets';
+import {
+  SHELF_W,
+  SHELF_D,
+  LAYER_H,
+  POST,
+  BOARD_T,
+  SELECTED_COLOR,
+  NORMAL_FRAME,
+  NORMAL_BOARD,
+  DOOR_COLOR,
+  SNAP,
+} from './constants';
+import {
+  getOccupancyRatio,
+  getOccupancyColor,
+  getRemainingCapacity,
+} from './occupancy';
+import type { WarehouseEditableShelf, WarehouseShelf } from './types';
 
 /**
- * 货架 3D 编辑器（管理员配置仓库布局用）— 点击拖拽版 + 模型库拖拽建模
+ * 仓库 3D 编辑场景（内部实现，业务入口请用 Warehouse3D mode="edit"）
  * --------------------------------------------------
  * 交互：
  *  - 点击货架/门/区域选中（高亮）
  *  - 按住拖拽 → 沿地面（y=0）自由移动，实时跟随鼠标
  *  - 松手 → 自动吸附到 0.5m 网格 + 回调保存
  *  - 拖拽时禁用 OrbitControls，避免相机跟着转
- *  - 模型库（办公区/揽收区/门口）支持 HTML5 drag-and-drop 拖入 3D 场景
+ *  - 模型库（服务台/出库记录区/异常件区等）支持 HTML5 drag-and-drop 拖入 3D 场景
  *
  * 技术实现：手动 raycaster 投影到 y=0 平面，直接操作 group ref（不走 React state），
  * 避免 TransformControls 在 r3f 下的崩溃问题，同时保证拖拽 60fps 丝滑
  */
 
-export type EditorShelf = KioskShelf & { id: string };
+export type EditorShelf = WarehouseEditableShelf;
 
-/**
- * 模型库预设尺寸（米）— 后期基本不动，管理员只拖拽摆放
- * 宽度/深度/高度对应 3D 场景的 X/Z/Y 轴
- */
-export interface ModelLibraryItem {
-  type: 'office' | 'pickup' | 'door';
-  label: string;
-  width: number;
-  depth: number;
-  height: number;
-  color: string;
-}
+// 模型库注册表统一维护在 modelLibrary.ts
+export type { ModelLibraryItem } from './modelLibrary';
+export { MODEL_LIBRARY, findModelByType } from './modelLibrary';
 
-export const MODEL_LIBRARY: ModelLibraryItem[] = [
-  { type: 'office', label: '办公区', width: 3, depth: 3, height: 2.5, color: '#3B82F6' },
-  { type: 'pickup', label: '揽收区', width: 4, depth: 2, height: 2.5, color: '#8B5CF6' },
-  { type: 'door', label: '门口', width: 1.2, depth: 0.3, height: 2, color: '#10B981' },
-];
-
-/** 根据 type 查找预设 */
-export function findModelByType(type: string): ModelLibraryItem | undefined {
-  return MODEL_LIBRARY.find((m) => m.type === type);
-}
-
-const SHELF_W = 2.4;
-const SHELF_D = 1.2;
-const LAYER_H = 0.55;
-const POST = 0.08;
-const BOARD_T = 0.05;
-const SHELF_GAP_X = 0.5;
-const SHELF_GAP_Z = 1.0;
-const PER_ROW = 6;
-const ZONE_GAP = 2.4;
-const ZONE_LABEL_H = 0.6;
-
-const SELECTED_COLOR = '#3B82F6';
-const NORMAL_FRAME = '#94A3B8';
-const NORMAL_BOARD = '#E2E8F0';
-const GROUND_COLOR = '#F1F5F9';
-const DOOR_COLOR = '#10B981';
-const GRID_COLOR = '#CBD5E1';
-const AREA_OFFICE_COLOR = '#3B82F6';
-const AREA_PICKUP_COLOR = '#8B5CF6';
-const AREA_LABEL_BG = 'rgba(15,23,42,0.75)';
-const SNAP = 0.5;
 const DRAG_PLANE_OFFSET_Y = 0; // 拖拽投影平面 Y 高度
-
-// ============ 自动布局 fallback ============
-interface PlacedShelf {
-  shelf: EditorShelf;
-  x: number;
-  z: number;
-  zone: string;
-}
-
-function computeShelfPositions(shelves: EditorShelf[]) {
-  const hasRealCoords = shelves.some((s) => s.posX !== null && s.posY !== null);
-  const order: ShelfSizeType[] = ['small', 'medium', 'large'];
-  const fallbackGroup: Record<ShelfSizeType, EditorShelf[]> = {
-    small: [],
-    medium: [],
-    large: [],
-  };
-  for (const s of shelves) {
-    if (s.posX === null || s.posY === null) fallbackGroup[s.sizeType].push(s);
-  }
-
-  let cursorZ = 0;
-  if (hasRealCoords) {
-    for (const s of shelves) {
-      if (s.posX !== null && s.posY !== null) {
-        cursorZ = Math.max(cursorZ, s.posY + SHELF_D);
-      }
-    }
-    cursorZ += ZONE_GAP;
-  }
-
-  const placed: PlacedShelf[] = [];
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minZ = 0;
-  let maxZ = -Infinity;
-
-  for (const s of shelves) {
-    if (s.posX !== null && s.posY !== null) {
-      placed.push({
-        shelf: s,
-        x: s.posX,
-        z: s.posY,
-        zone: s.zone || SHELF_ZONE_MAP[s.sizeType],
-      });
-      minX = Math.min(minX, s.posX - SHELF_W / 2);
-      maxX = Math.max(maxX, s.posX + SHELF_W / 2);
-      minZ = Math.min(minZ, s.posY - SHELF_D / 2);
-      maxZ = Math.max(maxZ, s.posY + SHELF_D / 2);
-    }
-  }
-
-  for (const t of order) {
-    const items = fallbackGroup[t];
-    if (items.length === 0) continue;
-    const rows = Math.ceil(items.length / PER_ROW);
-    const rowWidth = PER_ROW * SHELF_W + (PER_ROW - 1) * SHELF_GAP_X;
-    const zoneDepth = rows * SHELF_D + (rows - 1) * SHELF_GAP_Z + ZONE_LABEL_H;
-    const originZ = cursorZ;
-    cursorZ += zoneDepth + ZONE_GAP;
-    items.forEach((s, i) => {
-      const row = Math.floor(i / PER_ROW);
-      const col = i % PER_ROW;
-      const x = col * (SHELF_W + SHELF_GAP_X) - rowWidth / 2 + SHELF_W / 2;
-      const z = row * (SHELF_D + SHELF_GAP_Z) + ZONE_LABEL_H + SHELF_D / 2 + originZ;
-      placed.push({ shelf: s, x, z, zone: s.zone || SHELF_ZONE_MAP[t] });
-      minX = Math.min(minX, x - SHELF_W / 2);
-      maxX = Math.max(maxX, x + SHELF_W / 2);
-      maxZ = Math.max(maxZ, z + SHELF_D / 2);
-    });
-  }
-
-  if (minX === Infinity) {
-    minX = -5;
-    maxX = 5;
-    maxZ = 5;
-  }
-  return { placed, bounds: { minX, maxX, minZ, maxZ } };
-}
 
 // ============ 拖拽工具：把鼠标 NDC 投影到 y=0 平面 ============
 const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -DRAG_PLANE_OFFSET_Y);
@@ -205,6 +111,23 @@ const DraggableShelf: React.FC<DraggableShelfProps> = ({
   const frameColor = selected ? SELECTED_COLOR : NORMAL_FRAME;
   const boardColor = selected ? '#BFDBFE' : NORMAL_BOARD;
   const opacity = dimmed ? 0.35 : 1;
+  const occupancyRatio = getOccupancyRatio(shelf);
+  const occupancyColor = getOccupancyColor(occupancyRatio);
+  const remainingCapacity = getRemainingCapacity(shelf);
+  const shelfPackages = useMemo(() => {
+    const count = Math.min(14, Math.max(4, Math.round((shelf.inStockCount ?? shelf.layers * 3) * 0.18)));
+    return Array.from({ length: count }, (_, i) => {
+      const layer = i % Math.max(1, shelf.layers);
+      const col = Math.floor(i / Math.max(1, shelf.layers)) % 4;
+      return {
+        x: -SHELF_W * 0.34 + col * (SHELF_W * 0.22),
+        y: layer * LAYER_H + 0.18,
+        z: -SHELF_D * 0.18 + ((i + shelf.number) % 3) * 0.17,
+        rot: ((i + shelf.number) % 5 - 2) * 0.04,
+        color: (i + shelf.number) % 2 === 0 ? '#C58A54' : '#D8A15F',
+      };
+    });
+  }, [shelf.inStockCount, shelf.layers, shelf.number]);
 
   const postPositions: [number, number, number][] = [
     [-SHELF_W / 2 + POST / 2, 0, -SHELF_D / 2 + POST / 2],
@@ -285,21 +208,77 @@ const DraggableShelf: React.FC<DraggableShelfProps> = ({
         </mesh>
       )}
 
-      {/* 4 立柱 */}
-      {postPositions.map((p, i) => (
-        <mesh key={`post-${i}`} position={[p[0], totalH / 2, p[2]]} castShadow>
-          <boxGeometry args={[POST, totalH, POST]} />
-          <meshStandardMaterial color={frameColor} transparent opacity={opacity} />
-        </mesh>
-      ))}
+      {/* GLB 货架模型（与只读场景共用资产）；加载失败时退回程序化立柱/层板 */}
+      <GltfModel
+        assetKey={shelfAssetKey(shelf.sizeType)}
+        size={[SHELF_W, totalH, SHELF_D]}
+        opacity={opacity}
+        emissive={selected ? SELECTED_COLOR : undefined}
+        emissiveIntensity={selected ? 0.25 : 0}
+        fallback={
+          <group>
+            {postPositions.map((p, i) => (
+              <mesh key={`post-${i}`} position={[p[0], totalH / 2, p[2]]} castShadow>
+                <boxGeometry args={[POST, totalH, POST]} />
+                <meshStandardMaterial color={frameColor} transparent opacity={opacity} />
+              </mesh>
+            ))}
+            {Array.from({ length: shelf.layers + 1 }).map((_, i) => (
+              <mesh key={`board-${i}`} position={[0, i * LAYER_H, 0]} receiveShadow castShadow>
+                <boxGeometry args={[SHELF_W, BOARD_T, SHELF_D]} />
+                <meshStandardMaterial color={boardColor} transparent opacity={opacity} />
+              </mesh>
+            ))}
+          </group>
+        }
+      />
 
-      {/* 层板 */}
-      {Array.from({ length: shelf.layers + 1 }).map((_, i) => (
-        <mesh key={`board-${i}`} position={[0, i * LAYER_H, 0]} receiveShadow castShadow>
-          <boxGeometry args={[SHELF_W, BOARD_T, SHELF_D]} />
-          <meshStandardMaterial color={boardColor} transparent opacity={opacity} />
-        </mesh>
-      ))}
+      {!dimmed &&
+        shelfPackages.map((pkg, i) => (
+          <ParcelBox
+            key={`editor-shelf-pkg-${i}`}
+            position={[pkg.x, pkg.y, pkg.z]}
+            rotation={[0, pkg.rot, 0]}
+            size={[0.28, 0.22, 0.22]}
+            color={pkg.color}
+          />
+        ))}
+
+      {/* 占用率侧边条 */}
+      <mesh position={[SHELF_W / 2 + 0.04, totalH * 0.5, 0]}>
+        <boxGeometry args={[0.08, totalH, 0.18]} />
+        <meshStandardMaterial color="#E2E8F0" transparent opacity={0.5 * opacity} />
+      </mesh>
+      <mesh
+        position={[SHELF_W / 2 + 0.04, totalH * occupancyRatio * 0.5, 0]}
+      >
+        <boxGeometry args={[0.08, Math.max(0.08, totalH * occupancyRatio), 0.18]} />
+        <meshStandardMaterial
+          color={occupancyColor}
+          emissive={occupancyColor}
+          emissiveIntensity={0.35}
+          transparent
+          opacity={0.9 * opacity}
+        />
+      </mesh>
+
+      {/* 层内数字货位灯带 */}
+      {Array.from({ length: shelf.layers }).map((_, i) => {
+        const y = i * LAYER_H + BOARD_T + 0.16;
+        const segmentOpacity = Math.max(0.15, occupancyRatio * 0.8);
+        return (
+          <mesh key={`slot-${i}`} position={[0, y, SHELF_D / 2 + 0.02]}>
+            <boxGeometry args={[SHELF_W * 0.7, 0.04, 0.06]} />
+            <meshStandardMaterial
+              color={occupancyColor}
+              emissive={occupancyColor}
+              emissiveIntensity={0.25}
+              transparent
+              opacity={segmentOpacity * opacity}
+            />
+          </mesh>
+        );
+      })}
 
       {/* 货架号 */}
       <Text
@@ -312,8 +291,26 @@ const DraggableShelf: React.FC<DraggableShelfProps> = ({
         {`#${shelf.number}`}
       </Text>
 
+      {/* 占用信息 */}
+      <Html position={[0, totalH + 0.62, 0]} center distanceFactor={5.5}>
+        <div
+          style={{
+            background: occupancyColor,
+            color: '#fff',
+            padding: '3px 9px',
+            borderRadius: 999,
+            fontSize: 12,
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+            boxShadow: `0 2px 8px ${occupancyColor}66`,
+          }}
+        >
+          在库 {shelf.inStockCount ?? 0} · 余 {remainingCapacity}
+        </div>
+      </Html>
+
       {selected && (
-        <Html position={[0, totalH + 0.75, 0]} center distanceFactor={10}>
+        <Html position={[0, totalH + 1.02, 0]} center distanceFactor={5.5}>
           <div
             style={{
               background: SELECTED_COLOR,
@@ -484,10 +481,8 @@ const DraggableArea: React.FC<DraggableAreaProps> = ({
   const dragging = useRef(false);
   const { camera, gl, raycaster } = useThree();
 
-  const baseColor = area.type === 'office' ? AREA_OFFICE_COLOR : AREA_PICKUP_COLOR;
-  const frameColor = selected ? SELECTED_COLOR : baseColor;
-  const opacity = dimmed ? 0.18 : 0.32;
-  const frameOpacity = dimmed ? 0.35 : 1;
+  const palette = getStationAreaPalette(area.type);
+  const frameColor = selected ? SELECTED_COLOR : palette.color;
 
   const onDragEndRef = useRef(onDragEnd);
   onDragEndRef.current = onDragEnd;
@@ -543,60 +538,7 @@ const DraggableArea: React.FC<DraggableAreaProps> = ({
         if (!dragging.current) document.body.style.cursor = 'default';
       }}
     >
-      {/* 选中光圈 */}
-      {selected && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-          <ringGeometry args={[Math.max(area.width, area.depth) * 0.6, Math.max(area.width, area.depth) * 0.72, 32]} />
-          <meshStandardMaterial
-            color={SELECTED_COLOR}
-            transparent
-            opacity={0.5}
-            emissive={SELECTED_COLOR}
-            emissiveIntensity={0.4}
-          />
-        </mesh>
-      )}
-
-      {/* 区域底面（半透明色块） */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} receiveShadow>
-        <planeGeometry args={[area.width, area.depth]} />
-        <meshStandardMaterial
-          color={baseColor}
-          transparent
-          opacity={opacity}
-          emissive={baseColor}
-          emissiveIntensity={0.15}
-        />
-      </mesh>
-
-      {/* 区域边框（4 根立柱 + 顶框） */}
-      {[
-        [-area.width / 2, 0, -area.depth / 2],
-        [area.width / 2, 0, -area.depth / 2],
-        [-area.width / 2, 0, area.depth / 2],
-        [area.width / 2, 0, area.depth / 2],
-      ].map((p, i) => (
-        <mesh key={`ap-${i}`} position={[p[0], area.height / 2, p[2]]}>
-          <boxGeometry args={[0.06, area.height, 0.06]} />
-          <meshStandardMaterial
-            color={frameColor}
-            transparent
-            opacity={frameOpacity}
-          />
-        </mesh>
-      ))}
-      {/* 顶框 4 条边 */}
-      {[
-        { pos: [0, area.height, -area.depth / 2] as [number, number, number], size: [area.width, 0.05, 0.05] as [number, number, number] },
-        { pos: [0, area.height, area.depth / 2] as [number, number, number], size: [area.width, 0.05, 0.05] as [number, number, number] },
-        { pos: [-area.width / 2, area.height, 0] as [number, number, number], size: [0.05, 0.05, area.depth] as [number, number, number] },
-        { pos: [area.width / 2, area.height, 0] as [number, number, number], size: [0.05, 0.05, area.depth] as [number, number, number] },
-      ].map((b, i) => (
-        <mesh key={`ab-${i}`} position={b.pos}>
-          <boxGeometry args={b.size} />
-          <meshStandardMaterial color={frameColor} transparent opacity={frameOpacity} />
-        </mesh>
-      ))}
+      <StationAreaModel area={area} selected={selected} dimmed={dimmed} />
 
       {/* 区域标签 */}
       <Text
@@ -610,7 +552,7 @@ const DraggableArea: React.FC<DraggableAreaProps> = ({
       </Text>
 
       {selected && (
-        <Html position={[0, area.height + 0.75, 0]} center distanceFactor={10}>
+        <Html position={[0, area.height + 0.75, 0]} center distanceFactor={5.5}>
           <div
             style={{
               background: SELECTED_COLOR,
@@ -665,43 +607,6 @@ const DropZone: React.FC<{
 };
 
 // ============ 网格地面 ============
-const GridFloor: React.FC<{ width: number; depth: number }> = ({ width, depth }) => {
-  const lines = useMemo(() => {
-    const arr: Array<[number, number, number, number, number, number]> = [];
-    const halfW = width / 2;
-    const halfD = depth / 2;
-    for (let x = -Math.ceil(halfW); x <= Math.ceil(halfW); x++) {
-      arr.push([x, 0.005, -halfD, x, 0.005, halfD]);
-    }
-    for (let z = -Math.ceil(halfD); z <= Math.ceil(halfD); z++) {
-      arr.push([-halfW, 0.005, z, halfW, 0.005, z]);
-    }
-    return arr;
-  }, [width, depth]);
-
-  return (
-    <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
-        <planeGeometry args={[width, depth]} />
-        <meshStandardMaterial color={GROUND_COLOR} />
-      </mesh>
-      {lines.map((l, i) => (
-        <line key={`g-${i}`}>
-          <bufferGeometry attach="geometry">
-            <bufferAttribute
-              attach="attributes-position"
-              count={2}
-              array={new Float32Array(l)}
-              itemSize={3}
-            />
-          </bufferGeometry>
-          <lineBasicMaterial color={GRID_COLOR} transparent opacity={0.4} />
-        </line>
-      ))}
-    </group>
-  );
-};
-
 // ============ 场景 ============
 interface SelectedTarget {
   type: 'shelf' | 'door' | 'area';
@@ -734,21 +639,23 @@ const EditorScene: React.FC<{
   containerHeight,
 }) => {
   const { placed, bounds } = useMemo(() => computeShelfPositions(shelves), [shelves]);
-
-  const doors: LayoutDoor[] = useMemo(() => {
-    if (layoutConfig?.doors && layoutConfig.doors.length > 0) return layoutConfig.doors;
-    const doorX = (bounds.minX + bounds.maxX) / 2;
-    return [{ x: doorX, y: bounds.minZ, width: 1.2, label: '入口' }];
-  }, [layoutConfig, bounds]);
-
-  const areas: LayoutArea[] = useMemo(
-    () => layoutConfig?.areas ?? [],
-    [layoutConfig],
+  const normalizedLayout = useMemo(
+    () => normalizeStationLayout(layoutConfig, bounds),
+    [layoutConfig, bounds],
   );
 
-  // 地面尺寸：取仓库 bounds，没配置时用货架布局范围 + margin
-  const groundW = layoutConfig?.bounds?.width || bounds.maxX - bounds.minX + 4;
-  const groundD = layoutConfig?.bounds?.depth || bounds.maxZ - bounds.minZ + 4;
+  const doors: LayoutDoor[] = useMemo(() => {
+    return normalizedLayout.doors;
+  }, [normalizedLayout.doors]);
+
+  const areas: LayoutArea[] = useMemo(
+    () => normalizedLayout.areas,
+    [normalizedLayout.areas],
+  );
+
+  // 地面尺寸：统一走归一化配置，接口未返回/字段不全时使用稳定默认门店尺寸
+  const groundW = normalizedLayout.bounds.width;
+  const groundD = normalizedLayout.bounds.depth;
 
   // 相机距离自适应：根据容器宽高比 + 地面尺寸计算，让地面网格铺满视口宽度
   // 注意：地面网格以原点 (0,0) 为中心绘制，相机 target 也对准原点，
@@ -774,11 +681,9 @@ const EditorScene: React.FC<{
 
   return (
     <>
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[10, 15, 8]} intensity={0.8} castShadow />
-      <hemisphereLight args={['#ffffff', '#cbd5e1', 0.4]} />
+      <LightingRig theme="ops" width={groundW} depth={groundD} />
 
-      <GridFloor width={groundW} depth={groundD} />
+      <WarehouseShell width={groundW} depth={groundD} visualTheme="ops" />
 
       {/* 区域（办公区/揽收区，可拖拽） */}
       {areas.map((a) => {
@@ -844,34 +749,18 @@ const EditorScene: React.FC<{
         ref={orbitRef}
         target={cameraInit.target}
         enablePan={false}
-        minDistance={3}
-        maxDistance={60}
+        minDistance={0.6}
+        maxDistance={90}
         maxPolarAngle={Math.PI / 2.1}
         minPolarAngle={Math.PI / 6}
       />
       <CameraRig
         position={cameraInit.position}
         target={cameraInit.target}
-        resetKey={`${containerWidth}x${containerHeight}`}
+        overviewKey="editor"
       />
     </>
   );
-};
-
-const CameraRig: React.FC<{
-  position: [number, number, number];
-  target: [number, number, number];
-  resetKey: string;
-}> = ({ position, target, resetKey }) => {
-  const { camera } = useThree();
-  const lastResetKey = useRef('');
-  useEffect(() => {
-    if (lastResetKey.current === resetKey) return;
-    lastResetKey.current = resetKey;
-    camera.position.set(position[0], position[1], position[2]);
-    camera.lookAt(target[0], target[1], target[2]);
-  }, [resetKey, position, target, camera]);
-  return null;
 };
 
 // ============ 对外组件 ============
@@ -884,10 +773,11 @@ export interface ShelfMap3DEditorProps {
   onShelfDragEnd?: (shelfId: string, x: number, z: number) => void;
   onDoorDragEnd?: (doorIndex: number, x: number, y: number) => void;
   onAreaDragEnd?: (areaId: string, x: number, z: number) => void;
-  /** 模型库拖入 3D 场景时触发，modelType: 'office' | 'pickup' | 'door' */
+  /** 模型库拖入 3D 场景时触发，modelType: 'office' | 'pickup' | 'outboundRecord' | 'door' */
   onDropFromLibrary?: (modelType: string, x: number, z: number) => void;
-  height?: number;
+  height?: number | string;
   className?: string;
+  layoutLoading?: boolean;
 }
 
 const ShelfMap3DEditor: React.FC<ShelfMap3DEditorProps> = ({
@@ -902,6 +792,7 @@ const ShelfMap3DEditor: React.FC<ShelfMap3DEditorProps> = ({
   onDropFromLibrary,
   height = 480,
   className,
+  layoutLoading = false,
 }) => {
   const orbitRef = useRef<any>(null);
   const [internalSelected, setInternalSelected] = useState<SelectedTarget | null>(null);
@@ -933,6 +824,8 @@ const ShelfMap3DEditor: React.FC<ShelfMap3DEditorProps> = ({
     }
   };
 
+  const waitingForLayout = layoutLoading;
+
   if (shelves.length === 0) {
     return (
       <div
@@ -950,29 +843,37 @@ const ShelfMap3DEditor: React.FC<ShelfMap3DEditorProps> = ({
       className={`relative w-full overflow-hidden rounded-xl bg-white ${className || ''}`}
       style={{ height }}
     >
-      <Canvas
-        shadows
-        dpr={[1, 2]}
-        camera={{ fov: 45, near: 0.1, far: 100 }}
-        style={{ background: 'linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)' }}
-        onPointerMissed={() => handleSelect(null)}
-      >
-        <Suspense fallback={null}>
-          <EditorScene
-            shelves={shelves}
-            layoutConfig={layoutConfig}
-            selected={selected}
-            onSelect={handleSelect}
-            onShelfDragEnd={onShelfDragEnd || (() => {})}
-            onDoorDragEnd={onDoorDragEnd || (() => {})}
-            onAreaDragEnd={onAreaDragEnd || (() => {})}
-            onDropFromLibrary={onDropFromLibrary || (() => {})}
-            orbitRef={orbitRef}
-            containerWidth={containerSize.width}
-            containerHeight={containerSize.height}
-          />
-        </Suspense>
-      </Canvas>
+      {!waitingForLayout ? (
+        <Canvas
+          shadows
+          dpr={[1, 2]}
+          camera={{ fov: 45, near: 0.1, far: 100 }}
+          style={{ background: 'linear-gradient(180deg, #eef4fb 0%, #d9e4f2 100%)' }}
+          onPointerMissed={() => handleSelect(null)}
+        >
+          <Suspense fallback={null}>
+            <EditorScene
+              shelves={shelves}
+              layoutConfig={layoutConfig}
+              selected={selected}
+              onSelect={handleSelect}
+              onShelfDragEnd={onShelfDragEnd || (() => {})}
+              onDoorDragEnd={onDoorDragEnd || (() => {})}
+              onAreaDragEnd={onAreaDragEnd || (() => {})}
+              onDropFromLibrary={onDropFromLibrary || (() => {})}
+              orbitRef={orbitRef}
+              containerWidth={containerSize.width}
+              containerHeight={containerSize.height}
+            />
+          </Suspense>
+        </Canvas>
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-50">
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-500 shadow-sm">
+            正在加载门店布局...
+          </div>
+        </div>
+      )}
       <div className="pointer-events-none absolute bottom-2 left-3 rounded bg-black/30 px-2 py-0.5 text-xs text-white">
         点击货架/门/区域选中 · 按住拖拽移动 · 从模型库拖入新模型 · 松手自动对齐 0.5m 网格
       </div>

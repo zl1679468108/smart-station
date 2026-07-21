@@ -36,12 +36,15 @@ export class AuthService {
     const isEmail = account.includes('@');
     const column = isEmail ? 'email' : 'phone';
 
-    const { data: user, error } = await this.supabase
-      .getClient()
-      .from('ss_users')
-      .select('id, phone, email, username, password_hash, avatar_url, status, failed_login_count, locked_until, current_station_id')
-      .eq(column, account)
-      .maybeSingle();
+    const { data: user, error } = await this.supabase.withRetry(
+      (client) =>
+        client
+          .from('ss_users')
+          .select('id, phone, email, username, password_hash, avatar_url, status, failed_login_count, locked_until, current_station_id')
+          .eq(column, account)
+          .maybeSingle(),
+      { maxRetries: 1, timeoutMs: 10000 },
+    );
 
     if (error) {
       throw new UnauthorizedException('登录失败，请稍后重试');
@@ -83,11 +86,14 @@ export class AuthService {
       const firstActive = stations.find((s) => s.isActive !== false);
       currentStationId = firstActive?.id ?? stations[0]?.id ?? null;
       if (currentStationId) {
-        await this.supabase
-          .getClient()
-          .from('ss_users')
-          .update({ current_station_id: currentStationId })
-          .eq('id', user.id);
+        await this.supabase.withRetry(
+          (client) =>
+            client
+              .from('ss_users')
+              .update({ current_station_id: currentStationId })
+              .eq('id', user.id),
+          { maxRetries: 1, timeoutMs: 10000 },
+        );
       }
     }
 
@@ -126,12 +132,15 @@ export class AuthService {
 
   /** 获取当前用户资料 + 关联驿站 */
   async getProfile(user: UserPayload) {
-    const { data, error } = await this.supabase
-      .getClient()
-      .from('ss_users')
-      .select('id, phone, email, username, avatar_url, current_station_id')
-      .eq('id', user.id)
-      .maybeSingle();
+    const { data, error } = await this.supabase.withRetry(
+      (client) =>
+        client
+          .from('ss_users')
+          .select('id, phone, email, username, avatar_url, current_station_id')
+          .eq('id', user.id)
+          .maybeSingle(),
+      { maxRetries: 1, timeoutMs: 10000 },
+    );
     if (error || !data) {
       throw new UnauthorizedException('用户不存在');
     }
@@ -160,13 +169,16 @@ export class AuthService {
     if (Object.keys(patch).length === 0) {
       return this.getProfile(user);
     }
-    const { data, error } = await this.supabase
-      .getClient()
-      .from('ss_users')
-      .update(patch)
-      .eq('id', user.id)
-      .select('id, phone, email, username, avatar_url, current_station_id')
-      .maybeSingle();
+    const { data, error } = await this.supabase.withRetry(
+      (client) =>
+        client
+          .from('ss_users')
+          .update(patch)
+          .eq('id', user.id)
+          .select('id, phone, email, username, avatar_url, current_station_id')
+          .maybeSingle(),
+      { maxRetries: 1, timeoutMs: 10000 },
+    );
     if (error || !data) {
       throw new BadRequestException('更新失败');
     }
@@ -191,12 +203,15 @@ export class AuthService {
     if (dto.oldPassword === dto.newPassword) {
       throw new BadRequestException('新密码不能与旧密码相同');
     }
-    const { data, error } = await this.supabase
-      .getClient()
-      .from('ss_users')
-      .select('password_hash')
-      .eq('id', user.id)
-      .maybeSingle();
+    const { data, error } = await this.supabase.withRetry(
+      (client) =>
+        client
+          .from('ss_users')
+          .select('password_hash')
+          .eq('id', user.id)
+          .maybeSingle(),
+      { maxRetries: 1, timeoutMs: 10000 },
+    );
     if (error || !data) {
       throw new UnauthorizedException('用户不存在');
     }
@@ -205,11 +220,14 @@ export class AuthService {
       throw new BadRequestException('旧密码错误');
     }
     const newHash = await bcrypt.hash(dto.newPassword, 10);
-    const { error: updateErr } = await this.supabase
-      .getClient()
-      .from('ss_users')
-      .update({ password_hash: newHash })
-      .eq('id', user.id);
+    const { error: updateErr } = await this.supabase.withRetry(
+      (client) =>
+        client
+          .from('ss_users')
+          .update({ password_hash: newHash })
+          .eq('id', user.id),
+      { maxRetries: 1, timeoutMs: 10000 },
+    );
     if (updateErr) {
       throw new BadRequestException('密码修改失败');
     }
@@ -221,35 +239,44 @@ export class AuthService {
   /** 切换当前驿站 */
   async switchStation(user: UserPayload, stationId: string) {
     // 校验该用户在该驿站有 active 员工关系
-    const { data: staff, error } = await this.supabase
-      .getClient()
-      .from('ss_staff')
-      .select('id, role')
-      .eq('user_id', user.id)
-      .eq('station_id', stationId)
-      .eq('status', 'active')
-      .maybeSingle();
+    const { data: staff, error } = await this.supabase.withRetry(
+      (client) =>
+        client
+          .from('ss_staff')
+          .select('id, role')
+          .eq('user_id', user.id)
+          .eq('station_id', stationId)
+          .eq('status', 'active')
+          .maybeSingle(),
+      { maxRetries: 1, timeoutMs: 10000 },
+    );
     if (error || !staff) {
       throw new BadRequestException('无该驿站的操作权限');
     }
-    await this.supabase
-      .getClient()
-      .from('ss_users')
-      .update({ current_station_id: stationId })
-      .eq('id', user.id);
+    await this.supabase.withRetry(
+      (client) =>
+        client
+          .from('ss_users')
+          .update({ current_station_id: stationId })
+          .eq('id', user.id),
+      { maxRetries: 1, timeoutMs: 10000 },
+    );
     return { currentStationId: stationId, role: staff.role };
   }
 
   /** 查询用户关联的所有驿站（带角色） */
   private async listStationsOfUser(userId: string): Promise<StationBrief[]> {
-    const { data, error } = await this.supabase
-      .getClient()
-      .from('ss_staff')
-      .select(
-        'station_id, role, status, station:ss_stations!ss_staff_station_id_fkey(id, name, status)',
-      )
-      .eq('user_id', userId)
-      .eq('status', 'active');
+    const { data, error } = await this.supabase.withRetry(
+      (client) =>
+        client
+          .from('ss_staff')
+          .select(
+            'station_id, role, status, station:ss_stations!ss_staff_station_id_fkey(id, name, status)',
+          )
+          .eq('user_id', userId)
+          .eq('status', 'active'),
+      { maxRetries: 1, timeoutMs: 10000 },
+    );
     if (error || !data) {
       return [];
     }

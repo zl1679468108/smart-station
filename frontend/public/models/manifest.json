@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "description": "智能驿站 3D 资产清单。将 GLB 放到同目录后刷新页面即可自动替换程序化模型。",
+  "assets": {
+    "shelf.small": {
+      "url": "/models/shelf-small.glb",
+      "label": "小型货架",
+      "targetSize": [2.0, 1.8, 1.0]
+    },
+    "shelf.medium": {
+      "url": "/models/shelf-medium.glb",
+      "label": "中型货架",
+      "targetSize": [2.4, 2.2, 1.2]
+    },
+    "shelf.large": {
+      "url": "/models/shelf-large.glb",
+      "label": "大型货架",
+      "targetSize": [2.8, 2.4, 1.4]
+    },
+    "door.main": {
+      "url": "/models/door-main.glb",
+      "label": "正门",
+      "targetSize": [2.0, 2.2, 0.4]
+    },
+    "area.counter": {
+      "url": "/models/counter.glb",
+      "label": "服务台",
+      "targetSize": [3.2, 1.4, 1.4]
+    },
+    "area.outboundRecord": {
+      "url": "/models/locker.glb",
+      "label": "出库记录区",
+      "targetSize": [3.0, 2.2, 0.8]
+    },
+    "area.office": {
+      "url": "/models/office.glb",
+      "label": "办公区",
+      "targetSize": [2.4, 1.8, 1.8]
+    },
+    "parcel.box": {
+      "url": "/models/parcel-box.glb",
+      "label": "纸箱",
+      "targetSize": [0.46, 0.34, 0.38]
+    }
+  }
+}

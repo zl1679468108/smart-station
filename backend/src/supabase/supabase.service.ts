@@ -87,7 +87,7 @@ export class SupabaseService implements OnModuleInit {
    *   });
    */
   async withRetry<T>(
-    fn: (client: SupabaseClient) => Promise<T>,
+    fn: (client: SupabaseClient) => PromiseLike<T>,
     options?: { maxRetries?: number; timeoutMs?: number },
   ): Promise<T> {
     const maxRetries = options?.maxRetries ?? 3;
@@ -221,12 +221,12 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(new TimeoutError(`请求超过 ${ms}ms 未返回`));
     }, ms);
-    promise
+    Promise.resolve(promise)
       .then((v) => {
         clearTimeout(timer);
         resolve(v);

@@ -8,24 +8,24 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ThrottlerGuard, SkipThrottle } from '@nestjs/throttler';
+import { ThrottlerGuard, SkipThrottle, Throttle } from '@nestjs/throttler';
 import { KioskService } from './kiosk.service';
-import { SendCodeDto, QueryByPhoneDto, QueryByPhoneDirectDto, QueryByTrackingDto, QueryByCodeDto } from './dto/kiosk.dto';
+import {
+  SendCodeDto,
+  QueryByPhoneDto,
+  QueryByPhoneDirectDto,
+  QueryByTrackingDto,
+  QueryByCodeDto,
+} from './dto/kiosk.dto';
 import { Public } from '../common/decorators/public.decorator';
 import type { Request } from 'express';
 
 /**
  * Kiosk 取件自助查询控制器
  * - 全部 @Public（无登录）
- * - 全局 ThrottlerGuard 限流：同 IP 每分钟 ≤10 次（默认配置）
- *
- * 路由：
- * - GET  /api/kiosk/station/layout        货架平面图数据（按 size_type 自动分 A/B/C 区）
- * - POST /api/kiosk/send-code              发送验证码
- * - POST /api/kiosk/query-by-phone         手机号尾号 + 验证码查询
- * - POST /api/kiosk/query-by-phone-direct  手机号直接查询（1.1.0 新增，无需验证码）
- * - POST /api/kiosk/query-by-tracking      运单号查询
- * - POST /api/kiosk/query-by-code          取件码查询（1.1.0 新增）
+ * - ThrottlerGuard 限流：默认同 IP 每分钟 ≤10 次
+ * - 手机号直查更严：同 IP 每分钟 ≤5 次
+ * - 可通过 ?stationId= 或 VITE_KIOSK_STATION_ID 绑定驿站
  */
 @Controller('kiosk')
 @Public()
@@ -48,31 +48,43 @@ export class KioskController {
 
   @Post('send-code')
   @HttpCode(200)
-  async sendCode(@Body() dto: SendCodeDto, @Req() req: Request) {
-    return this.kioskService.sendCode(dto, this.getClientIp(req));
+  async sendCode(
+    @Body() dto: SendCodeDto,
+    @Req() req: Request,
+    @Query('stationId') stationId?: string,
+  ) {
+    return this.kioskService.sendCode(dto, this.getClientIp(req), stationId);
   }
 
   @Post('query-by-phone')
   @HttpCode(200)
-  async queryByPhone(@Body() dto: QueryByPhoneDto) {
-    return this.kioskService.queryByPhone(dto);
+  async queryByPhone(@Body() dto: QueryByPhoneDto, @Query('stationId') stationId?: string) {
+    return this.kioskService.queryByPhone(dto, stationId);
   }
 
+  /** 手机号直查：更严格的 IP 限流，降低撞库窥探风险 */
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('query-by-phone-direct')
   @HttpCode(200)
-  async queryByPhoneDirect(@Body() dto: QueryByPhoneDirectDto) {
-    return this.kioskService.queryByPhoneDirect(dto);
+  async queryByPhoneDirect(
+    @Body() dto: QueryByPhoneDirectDto,
+    @Query('stationId') stationId?: string,
+  ) {
+    return this.kioskService.queryByPhoneDirect(dto, stationId);
   }
 
   @Post('query-by-tracking')
   @HttpCode(200)
-  async queryByTracking(@Body() dto: QueryByTrackingDto) {
-    return this.kioskService.queryByTracking(dto);
+  async queryByTracking(
+    @Body() dto: QueryByTrackingDto,
+    @Query('stationId') stationId?: string,
+  ) {
+    return this.kioskService.queryByTracking(dto, stationId);
   }
 
   @Post('query-by-code')
   @HttpCode(200)
-  async queryByCode(@Body() dto: QueryByCodeDto) {
-    return this.kioskService.queryByCode(dto);
+  async queryByCode(@Body() dto: QueryByCodeDto, @Query('stationId') stationId?: string) {
+    return this.kioskService.queryByCode(dto, stationId);
   }
 }

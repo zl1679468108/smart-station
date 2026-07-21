@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import * as adminService from '@/services/admin';
+import { useStaff, useInvalidateStaff } from '@/hooks/useSystemAdmin';
 import type { Staff } from '@/types/admin';
 
 const roleLabel: Record<string, string> = {
@@ -10,8 +11,9 @@ const roleLabel: Record<string, string> = {
 
 // 员工管理 Tab：列表 + 新增 + 角色编辑 + 启用/禁用
 const StaffTab: React.FC = () => {
-  const [list, setList] = useState<Staff[]>([]);
-  const [loading, setLoading] = useState(true);
+  // 员工列表走 React Query 缓存；写操作后 invalidate 刷新
+  const { data: list = [], isLoading: loading, error: queryError } = useStaff();
+  const invalidateStaff = useInvalidateStaff();
   const [error, setError] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [newStaff, setNewStaff] = useState({
@@ -30,18 +32,11 @@ const StaffTab: React.FC = () => {
   const [resetPassword, setResetPassword] = useState('');
   const [resetting, setResetting] = useState(false);
 
-  const load = () => {
-    setLoading(true);
-    adminService
-      .listStaff()
-      .then(setList)
-      .catch((err) => setError(err instanceof Error ? err.message : '加载失败'))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
+  const loadError = queryError
+    ? queryError instanceof Error
+      ? queryError.message
+      : '加载失败'
+    : '';
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,7 +58,7 @@ const StaffTab: React.FC = () => {
       setCreatedPassword(created.initialPassword || null);
       setShowAdd(false);
       setNewStaff({ phone: '', username: '', password: '', role: 'clerk' });
-      load();
+      invalidateStaff();
     } catch (err) {
       setError(err instanceof Error ? err.message : '添加失败');
     } finally {
@@ -75,7 +70,7 @@ const StaffTab: React.FC = () => {
     const next = staff.status === 'active' ? 'disabled' : 'active';
     try {
       await adminService.setStaffStatus(staff.id, next);
-      load();
+      invalidateStaff();
     } catch (err) {
       alert(err instanceof Error ? err.message : '操作失败');
     }
@@ -91,7 +86,7 @@ const StaffTab: React.FC = () => {
     try {
       await adminService.updateStaff(staff.id, { role: editRole, username: editUsername });
       setEditingId(null);
-      load();
+      invalidateStaff();
     } catch (err) {
       alert(err instanceof Error ? err.message : '保存失败');
     }
@@ -136,7 +131,7 @@ const StaffTab: React.FC = () => {
         </button>
       </div>
 
-      {error && <div className="mb-3 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+      {(error || loadError) && <div className="mb-3 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{error || loadError}</div>}
 
       {/* 新增表单 */}
       {showAdd && (

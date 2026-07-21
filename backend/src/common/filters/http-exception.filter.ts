@@ -7,6 +7,10 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
+import {
+  SupabaseNetworkError,
+  SupabaseUnavailableError,
+} from '../../supabase/supabase.service';
 
 /**
  * 全局 HTTP 异常过滤器
@@ -23,7 +27,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = '服务器内部错误';
 
-    if (exception instanceof HttpException) {
+    if (
+      exception instanceof SupabaseNetworkError ||
+      exception instanceof SupabaseUnavailableError
+    ) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      message = exception.message;
+    } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       const res = exception.getResponse();
       // 支持自定义 message 字符串，也支持 class-validator 返回的 { message: string[] } 结构

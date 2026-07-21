@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as inventoryService from '@/services/inventory';
+import { useAuth } from '@/utils/auth';
 
 /**
  * 字典数据统一封装：快递公司 + 货架
@@ -19,10 +20,16 @@ const DIC_GC_TIME = 1000 * 60 * 30; // 30 分钟无观察者后回收
 // ============ 快递公司 ============
 export const COURIERS_KEY = ['couriers'] as const;
 
+export function couriersKey(stationId?: string | null) {
+  return [...COURIERS_KEY, stationId ?? 'none'] as const;
+}
+
 export function useCouriers() {
+  const { currentStationId } = useAuth();
   return useQuery({
-    queryKey: COURIERS_KEY,
+    queryKey: couriersKey(currentStationId),
     queryFn: () => inventoryService.fetchCouriers(),
+    enabled: Boolean(currentStationId),
     staleTime: DIC_STALE_TIME,
     gcTime: DIC_GC_TIME,
   });
@@ -38,10 +45,16 @@ export function useInvalidateCouriers() {
 // 统一只读接口（inventory 端），admin/clerk 均可读，写操作走 adminService
 export const SHELVES_KEY = ['shelves'] as const;
 
+export function shelvesKey(stationId?: string | null) {
+  return [...SHELVES_KEY, stationId ?? 'none'] as const;
+}
+
 export function useShelves() {
+  const { currentStationId } = useAuth();
   return useQuery({
-    queryKey: SHELVES_KEY,
+    queryKey: shelvesKey(currentStationId),
     queryFn: () => inventoryService.fetchShelves(),
+    enabled: Boolean(currentStationId),
     staleTime: DIC_STALE_TIME,
     gcTime: DIC_GC_TIME,
   });

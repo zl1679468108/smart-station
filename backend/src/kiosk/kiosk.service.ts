@@ -6,31 +6,35 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
-import { SendCodeDto, QueryByPhoneDto, QueryByPhoneDirectDto, QueryByTrackingDto, QueryByCodeDto } from './dto/kiosk.dto';
+import {
+  SendCodeDto,
+  QueryByPhoneDto,
+  QueryByPhoneDirectDto,
+  QueryByTrackingDto,
+  QueryByCodeDto,
+} from './dto/kiosk.dto';
 
 /**
  * Kiosk 取件自助查询服务
  * - 公开接口（@Public）
- * - 限流：同 IP 每分钟 ≤10 次（ThrottlerGuard）
+ * - 限流：同 IP 每分钟 ≤10 次（ThrottlerGuard）；直查接口更严
  * - 验证码：同手机号每小时 ≤5 次
  * - 脱敏：手机号仅尾号 4 位，姓名首字 + **
- * - 取件码查询：同码连续错误 5 次锁 10 分钟（进程内 Map，单实例）
+ * - 驿站隔离：查询强制 station_id（显式 stationId 或默认第一个 active 驿站）
+ * - 取件码错误锁定：ss_pickup_code_attempts（与出库侧同表，多实例一致）
  */
 
 const CODE_TTL_MINUTES = 5;
 const MAX_SEND_PER_HOUR = 5;
 const MAX_CODE_QUERY_ATTEMPTS = 5;
-const CODE_QUERY_LOCK_MS = 10 * 60 * 1000;
+const CODE_QUERY_LOCK_MINUTES = 10;
 
 @Injectable()
 export class KioskService {
-  // 取件码查询错误计数（进程内，单实例；key=pickup_code）
-  private codeQueryAttempts = new Map<string, { count: number; lockedUntil: number | null }>();
-
   constructor(@Inject(SupabaseService) private readonly supabase: SupabaseService) {}
 
   /** 发送验证码（v1.0 仅写入数据库 + log，不真实发短信） */
-  async sendCode(dto: SendCodeDto, ip?: string) {
+  async sendCode(dto: SendCodeDto, ip?: string, _stationId?: string) {
     // 限流：同手机号 1 小时内 ≤5 次
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { count, error: countErr } = await this.supabase
@@ -44,7 +48,6 @@ export class KioskService {
       throw new ForbiddenException('该手机号验证码请求过于频繁，请稍后再试');
     }
 
-    // 生成 6 位验证码
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + CODE_TTL_MINUTES * 60 * 1000).toISOString();
 
@@ -56,7 +59,6 @@ export class KioskService {
     });
     if (error) throw new Error(`验证码发送失败: ${error.message}`);
 
-    // v1.0 不接入真实短信，控制台输出便于联调
     // 生产环境应通过 NotifyService 调用第三方短信网关
     // eslint-disable-next-line no-console
     console.log(`[Kiosk] 验证码 -> ${dto.phone}: ${code}（${CODE_TTL_MINUTES} 分钟内有效）`);
@@ -65,10 +67,7 @@ export class KioskService {
   }
 
   /** 手机号尾号 + 验证码查询 */
-  async queryByPhone(dto: QueryByPhoneDto) {
-    // 1. 校验验证码：查最近有效记录，需匹配尾号 4 位的某个手机号
-    // 取件自助查询是公开场景，验证码与手机号绑定，校验时先按尾号模糊查可能的手机号，
-    // 再核验该手机号是否有匹配的未使用未过期验证码
+  async queryByPhone(dto: QueryByPhoneDto, stationId?: string) {
     const { data: codeRows, error: codeErr } = await this.supabase
       .getClient()
       .from('ss_kiosk_codes')
@@ -85,83 +84,64 @@ export class KioskService {
       throw new BadRequestException('验证码错误或已过期');
     }
 
-    // 2. 标记验证码已使用
     await this.supabase
       .getClient()
       .from('ss_kiosk_codes')
       .update({ used_at: new Date().toISOString() })
       .eq('id', matched.id);
 
-    // 3. 查该手机号在库包裹（所有驿站）
     const phone = (matched as any).phone as string;
-    return this.queryInStockParcels({ recipientPhone: phone });
+    return this.queryInStockParcels({ recipientPhone: phone, stationId });
   }
 
   /** 运单号查询（无需验证码） */
-  async queryByTracking(dto: QueryByTrackingDto) {
-    return this.queryInStockParcels({ trackingNumber: dto.trackingNumber.trim().toUpperCase() });
+  async queryByTracking(dto: QueryByTrackingDto, stationId?: string) {
+    return this.queryInStockParcels({
+      trackingNumber: dto.trackingNumber.trim().toUpperCase(),
+      stationId,
+    });
   }
 
-  /** 手机号直接查询（1.1.0 新增，无需验证码，用于 /query 门户，脱敏返回） */
-  async queryByPhoneDirect(dto: QueryByPhoneDirectDto) {
-    return this.queryInStockParcels({ recipientPhone: dto.phone });
+  /** 手机号直接查询（脱敏返回） */
+  async queryByPhoneDirect(dto: QueryByPhoneDirectDto, stationId?: string) {
+    return this.queryInStockParcels({ recipientPhone: dto.phone, stationId });
   }
 
-  /** 取件码查询（无需验证码，错误 5 次锁定 10 分钟） */
-  async queryByCode(dto: QueryByCodeDto) {
-    // 检查取件码是否被锁定
-    this.checkCodeQueryLock(dto.code);
+  /** 取件码查询（错误 5 次锁定 10 分钟，落库） */
+  async queryByCode(dto: QueryByCodeDto, stationId?: string) {
+    const resolvedStationId = await this.resolveStationId(stationId);
+    await this.checkCodeQueryLock(resolvedStationId, dto.code);
 
-    const result = await this.queryInStockParcels({ pickupCode: dto.code });
+    const result = await this.queryInStockParcels({
+      pickupCode: dto.code,
+      stationId: resolvedStationId,
+    });
 
     if (result.total === 0) {
-      // 查询失败，记录错误
-      this.recordCodeQueryFailure(dto.code);
+      await this.recordCodeQueryFailure(resolvedStationId, dto.code);
       throw new NotFoundException('未找到该取件码对应的在库包裹');
     }
 
-    // 查询成功，清零错误计数
-    this.clearCodeQueryFailures(dto.code);
+    await this.clearCodeQueryFailures(resolvedStationId, dto.code);
     return result;
   }
 
-  // ============ 货架平面图 ============
-
   /**
    * 获取驿站货架平面图数据（公开接口）
-   * - 用于 Kiosk 端取件引导：按 size_type 自动分 A/B/C 区
-   * - 仅返回 active 货架的基础信息，不含库存数等敏感数据
    * - stationId 未传时取第一个 active 驿站（兼容单租户场景）
    */
   async getStationLayout(stationId?: string) {
     const client = this.supabase.getClient();
-
-    // 公开字段：仅返回 /query 门户展示所需的驿站基础信息（不含 overdue 规则、sms 开关等内部配置）
     const STATION_PUBLIC_FIELDS = 'id, name, address, contact_phone, business_hours, layout_config';
 
-    let targetStationId = stationId;
-    let stationRow: Record<string, unknown> | null = null;
-    if (!targetStationId) {
-      const { data: firstStation, error: stationErr } = await client
-        .from('ss_stations')
-        .select(STATION_PUBLIC_FIELDS)
-        .eq('status', 'active')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (stationErr) throw new Error(`查询驿站失败: ${stationErr.message}`);
-      if (!firstStation) throw new NotFoundException('未找到可用驿站');
-      targetStationId = firstStation.id;
-      stationRow = firstStation as Record<string, unknown>;
-    } else {
-      const { data: st, error: stErr } = await client
-        .from('ss_stations')
-        .select(STATION_PUBLIC_FIELDS)
-        .eq('id', targetStationId)
-        .maybeSingle();
-      if (stErr) throw new Error(`查询驿站户型失败: ${stErr.message}`);
-      stationRow = (st as Record<string, unknown>) ?? null;
-    }
+    const targetStationId = await this.resolveStationId(stationId);
+    const { data: st, error: stErr } = await client
+      .from('ss_stations')
+      .select(STATION_PUBLIC_FIELDS)
+      .eq('id', targetStationId)
+      .maybeSingle();
+    if (stErr) throw new Error(`查询驿站户型失败: ${stErr.message}`);
+    const stationRow = (st as Record<string, unknown>) ?? null;
 
     const stationLayoutConfig =
       (stationRow?.layout_config as Record<string, unknown> | null) ?? null;
@@ -174,7 +154,6 @@ export class KioskService {
       .order('number', { ascending: true });
     if (error) throw new Error(`查询货架失败: ${error.message}`);
 
-    // 公开返回的 layoutConfig 仅含 bounds + doors + areas，过滤 obstacles 等内部细节
     const rawConfig = (stationLayoutConfig as Record<string, unknown> | null) || {};
     const publicLayoutConfig: Record<string, unknown> = {};
     if (rawConfig.bounds) publicLayoutConfig.bounds = rawConfig.bounds;
@@ -193,7 +172,6 @@ export class KioskService {
         zone: s.zone ?? null,
       })),
       station: {
-        // 驿站公开基础信息（供 /query 门户顶部展示）
         name: (stationRow?.name as string) ?? null,
         address: (stationRow?.address as string) ?? null,
         contactPhone: (stationRow?.contact_phone as string) ?? null,
@@ -203,43 +181,112 @@ export class KioskService {
     };
   }
 
-  // ============ 取件码查询错误计数（进程内） ============
+  // ============ 取件码查询错误计数（持久化） ============
 
-  private checkCodeQueryLock(code: string) {
-    const rec = this.codeQueryAttempts.get(code);
-    if (rec?.lockedUntil && Date.now() < rec.lockedUntil) {
-      const remainMin = Math.ceil((rec.lockedUntil - Date.now()) / 60000);
-      throw new ForbiddenException(`该取件码查询错误次数过多，请 ${remainMin} 分钟后重试`);
+  private async checkCodeQueryLock(stationId: string, code: string) {
+    const { data } = await this.supabase
+      .getClient()
+      .from('ss_pickup_code_attempts')
+      .select('attempt_count, locked_until')
+      .eq('station_id', stationId)
+      .eq('pickup_code', code)
+      .maybeSingle();
+    if (data?.locked_until) {
+      const until = new Date(data.locked_until).getTime();
+      if (Date.now() < until) {
+        const remainMin = Math.ceil((until - Date.now()) / 60000);
+        throw new ForbiddenException(`该取件码查询错误次数过多，请 ${remainMin} 分钟后重试`);
+      }
     }
   }
 
-  private recordCodeQueryFailure(code: string) {
-    const rec = this.codeQueryAttempts.get(code) || { count: 0, lockedUntil: null };
-    rec.count += 1;
-    if (rec.count >= MAX_CODE_QUERY_ATTEMPTS) {
-      rec.lockedUntil = Date.now() + CODE_QUERY_LOCK_MS;
+  private async recordCodeQueryFailure(stationId: string, code: string) {
+    const { data } = await this.supabase
+      .getClient()
+      .from('ss_pickup_code_attempts')
+      .select('id, attempt_count')
+      .eq('station_id', stationId)
+      .eq('pickup_code', code)
+      .maybeSingle();
+
+    const next = (data?.attempt_count || 0) + 1;
+    const locked = next >= MAX_CODE_QUERY_ATTEMPTS;
+    const patch: {
+      attempt_count: number;
+      last_attempt_at: string;
+      locked_until?: string | null;
+    } = {
+      attempt_count: next,
+      last_attempt_at: new Date().toISOString(),
+    };
+    if (locked) {
+      patch.locked_until = new Date(
+        Date.now() + CODE_QUERY_LOCK_MINUTES * 60 * 1000,
+      ).toISOString();
     }
-    this.codeQueryAttempts.set(code, rec);
+
+    if (data?.id) {
+      await this.supabase
+        .getClient()
+        .from('ss_pickup_code_attempts')
+        .update(patch)
+        .eq('id', data.id);
+    } else {
+      await this.supabase.getClient().from('ss_pickup_code_attempts').insert({
+        station_id: stationId,
+        pickup_code: code,
+        ...patch,
+      });
+    }
   }
 
-  private clearCodeQueryFailures(code: string) {
-    this.codeQueryAttempts.delete(code);
+  private async clearCodeQueryFailures(stationId: string, code: string) {
+    await this.supabase
+      .getClient()
+      .from('ss_pickup_code_attempts')
+      .update({
+        attempt_count: 0,
+        locked_until: null,
+        last_attempt_at: new Date().toISOString(),
+      })
+      .eq('station_id', stationId)
+      .eq('pickup_code', code);
   }
 
   // ============ 内部 ============
+
+  /** 解析驿站：显式 ID 优先，否则取第一个 active 驿站 */
+  private async resolveStationId(stationId?: string): Promise<string> {
+    if (stationId) return stationId;
+    const { data, error } = await this.supabase
+      .getClient()
+      .from('ss_stations')
+      .select('id')
+      .eq('status', 'active')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(`查询驿站失败: ${error.message}`);
+    if (!data?.id) throw new NotFoundException('未找到可用驿站');
+    return data.id as string;
+  }
 
   private async queryInStockParcels(opts: {
     recipientPhone?: string;
     trackingNumber?: string;
     pickupCode?: string;
+    stationId?: string;
   }) {
+    const stationId = await this.resolveStationId(opts.stationId);
+
     let query = this.supabase
       .getClient()
       .from('ss_parcels')
       .select(
         'id, tracking_number, recipient_name, recipient_phone, pickup_code, shelf_layer, shelf_position, inbound_at, station:ss_stations!ss_parcels_station_id_fkey(name), shelf:ss_shelves!ss_parcels_shelf_id_fkey(number), courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(name, code)',
       )
-      .eq('status', 'in_stock');
+      .eq('status', 'in_stock')
+      .eq('station_id', stationId);
 
     if (opts.recipientPhone) {
       query = query.eq('recipient_phone', opts.recipientPhone);
@@ -262,9 +309,7 @@ export class KioskService {
         return {
           id: r.id,
           trackingNumber: r.tracking_number,
-          // 脱敏：姓名首字 + **
           recipientName: this.maskName(r.recipient_name),
-          // 脱敏：手机号尾号 4 位
           recipientPhoneTail: this.maskPhone(r.recipient_phone),
           pickupCode: r.pickup_code,
           inboundAt: r.inbound_at,
@@ -276,14 +321,12 @@ export class KioskService {
     };
   }
 
-  /** 脱敏：姓名首字 + ** */
   private maskName(name: string): string {
     if (!name) return '';
     if (name.length <= 1) return name;
     return name.charAt(0) + '*'.repeat(Math.min(name.length - 1, 2));
   }
 
-  /** 脱敏：手机号仅尾号 4 位 */
   private maskPhone(phone: string): string {
     if (!phone || phone.length < 4) return phone || '';
     return `****${phone.slice(-4)}`;

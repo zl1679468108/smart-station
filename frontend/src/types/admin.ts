@@ -31,8 +31,14 @@ export interface LayoutBounds {
   depth: number;
 }
 
-/** 仓库户型 - 区域类型 */
-export type LayoutAreaType = 'office' | 'pickup';
+/** 驿站门店布局 - 可配置区域类型 */
+export type LayoutAreaType =
+  | 'office'
+  | 'pickup'
+  | 'counter'
+  | 'outboundRecord'
+  | 'exception'
+  | 'oversize';
 
 /** 仓库户型 - 区域（办公区/揽收区等） */
 export interface LayoutArea {
@@ -48,7 +54,7 @@ export interface LayoutArea {
   depth: number;
   /** 高度（米） */
   height: number;
-  /** 区域类型：office 办公区 / pickup 揽收区 */
+  /** 区域类型：office 办公区 / pickup 待取件区 / outboundRecord 出库记录区 */
   type: LayoutAreaType;
   /** 显示标签 */
   label: string;

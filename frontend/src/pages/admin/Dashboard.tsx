@@ -1,35 +1,105 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import * as statsService from '@/services/stats';
+import React, { useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { DashboardData, DashboardHourly } from '@/types/stats';
+import type { Shelf } from '@/types/admin';
+import { useShelves } from '@/hooks/useDictionary';
+import { useDashboard } from '@/hooks/useDashboardData';
+import { useLayoutConfig } from '@/hooks/useSystemAdmin';
+import { useAuth } from '@/utils/auth';
+
+const Warehouse3D = React.lazy(() => import('@/components/warehouse3d'));
+const WarehouseScreen = React.lazy(() =>
+  import('@/components/warehouse3d').then((m) => ({ default: m.WarehouseScreen })),
+);
+const StationLayoutTab = React.lazy(() => import('./system/tabs/StationLayoutTab'));
+
+const WarehouseFallback: React.FC<{ height?: string | number }> = ({ height = 360 }) => (
+  <div
+    className="flex items-center justify-center bg-gray-50 text-sm text-gray-400"
+    style={{ height }}
+  >
+    正在加载 3D 视图...
+  </div>
+);
 
 // 工作台 Dashboard：概览卡片 + 小时趋势 + 待办
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
+  const { data: shelves = [] } = useShelves();
+  const { data, isLoading, error } = useDashboard();
+  const { data: layoutRes, isLoading: layoutQueryLoading } = useLayoutConfig();
+  const layoutConfig = layoutRes?.layoutConfig ?? null;
+  const layoutLoading = layoutQueryLoading && !layoutRes;
 
-  useEffect(() => {
-    setLoading(true);
-    statsService
-      .fetchDashboard()
-      .then(setData)
-      .catch((err) => setError(err instanceof Error ? err.message : '加载失败'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) {
+  if (isLoading && !data) {
     return <div className="py-10 text-center text-sm text-gray-500">加载中...</div>;
   }
   if (error) {
-    return <div className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>;
+    return (
+      <div className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">
+        {error instanceof Error ? error.message : '加载失败'}
+      </div>
+    );
   }
   if (!data) return null;
 
+  const isEditingLayout = searchParams.get('layout') === 'edit';
+  const isScreenMode = searchParams.get('view') === 'screen';
+  const viewShelves = shelves.map(toWarehouseShelf);
+
+  if (isScreenMode) {
+    return (
+      <React.Suspense fallback={<WarehouseFallback height="100vh" />}>
+        <WarehouseScreen
+          stationName={stationName}
+          data={data}
+          shelves={viewShelves}
+          layoutConfig={layoutConfig}
+          layoutLoading={layoutLoading}
+          onExit={() => setSearchParams({})}
+          onTodoClick={(type) => navigate(`/admin/inventory?status=${type}`)}
+        />
+      </React.Suspense>
+    );
+  }
+
+  if (isEditingLayout) {
+    return (
+      <div className="w-full space-y-5">
+        <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+          <div>
+            <h1 className="text-lg font-semibold text-gray-800">工作台 · 调整门店布局</h1>
+            <p className="mt-1 text-sm text-gray-500">拖动货架、入口或区域后，统一保存全部改动。</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSearchParams({})}
+            className="border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            返回工作台
+          </button>
+        </div>
+        <React.Suspense fallback={<WarehouseFallback height={520} />}>
+          <StationLayoutTab />
+        </React.Suspense>
+      </div>
+    );
+  }
+
   const { today, yesterday, hourly, todo } = data;
 
-  const cards = [
+  const cards: Array<{
+    label: string;
+    value: number;
+    yesterday?: number;
+    color: string;
+    bg: string;
+    href?: string;
+  }> = [
     {
       label: '今日入库',
       value: today.inbound,
@@ -44,43 +114,92 @@ const Dashboard: React.FC = () => {
       color: 'text-success',
       bg: 'bg-success/10',
     },
-    { label: '当前在库', value: today.inStock, color: 'text-primary', bg: 'bg-primaryLight' },
-    { label: '当前滞留', value: today.overdue, color: 'text-warning', bg: 'bg-warning/10' },
-    { label: '当前异常', value: today.exception, color: 'text-danger', bg: 'bg-danger/10' },
+    {
+      label: '当前在库',
+      value: today.inStock,
+      color: 'text-primary',
+      bg: 'bg-primaryLight',
+      href: '/admin/inventory?status=in_stock',
+    },
+    {
+      label: '当前滞留',
+      value: today.overdue,
+      color: 'text-warning',
+      bg: 'bg-warning/10',
+      href: '/admin/inventory?status=overdue',
+    },
+    {
+      label: '当前异常',
+      value: today.exception,
+      color: 'text-danger',
+      bg: 'bg-danger/10',
+      href: '/admin/inventory?status=exception',
+    },
   ];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <h1 className="text-lg font-semibold text-gray-800">工作台</h1>
+    <div className="w-full space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-gray-800">工作台</h1>
+          <p className="mt-1 text-xs text-gray-500">运营概览 + 仓内数字孪生，可一键进入大屏演示。</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setSearchParams({ view: 'screen' })}
+          className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+        >
+          数字孪生大屏
+        </button>
+      </div>
 
       {/* 概览卡片 */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {cards.map((c) => (
-          <div key={c.label} className={`rounded-lg ${c.bg} p-4`}>
-            <div className="text-xs text-gray-600">{c.label}</div>
-            <div className={`mt-1 text-2xl font-bold ${c.color}`}>{c.value}</div>
-            {typeof c.yesterday === 'number' && (
-              <div className="mt-1 text-xs text-gray-500">
-                昨日 {c.yesterday}
-                {c.yesterday === 0 && c.value > 0 ? (
-                  <span className="ml-1 text-success">↑ 新增</span>
-                ) : c.yesterday > 0 ? (
-                  <span
-                    className={
-                      c.value >= c.yesterday ? 'ml-1 text-success' : 'ml-1 text-danger'
-                    }
-                  >
-                    {c.value >= c.yesterday ? '↑' : '↓'}
-                    {Math.abs(
-                      Math.round(((c.value - c.yesterday) / c.yesterday) * 100),
-                    )}
-                    %
-                  </span>
-                ) : null}
-              </div>
-            )}
-          </div>
-        ))}
+        {cards.map((c) => {
+          const body = (
+            <>
+              <div className="text-xs text-gray-600">{c.label}</div>
+              <div className={`mt-1 text-2xl font-bold ${c.color}`}>{c.value}</div>
+              {typeof c.yesterday === 'number' && (
+                <div className="mt-1 text-xs text-gray-500">
+                  昨日 {c.yesterday}
+                  {c.yesterday === 0 && c.value > 0 ? (
+                    <span className="ml-1 text-success">↑ 新增</span>
+                  ) : c.yesterday > 0 ? (
+                    <span
+                      className={
+                        c.value >= c.yesterday ? 'ml-1 text-success' : 'ml-1 text-danger'
+                      }
+                    >
+                      {c.value >= c.yesterday ? '↑' : '↓'}
+                      {Math.abs(
+                        Math.round(((c.value - c.yesterday) / c.yesterday) * 100),
+                      )}
+                      %
+                    </span>
+                  ) : null}
+                </div>
+              )}
+            </>
+          );
+          if (c.href) {
+            return (
+              <button
+                key={c.label}
+                type="button"
+                onClick={() => navigate(c.href!)}
+                className={`rounded-lg ${c.bg} p-4 text-left transition hover:opacity-90`}
+              >
+                {body}
+              </button>
+            );
+          }
+          return (
+            <div key={c.label} className={`rounded-lg ${c.bg} p-4`}>
+              {body}
+            </div>
+          );
+        })}
       </div>
 
       {/* 今日小时趋势 + 待办 */}
@@ -94,27 +213,99 @@ const Dashboard: React.FC = () => {
           <h2 className="mb-3 text-sm font-medium text-gray-700">待办提醒</h2>
           <div className="space-y-3">
             <button
+              type="button"
               onClick={() => navigate('/admin/inventory?status=overdue')}
-              className="flex w-full items-center justify-between rounded-md bg-warning/5 px-3 py-3 text-left hover:bg-warning/10"
+              className="flex w-full flex-col rounded-md bg-warning/5 px-3 py-3 text-left hover:bg-warning/10"
             >
-              <span className="text-sm text-gray-600">超期待提醒</span>
-              <span className="text-lg font-bold text-warning">{todo.overdueWarn}</span>
+              <div className="flex w-full items-center justify-between">
+                <span className="text-sm text-gray-600">超期待提醒</span>
+                <span className="text-lg font-bold text-warning">{todo.overdueWarn}</span>
+              </div>
+              {todo.overdueWarn === 0 && (
+                <span className="mt-1 text-xs text-gray-400">
+                  暂无滞留（自动扫描将在 1.3 滞留件模块提供）
+                </span>
+              )}
             </button>
             <button
+              type="button"
               onClick={() => navigate('/admin/inventory?status=exception')}
-              className="flex w-full items-center justify-between rounded-md bg-danger/5 px-3 py-3 text-left hover:bg-danger/10"
+              className="flex w-full flex-col rounded-md bg-danger/5 px-3 py-3 text-left hover:bg-danger/10"
             >
-              <span className="text-sm text-gray-600">异常件未处理</span>
-              <span className="text-lg font-bold text-danger">
-                {todo.exceptionUnresolved}
-              </span>
+              <div className="flex w-full items-center justify-between">
+                <span className="text-sm text-gray-600">异常件未处理</span>
+                <span className="text-lg font-bold text-danger">
+                  {todo.exceptionUnresolved}
+                </span>
+              </div>
+              {todo.exceptionUnresolved === 0 && (
+                <span className="mt-1 text-xs text-gray-400">
+                  暂无异常，可在库存列表批量标记
+                </span>
+              )}
             </button>
           </div>
         </div>
       </div>
+
+      <section className="overflow-hidden border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-medium text-gray-700">驿站实时占用 · 3D 数字孪生</h2>
+            <p className="mt-1 text-xs text-gray-500">
+              按当前库存渲染货架热力与仓内细节；进入大屏可获得科技可视化演示效果。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setSearchParams({ view: 'screen' })}
+              className="border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              全屏大屏
+            </button>
+            <button
+              type="button"
+              onClick={() => setSearchParams({ layout: 'edit' })}
+              className="bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primaryHover"
+            >
+              调整布局
+            </button>
+          </div>
+        </div>
+        <React.Suspense fallback={<WarehouseFallback height="min(680px, calc(100vh - 240px))" />}>
+          <Warehouse3D
+            mode="view"
+            shelves={viewShelves}
+            layoutConfig={layoutConfig}
+            layoutLoading={layoutLoading}
+            showOccupancy
+            showCeilingLights
+            visualTheme="ops"
+            enableBloom
+            height="min(680px, calc(100vh - 240px))"
+          />
+        </React.Suspense>
+      </section>
     </div>
   );
 };
+
+function toWarehouseShelf(shelf: Shelf) {
+  return {
+    number: shelf.number,
+    sizeType: shelf.size_type,
+    layers: shelf.layers,
+    description: shelf.description,
+    posX: shelf.pos_x,
+    posY: shelf.pos_y,
+    rotation: shelf.rotation,
+    zone: shelf.zone,
+    inStockCount: shelf.in_stock_count,
+    remainingCapacity: shelf.remaining_capacity,
+    capacityPerLayer: shelf.capacity_per_layer,
+  };
+}
 
 // ============ 趋势图（纯 SVG 双折线） ============
 const TrendChart: React.FC<{ hourly: DashboardHourly[] }> = ({ hourly }) => {

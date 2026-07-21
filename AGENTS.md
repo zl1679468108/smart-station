@@ -33,8 +33,8 @@
 | 端 | 断点 | 路由前缀 | 用途 |
 |----|------|----------|------|
 | PC | ≥1200px | `/admin/*` | 工作人员管理后台 |
-| 平板 PAD | 768–1200px | `/admin/*` `/kiosk/*` | 工作人员现场操作 + 取件自助 |
-| Kiosk PAD | 768–1200px | `/kiosk/*` | 取件自助查询（无登录） |
+| 平板 PAD | 768–1200px | `/admin/*` `/query/*` | 工作人员现场操作 + 取件自助 |
+| Kiosk / 查询门户 | 768–1200px | `/query/*` | 取件自助查询（无登录，原 `/kiosk/*` 已合并） |
 | 扫描机 | 全屏 | `/scan/*` | 出库扫描（独立设备） |
 | H5 | <768px | `/m/*` | 远端查件（备用） |
 
@@ -114,9 +114,9 @@ cd backend && npx tsc --noEmit
 ```text
 frontend/
   src/
-    pages/                页面（按路由前缀分子目录：admin/ kiosk/ scan/ m/）
+    pages/                页面（按路由前缀分子目录：admin/ query/ scan/ m/）
       admin/              工作人员后台页面
-      kiosk/              取件自助 PAD 页面
+      query/              取件自助查询门户（原 kiosk 合并）
       scan/               出库扫描机页面
       m/                  移动 H5 页面
     components/           共享组件（ui/ 为原子组件）
@@ -134,13 +134,10 @@ backend/
     inventory/            库存模块
     outbound/             出库模块
     kiosk/                取件自助查询模块（公开 + 限流）
-    overdue/              滞留件模块
-    exception/            异常件模块
-    shipping/             寄件模块
-    finance/              财务结算模块
-    stats/                统计模块
+    stats/                统计模块（工作台 Dashboard）
     admin/                系统管理模块
-    notify/               通知模块（短信）
+    notify/               通知模块（短信 stub，SMS_PROVIDER 可切换）
+    # 未实现（见 docs/TASKS.md M24-M26）：overdue / exception / shipping / finance
     supabase/             Supabase 客户端
     common/               公共模块（interceptors / filters / pipes / guards / decorators）
 
@@ -200,7 +197,7 @@ scripts/                  部署脚本
 - 路由使用 `react-router-dom` v6 HashRouter，全部 `React.lazy()` 懒加载。路由配置在 `src/routes/`。
 - 路由分前缀适配多端：
   - `/admin/*` — 工作人员管理后台（PC 主用，平板可访问）
-  - `/kiosk/*` — 驿站现场 PAD 自助查询页（取件用户，无登录）
+  - `/query/*` — 用户自助查询门户（取件用户，无登录；原 `/kiosk/*` 已合并）
   - `/scan/*` — 出库扫描机页面（独立设备，全屏扫描）
   - `/m/*` — 移动 H5 取件查询页（备用，远端查件状态）
 - 状态管理：服务端用 `@tanstack/react-query` v5，客户端用 React Context。无 Redux / Zustand。
@@ -213,7 +210,7 @@ scripts/                  部署脚本
 
 ## 7. Backend（NestJS）规则
 
-- 模块（13 个）：Auth、Inbound、Inventory、Outbound、Kiosk、Overdue、Exception、Shipping、Finance、Stats、Admin、Notify、Health。`SupabaseModule` 为 `@Global()`。
+- 模块（已实现）：Auth、Inbound、Inventory、Outbound、Kiosk、Stats、Admin、Notify、Health。`SupabaseModule` 为 `@Global()`。未实现：Overdue、Exception、Shipping、Finance（见 TASKS M24–M26）。
 - REST API 基础路径为 `/api`。
 - 每个模块保持三件套：`controller`、`service`、`module`。
 - 全局中间件：
@@ -271,9 +268,9 @@ scripts/                  部署脚本
 
 新增响应式页面：
 
-1. 确认所属路由前缀（admin/kiosk/scan/m）。
+1. 确认所属路由前缀（admin/query/scan/m）。
 2. 移动端优先样式，向上适配平板、PC。
-3. Kiosk 与 Scan 端需考虑全屏沉浸式、无导航栏、超时返回。
+3. Query 与 Scan 端需考虑全屏沉浸式、无导航栏、超时返回。
 
 ## 11. 验证要求
 

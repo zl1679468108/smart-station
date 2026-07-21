@@ -1,22 +1,23 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import Icon, { IconName } from '@/components/ui/Icon';
 import { useAuth } from '@/utils/auth';
-import StationTab from './tabs/StationTab';
-import StaffTab from './tabs/StaffTab';
-import ShelfTab from './tabs/ShelfTab';
-import CourierTab from './tabs/CourierTab';
-import VersionTab from './tabs/VersionTab';
-import StationLayoutTab from './tabs/StationLayoutTab';
+
+const StationTab = React.lazy(() => import('./tabs/StationTab'));
+const StaffTab = React.lazy(() => import('./tabs/StaffTab'));
+const ShelfTab = React.lazy(() => import('./tabs/ShelfTab'));
+const CourierTab = React.lazy(() => import('./tabs/CourierTab'));
+const VersionTab = React.lazy(() => import('./tabs/VersionTab'));
+const StationLayoutTab = React.lazy(() => import('./tabs/StationLayoutTab'));
 
 type TabKey = 'station' | 'stationLayout' | 'staff' | 'shelves' | 'couriers' | 'version';
 type Role = 'admin' | 'clerk' | 'viewer';
 
 // 全部 Tab 配置；roles 字段控制可见角色：
-// - 驿站信息/货架/快递公司/版本说明/仓库布局：admin + clerk（店员只读，写操作按钮在 Tab 内按角色显隐）
+// - 驿站信息/货架/快递公司/版本说明/门店布局：admin + clerk（店员只读，写操作按钮在 Tab 内按角色显隐）
 // - 员工管理：仅 admin（员工信息敏感，店员不可见）
 const allTabs: { key: TabKey; label: string; icon: IconName; roles: Role[] }[] = [
   { key: 'station', label: '驿站信息', icon: 'box', roles: ['admin', 'clerk'] },
-  { key: 'stationLayout', label: '仓库布局', icon: 'inbox', roles: ['admin', 'clerk'] },
+  { key: 'stationLayout', label: '门店布局', icon: 'inbox', roles: ['admin', 'clerk'] },
   { key: 'staff', label: '员工管理', icon: 'user', roles: ['admin'] },
   { key: 'shelves', label: '货架管理', icon: 'inbox', roles: ['admin', 'clerk'] },
   { key: 'couriers', label: '快递公司', icon: 'package', roles: ['admin', 'clerk'] },
@@ -37,9 +38,26 @@ const System: React.FC = () => {
 
   // 默认选中第一个可见 Tab
   const [active, setActive] = useState<TabKey>(tabs[0]?.key || 'station');
+  const [visitedTabs, setVisitedTabs] = useState<Set<TabKey>>(
+    () => new Set([tabs[0]?.key || 'station']),
+  );
+
+  useEffect(() => {
+    if (tabs.some((t) => t.key === active)) return;
+    setActive(tabs[0]?.key || 'station');
+  }, [active, tabs]);
+
+  useEffect(() => {
+    setVisitedTabs((prev) => {
+      if (prev.has(active)) return prev;
+      const next = new Set(prev);
+      next.add(active);
+      return next;
+    });
+  }, [active]);
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="w-full">
       <h1 className="mb-4 text-lg font-semibold text-gray-800">系统管理</h1>
 
       {/* Tab 头 */}
@@ -62,12 +80,29 @@ const System: React.FC = () => {
 
       {/* Tab 内容 */}
       <div className="min-h-[400px]">
-        {active === 'station' && <StationTab />}
-        {active === 'stationLayout' && <StationLayoutTab />}
-        {active === 'staff' && <StaffTab />}
-        {active === 'shelves' && <ShelfTab />}
-        {active === 'couriers' && <CourierTab />}
-        {active === 'version' && <VersionTab />}
+        {tabs.map((tab) => {
+          if (!visitedTabs.has(tab.key)) return null;
+          return (
+            <div
+              key={tab.key}
+              className={active === tab.key ? 'block' : 'hidden'}
+              aria-hidden={active !== tab.key}
+            >
+              <React.Suspense
+                fallback={
+                  <div className="py-10 text-center text-sm text-gray-500">加载中...</div>
+                }
+              >
+                {tab.key === 'station' && <StationTab />}
+                {tab.key === 'stationLayout' && <StationLayoutTab panelOnly />}
+                {tab.key === 'staff' && <StaffTab />}
+                {tab.key === 'shelves' && <ShelfTab />}
+                {tab.key === 'couriers' && <CourierTab />}
+                {tab.key === 'version' && <VersionTab />}
+              </React.Suspense>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

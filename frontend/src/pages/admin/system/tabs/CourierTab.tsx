@@ -3,6 +3,7 @@ import * as adminService from '@/services/admin';
 import { useCouriers, useInvalidateCouriers } from '@/hooks/useDictionary';
 import { useAuth } from '@/utils/auth';
 import { canManageSystem } from '@/utils/permission';
+import { notifyError } from '@/utils/notification';
 import type { CourierCompany } from '@/types/admin';
 
 // 快递公司管理 Tab：列表 + 新增 + 编辑（名称/客服电话/前缀/排序/状态）
@@ -31,8 +32,6 @@ const CourierTab: React.FC = () => {
     sort_order: 0,
     status: 'active' as 'active' | 'disabled',
   });
-  const [actionError, setActionError] = useState('');
-
   const parsePrefixes = (s: string): string[] =>
     s
       .split(/[,，\s]+/)
@@ -42,9 +41,8 @@ const CourierTab: React.FC = () => {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (adding) return;
-    setActionError('');
     if (!newCourier.name.trim() || !newCourier.code.trim()) {
-      setActionError('名称和代码不能为空');
+      notifyError('名称和代码不能为空');
       return;
     }
     setAdding(true);
@@ -59,8 +57,8 @@ const CourierTab: React.FC = () => {
       setShowAdd(false);
       setNewCourier({ name: '', code: '', servicePhone: '', trackingPrefixes: '', sortOrder: 0 });
       invalidateCouriers();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : '添加失败');
+    } catch {
+      // 接口错误已由全局 notification 统一提示
     } finally {
       setAdding(false);
     }
@@ -88,8 +86,8 @@ const CourierTab: React.FC = () => {
       });
       setEditingId(null);
       invalidateCouriers();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '保存失败');
+    } catch {
+      // 接口错误已由全局 notification 统一提示
     }
   };
 
@@ -107,9 +105,9 @@ const CourierTab: React.FC = () => {
         )}
       </div>
 
-      {(actionError || error) && (
+      {error && (
         <div className="mb-3 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">
-          {actionError || error}
+          {error}
         </div>
       )}
 

@@ -49,6 +49,30 @@ select {
   font-family: inherit;
 }
 
+/* PageLayout 主体内容四周间距：H5 / 平板 / PC 统一由设计 token 控制
+ * 规则：
+ * 1. 仅在布局层（AdminLayout / MLayout / Query 主内容区）使用本类
+ * 2. 页面根节点用 w-full 吃满内容区，不要再叠 mx-auto + max-w 居中，避免左右“假留白”
+ * 3. 表单可读性需要时，对表单区块单独 max-w-* 左对齐限宽即可
+ */
+.page-layout-main {
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--page-layout-main-padding);
+}
+
+@media (min-width: 768px) {
+  .page-layout-main {
+    padding: var(--page-layout-main-padding-sm);
+  }
+}
+
+@media (min-width: 1200px) {
+  .page-layout-main {
+    padding: var(--page-layout-main-padding-lg);
+  }
+}
+
 /* ===== 全局 Loading Toast（提交/变更数据接口时显示） ===== */
 .ss-loading-mask {
   position: fixed;
@@ -116,3 +140,138 @@ select {
     animation: none;
   }
 }
+
+/* ===== 全局 Notification（接口成功/失败右上角提醒） ===== */
+.ss-notification-region {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  display: flex;
+  width: min(360px, calc(100vw - 32px));
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.ss-notification {
+  display: grid;
+  grid-template-columns: 28px 1fr 24px;
+  gap: 10px;
+  align-items: flex-start;
+  min-height: 76px;
+  padding: 14px 12px;
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.98);
+  color: var(--color-gray-800);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
+  pointer-events: auto;
+  animation: ss-notification-enter 180ms ease-out;
+}
+
+.ss-notification-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+}
+
+.ss-notification--success {
+  border-left: 4px solid var(--color-success);
+}
+
+.ss-notification--success .ss-notification-icon {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--color-success);
+}
+
+.ss-notification--error {
+  border-left: 4px solid var(--color-danger);
+}
+
+.ss-notification--error .ss-notification-icon {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-danger);
+}
+
+.ss-notification--info {
+  border-left: 4px solid var(--color-info);
+}
+
+.ss-notification--info .ss-notification-icon {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--color-info);
+}
+
+.ss-notification--warning {
+  border-left: 4px solid var(--color-warning);
+}
+
+.ss-notification--warning .ss-notification-icon {
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--color-warning);
+}
+
+.ss-notification-content {
+  min-width: 0;
+}
+
+.ss-notification-title {
+  margin-bottom: 4px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.ss-notification-message {
+  overflow-wrap: anywhere;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--color-gray-600);
+}
+
+.ss-notification-close {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--color-gray-400);
+}
+
+.ss-notification-close:hover {
+  background: var(--color-gray-100);
+  color: var(--color-gray-700);
+}
+
+@keyframes ss-notification-enter {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 767px) {
+  .ss-notification-region {
+    top: 12px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-notification {
+    animation: none;
+  }
+}
+
+@import './warehouse-screen.scss';

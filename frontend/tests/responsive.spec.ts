@@ -158,8 +158,8 @@ test.describe('M18.4 3D 视图三端响应式', () => {
       await setLoggedIn(page, 'admin');
       await page.setViewportSize(vp);
       await page.goto('/#/admin/system');
-      await expect(page.getByRole('button', { name: /仓库布局/ })).toBeVisible({ timeout: 8000 });
-      await page.getByRole('button', { name: /仓库布局/ }).click();
+      await expect(page.getByRole('button', { name: /门店布局/ })).toBeVisible({ timeout: 8000 });
+      await page.getByRole('button', { name: /门店布局/ }).click();
       // 进入 Tab 后页面应正常渲染（canvas 或「暂无货架」提示任一出现都算成功）
       const canvas = page.locator('canvas').first();
       const fallback = page.getByText(/暂无货架|加载中/);

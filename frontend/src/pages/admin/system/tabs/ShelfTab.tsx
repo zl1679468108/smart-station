@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import * as adminService from '@/services/admin';
 import { useShelves, useInvalidateShelves } from '@/hooks/useDictionary';
+import { useInvalidateKioskLayout } from '@/hooks/useKioskLayout';
 import { useAuth } from '@/utils/auth';
 import { canManageSystem } from '@/utils/permission';
+import { notifyError } from '@/utils/notification';
 import type { Shelf, ShelfSizeType } from '@/types/admin';
 
 const SIZE_LABEL: Record<ShelfSizeType, string> = {
@@ -17,7 +19,7 @@ const SIZE_CLS: Record<ShelfSizeType, string> = {
   large: 'bg-danger/10 text-danger',
 };
 
-// 货架管理 Tab：列表 + 新增 + 编辑（大小类型/层数/每层容量/描述/状态）
+// 货架管理 Tab：列表 + 新增 + 编辑（货架号/大小类型/层数/每层容量/描述/状态）
 // 权限：admin 可读可改；clerk 只读（隐藏新增/编辑按钮）
 const ShelfTab: React.FC = () => {
   const { user } = useAuth();
@@ -25,6 +27,7 @@ const ShelfTab: React.FC = () => {
   // 字典数据走 React Query 缓存（inventory 只读接口，admin/clerk 均可读）
   const { data: list = [], isLoading: loading, error: queryError } = useShelves();
   const invalidateShelves = useInvalidateShelves();
+  const invalidateKioskLayout = useInvalidateKioskLayout();
   const error = queryError ? (queryError instanceof Error ? queryError.message : '加载失败') : '';
   const [showAdd, setShowAdd] = useState(false);
   const [newShelf, setNewShelf] = useState({
@@ -37,20 +40,18 @@ const ShelfTab: React.FC = () => {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
+    number: 1,
     sizeType: 'small' as ShelfSizeType,
     layers: 4,
     capacityPerLayer: 50,
     description: '',
     status: 'active' as 'active' | 'disabled',
   });
-  const [actionError, setActionError] = useState('');
-
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (adding) return;
-    setActionError('');
     if (newShelf.number < 1) {
-      setActionError('货架号必须大于 0');
+      notifyError('货架号必须大于 0');
       return;
     }
     setAdding(true);
@@ -65,8 +66,9 @@ const ShelfTab: React.FC = () => {
       setShowAdd(false);
       setNewShelf({ number: 1, sizeType: 'small', layers: 4, capacityPerLayer: 50, description: '' });
       invalidateShelves();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : '添加失败');
+      invalidateKioskLayout();
+    } catch {
+      // 接口错误已由全局 notification 统一提示
     } finally {
       setAdding(false);
     }
@@ -75,6 +77,7 @@ const ShelfTab: React.FC = () => {
   const startEdit = (s: Shelf) => {
     setEditingId(s.id);
     setEditForm({
+      number: s.number,
       sizeType: s.size_type,
       layers: s.layers,
       capacityPerLayer: s.capacity_per_layer,
@@ -84,8 +87,13 @@ const ShelfTab: React.FC = () => {
   };
 
   const handleSaveEdit = async (s: Shelf) => {
+    if (editForm.number < 1) {
+      notifyError('货架号必须大于 0');
+      return;
+    }
     try {
       await adminService.updateShelf(s.id, {
+        number: editForm.number,
         sizeType: editForm.sizeType,
         layers: editForm.layers,
         capacityPerLayer: editForm.capacityPerLayer,
@@ -94,8 +102,9 @@ const ShelfTab: React.FC = () => {
       });
       setEditingId(null);
       invalidateShelves();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '保存失败');
+      invalidateKioskLayout();
+    } catch {
+      // 接口错误已由全局 notification 统一提示
     }
   };
 
@@ -113,9 +122,9 @@ const ShelfTab: React.FC = () => {
         )}
       </div>
 
-      {(actionError || error) && (
+      {error && (
         <div className="mb-3 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">
-          {actionError || error}
+          {error}
         </div>
       )}
 
@@ -217,7 +226,21 @@ const ShelfTab: React.FC = () => {
             <tbody className="divide-y divide-gray-100">
               {list.map((s) => (
                 <tr key={s.id}>
-                  <td className="px-3 py-2 font-medium text-gray-800">{s.number}号</td>
+                  <td className="px-3 py-2 font-medium text-gray-800">
+                    {editingId === s.id ? (
+                      <input
+                        type="number"
+                        min={1}
+                        value={editForm.number}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, number: Number(e.target.value) })
+                        }
+                        className="w-20 rounded border border-gray-300 px-2 py-1 text-sm"
+                      />
+                    ) : (
+                      `${s.number}号`
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     {editingId === s.id ? (
                       <select

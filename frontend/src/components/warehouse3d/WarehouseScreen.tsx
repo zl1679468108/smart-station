@@ -1,0 +1,481 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import Warehouse3D from './Warehouse3D';
+import { preloadStationAssets } from './assets';
+import type { WarehouseShelf } from './types';
+import type { StationLayoutConfig } from '@/types/kiosk';
+import type { DashboardData } from '@/types/stats';
+import { useDashboard, useDashboardEvents } from '@/hooks/useDashboardData';
+import {
+  getOccupancyRatio,
+  getRemainingCapacity,
+  getShelfCapacity,
+} from './occupancy';
+
+export interface WarehouseScreenProps {
+  stationName?: string;
+  data: DashboardData;
+  shelves: WarehouseShelf[];
+  layoutConfig?: StationLayoutConfig | null;
+  layoutLoading?: boolean;
+  onExit: () => void;
+  /** 点击待办条目：overdue / exception */
+  onTodoClick?: (type: 'overdue' | 'exception') => void;
+}
+
+function pad2(n: number) {
+  return String(n).padStart(2, '0');
+}
+
+function formatNow(date: Date) {
+  const week = ['日', '一', '二', '三', '四', '五', '六'][date.getDay()];
+  return {
+    time: `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`,
+    date: `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} 星期${week}`,
+  };
+}
+
+const WarehouseScreen: React.FC<WarehouseScreenProps> = ({
+  stationName = '智能快递驿站',
+  data,
+  shelves,
+  layoutConfig = null,
+  layoutLoading = false,
+  onExit,
+  onTodoClick,
+}) => {
+  const [now, setNow] = useState(() => formatNow(new Date()));
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const { data: liveData = data } = useDashboard({
+    initialData: data,
+    refetchInterval: 15000,
+  });
+  const {
+    data: events = [],
+    isLoading: eventsLoading,
+    error: eventsError,
+  } = useDashboardEvents(24, { refetchInterval: 15000 });
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(formatNow(new Date())), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    preloadStationAssets().catch(() => {
+      /* 无 GLB 时静默回退程序化模型 */
+    });
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onExit();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onExit]);
+
+  const shelfStats = useMemo(() => {
+    const totalInStock = shelves.reduce((sum, s) => sum + (s.inStockCount ?? 0), 0);
+    const totalCapacity = shelves.reduce((sum, s) => sum + getShelfCapacity(s), 0);
+    const busy = shelves
+      .map((s) => ({
+        number: s.number,
+        ratio: getOccupancyRatio(s),
+        inStock: s.inStockCount ?? 0,
+        remaining: getRemainingCapacity(s),
+      }))
+      .sort((a, b) => b.ratio - a.ratio)
+      .slice(0, 6);
+    const occupancy = totalCapacity > 0 ? totalInStock / totalCapacity : 0;
+    const highRisk = shelves.filter((s) => getOccupancyRatio(s) >= 0.85).length;
+    return { totalInStock, totalCapacity, busy, occupancy, highRisk, shelfCount: shelves.length };
+  }, [shelves]);
+
+  const formatEventTime = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '--:--';
+    // createdAt 已是后端转北京时间字符串时直接截取
+    if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(iso)) {
+      return iso.slice(11, 16);
+    }
+    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  };
+
+  const feed = useMemo(() => {
+    if (events.length > 0) {
+      return events.slice(0, 10).map((e) => ({
+        time: formatEventTime(e.createdAt),
+        text: e.text,
+        tone: e.tone,
+        key: e.id,
+      }));
+    }
+    // 无事件时回退合成动态，避免空白
+    const items: Array<{ time: string; text: string; tone: 'ok' | 'warn' | 'danger' | 'info'; key: string }> = [];
+    const h = liveData.hourly[liveData.hourly.length - 1];
+    if (h) {
+      items.push({
+        key: 'hourly',
+        time: `${pad2(h.hour)}:00`,
+        text: `本时段入库 ${h.inbound} 件 · 出库 ${h.outbound} 件`,
+        tone: 'info',
+      });
+    }
+    if (liveData.todo.overdueWarn > 0) {
+      items.push({
+        key: 'overdue',
+        time: now.time.slice(0, 5),
+        text: `${liveData.todo.overdueWarn} 件超期待提醒`,
+        tone: 'warn',
+      });
+    }
+    if (liveData.todo.exceptionUnresolved > 0) {
+      items.push({
+        key: 'exception',
+        time: now.time.slice(0, 5),
+        text: `${liveData.todo.exceptionUnresolved} 件异常待处理`,
+        tone: 'danger',
+      });
+    }
+    items.push({
+      key: 'stock',
+      time: now.time.slice(0, 5),
+      text: `当前在库 ${liveData.today.inStock} 件 · 货架 ${shelfStats.shelfCount} 组`,
+      tone: 'ok',
+    });
+    return items;
+  }, [events, liveData, now.time, shelfStats.shelfCount]);
+
+  const tickerText = useMemo(() => {
+    return [
+      `今日入库 ${liveData.today.inbound} 件`,
+      `今日出库 ${liveData.today.outbound} 件`,
+      `在库 ${liveData.today.inStock} 件`,
+      `滞留 ${liveData.today.overdue} 件`,
+      `异常 ${liveData.today.exception} 件`,
+      `货架占用 ${(shelfStats.occupancy * 100).toFixed(1)}%`,
+      eventsLoading ? '动态同步中' : `已同步 ${events.length} 条业务动态`,
+    ].join('   ·   ');
+  }, [liveData, shelfStats.occupancy, events.length, eventsLoading]);
+
+  return (
+    <div className="ws-screen">
+      <div className="ws-screen__frame" />
+
+      <header className="ws-screen__header">
+        <div className="ws-screen__brand">
+          <i className="ws-screen__brand-dot" />
+          LIVE · 仓内数字孪生
+        </div>
+        <div className="ws-screen__title">
+          <h1>{stationName}</h1>
+          <p>SMART STATION DIGITAL TWIN</p>
+        </div>
+        <div className="ws-screen__header-right">
+          <div className="ws-screen__clock">
+            <strong>{now.time}</strong>
+            <span>{now.date}</span>
+          </div>
+          <button type="button" className="ws-screen__exit" onClick={onExit}>
+            退出大屏 Esc
+          </button>
+        </div>
+      </header>
+
+      <div
+        className={[
+          'ws-screen__body',
+          leftCollapsed ? 'ws-screen__body--left-collapsed' : '',
+          rightCollapsed ? 'ws-screen__body--right-collapsed' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <aside className={`ws-screen__panel ws-screen__panel--left${leftCollapsed ? ' is-collapsed' : ''}`}>
+          <button
+            type="button"
+            className="ws-screen__panel-toggle ws-screen__panel-toggle--left"
+            aria-label={leftCollapsed ? '展开左侧信息栏' : '收起左侧信息栏'}
+            title={leftCollapsed ? '展开左侧' : '收起左侧'}
+            onClick={() => setLeftCollapsed((v) => !v)}
+          >
+            {leftCollapsed ? '›' : '‹'}
+          </button>
+          <div className="ws-screen__panel-content">
+          <section className="ws-card">
+            <div className="ws-card__title">
+              运营概况 <span>TODAY</span>
+            </div>
+            <div className="ws-kpi-grid">
+              <div className="ws-kpi ws-kpi--inbound">
+                <label>今日入库</label>
+                <strong>{liveData.today.inbound}</strong>
+                <em>昨日 {liveData.yesterday.inbound}</em>
+              </div>
+              <div className="ws-kpi ws-kpi--outbound">
+                <label>今日出库</label>
+                <strong>{liveData.today.outbound}</strong>
+                <em>昨日 {liveData.yesterday.outbound}</em>
+              </div>
+              <div className="ws-kpi ws-kpi--stock">
+                <label>当前在库</label>
+                <strong>{liveData.today.inStock}</strong>
+                <em>仓容利用率 {(shelfStats.occupancy * 100).toFixed(1)}%</em>
+              </div>
+              <div className="ws-kpi ws-kpi--overdue">
+                <label>当前滞留</label>
+                <strong>{liveData.today.overdue}</strong>
+                <em>待提醒 {liveData.todo.overdueWarn}</em>
+              </div>
+              <div className="ws-kpi ws-kpi--exception">
+                <label>当前异常</label>
+                <strong>{liveData.today.exception}</strong>
+                <em>未处理 {liveData.todo.exceptionUnresolved}</em>
+              </div>
+              <div className="ws-kpi ws-kpi--todo">
+                <label>货架组数</label>
+                <strong>{shelfStats.shelfCount}</strong>
+                <em>高占用 {shelfStats.highRisk}</em>
+              </div>
+            </div>
+          </section>
+
+          <section className="ws-card">
+            <div className="ws-card__title">
+              货架压力 TOP <span>OCCUPANCY</span>
+            </div>
+            <div className="ws-list">
+              {shelfStats.busy.length === 0 && (
+                <div className="ws-list-item">
+                  <span>暂无货架库存数据</span>
+                </div>
+              )}
+              {shelfStats.busy.map((item) => (
+                <div key={item.number} className="ws-list-item" style={{ display: 'block' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <b>#{item.number} 货架</b>
+                    <span>
+                      {item.inStock} 件 · 余 {item.remaining}
+                    </span>
+                  </div>
+                  <div className="ws-bar">
+                    <i style={{ width: `${Math.round(item.ratio * 100)}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+          </div>
+        </aside>
+
+        <main className="ws-stage">
+          <div className="ws-stage__badge">仓内实时孪生 · 自动巡航</div>
+          <Warehouse3D
+            mode="view"
+            shelves={shelves}
+            layoutConfig={layoutConfig}
+            layoutLoading={layoutLoading}
+            showOccupancy
+            showCeilingLights
+            visualTheme="screen"
+            enableBloom
+            enableCameraPatrol
+            showGuidanceLabels
+            height="100%"
+            className="ws-stage__canvas h-full rounded-none"
+          />
+        </main>
+
+        <aside className={`ws-screen__panel ws-screen__panel--right${rightCollapsed ? ' is-collapsed' : ''}`}>
+          <button
+            type="button"
+            className="ws-screen__panel-toggle ws-screen__panel-toggle--right"
+            aria-label={rightCollapsed ? '展开右侧信息栏' : '收起右侧信息栏'}
+            title={rightCollapsed ? '展开右侧' : '收起右侧'}
+            onClick={() => setRightCollapsed((v) => !v)}
+          >
+            {rightCollapsed ? '‹' : '›'}
+          </button>
+          <div className="ws-screen__panel-content">
+          <section className="ws-card">
+            <div className="ws-card__title">
+              出入库趋势 <span>HOURLY</span>
+            </div>
+            <ScreenTrendChart hourly={liveData.hourly} />
+          </section>
+
+          <section className="ws-card">
+            <div className="ws-card__title">
+              实时动态 <span>EVENTS</span>
+            </div>
+            <div className="ws-feed">
+              {eventsError && (
+                <div className="ws-feed-item">
+                  <time>--</time>
+                  <strong>事件接口暂不可用，已显示本地概览</strong>
+                  <em>降级</em>
+                </div>
+              )}
+              {!eventsError && eventsLoading && feed.length === 0 && (
+                <div className="ws-feed-item">
+                  <time>--</time>
+                  <strong>正在同步业务动态...</strong>
+                  <em>加载</em>
+                </div>
+              )}
+              {feed.map((item, idx) => (
+                <div
+                  key={('key' in item && item.key) || `${item.text}-${idx}`}
+                  className={`ws-feed-item ${
+                    item.tone === 'warn'
+                      ? 'ws-feed-item--warn'
+                      : item.tone === 'danger'
+                        ? 'ws-feed-item--danger'
+                        : item.tone === 'ok'
+                          ? 'ws-feed-item--ok'
+                          : ''
+                  }`}
+                >
+                  <time>{item.time}</time>
+                  <strong>{item.text}</strong>
+                  <em>
+                    {item.tone === 'warn'
+                      ? '关注'
+                      : item.tone === 'danger'
+                        ? '处理'
+                        : item.tone === 'ok'
+                          ? '正常'
+                          : '同步'}
+                  </em>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="ws-card">
+            <div className="ws-card__title">待办速览</div>
+            <div className="ws-list">
+              <button
+                type="button"
+                className="ws-list-item"
+                onClick={() => onTodoClick?.('overdue')}
+                style={{ width: '100%', textAlign: 'left', cursor: onTodoClick ? 'pointer' : 'default' }}
+              >
+                <span>超期待提醒</span>
+                <b style={{ color: '#fbbf24' }}>{liveData.todo.overdueWarn}</b>
+              </button>
+              <button
+                type="button"
+                className="ws-list-item"
+                onClick={() => onTodoClick?.('exception')}
+                style={{ width: '100%', textAlign: 'left', cursor: onTodoClick ? 'pointer' : 'default' }}
+              >
+                <span>异常件未处理</span>
+                <b style={{ color: '#f87171' }}>{liveData.todo.exceptionUnresolved}</b>
+              </button>
+              <div className="ws-list-item">
+                <span>仓容利用率</span>
+                <b style={{ color: '#38bdf8' }}>{(shelfStats.occupancy * 100).toFixed(1)}%</b>
+              </div>
+            </div>
+          </section>
+          </div>
+        </aside>
+      </div>
+
+      <footer className="ws-screen__footer">
+        <div>Smart Station Digital Twin · 橙科技仓内孪生</div>
+        <div className="ws-screen__ticker">
+          <span>{tickerText}</span>
+        </div>
+        <div>按 Esc 退出演示</div>
+      </footer>
+    </div>
+  );
+};
+
+const ScreenTrendChart: React.FC<{ hourly: DashboardData['hourly'] }> = ({ hourly }) => {
+  const W = 520;
+  const H = 140;
+  const PAD_L = 28;
+  const PAD_R = 8;
+  const PAD_T = 10;
+  const PAD_B = 20;
+  const maxVal = Math.max(1, ...hourly.map((h) => Math.max(h.inbound, h.outbound)));
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+  const xStep = innerW / Math.max(1, hourly.length - 1);
+  const yScale = (v: number) => PAD_T + innerH - (v / maxVal) * innerH;
+  const xScale = (i: number) => PAD_L + i * xStep;
+  const buildPath = (key: 'inbound' | 'outbound') =>
+    hourly.map((h, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(h[key])}`).join(' ');
+  const buildArea = (key: 'inbound' | 'outbound') => {
+    if (hourly.length === 0) return '';
+    const line = buildPath(key);
+    const lastX = xScale(hourly.length - 1);
+    const firstX = xScale(0);
+    return `${line} L ${lastX} ${PAD_T + innerH} L ${firstX} ${PAD_T + innerH} Z`;
+  };
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="ws-chart">
+        <defs>
+          <linearGradient id="wsInboundFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="wsOutboundFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#34d399" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="#34d399" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {[0, 0.5, 1].map((t) => {
+          const y = yScale(maxVal * t);
+          return (
+            <line
+              key={t}
+              x1={PAD_L}
+              y1={y}
+              x2={W - PAD_R}
+              y2={y}
+              stroke="rgba(148,163,184,0.18)"
+              strokeWidth={1}
+            />
+          );
+        })}
+        <path d={buildArea('inbound')} fill="url(#wsInboundFill)" />
+        <path d={buildArea('outbound')} fill="url(#wsOutboundFill)" />
+        <path d={buildPath('inbound')} fill="none" stroke="#38bdf8" strokeWidth={2.2} />
+        <path d={buildPath('outbound')} fill="none" stroke="#34d399" strokeWidth={2.2} />
+        {hourly.map((h, i) =>
+          h.hour % 3 === 0 ? (
+            <text
+              key={h.hour}
+              x={xScale(i)}
+              y={H - 4}
+              textAnchor="middle"
+              fontSize="10"
+              fill="#64748b"
+            >
+              {h.hour}
+            </text>
+          ) : null,
+        )}
+      </svg>
+      <div className="ws-legend">
+        <span>
+          <i style={{ background: '#38bdf8' }} />
+          入库
+        </span>
+        <span>
+          <i style={{ background: '#34d399' }} />
+          出库
+        </span>
+      </div>
+    </div>
+  );
+};
+
+export default WarehouseScreen;

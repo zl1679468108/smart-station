@@ -229,17 +229,31 @@ export async function mockBusinessApis(page: Page) {
     });
   });
 
-  // 库存列表（需匹配 query 参数）
+  // 库存列表（按 URL query 过滤 status/phone 等，支撑深链与筛选 e2e）
   await page.route('**/api/inventory?**', (route) => {
+    const url = new URL(route.request().url());
+    let items = [...PARCELS];
+    const status = url.searchParams.get('status');
+    if (status) items = items.filter((p) => p.status === status);
+    const phone = url.searchParams.get('phone');
+    if (phone) items = items.filter((p) => (p.recipientPhone || '').includes(phone));
+    const trackingNumber = url.searchParams.get('trackingNumber');
+    if (trackingNumber) {
+      items = items.filter((p) =>
+        (p.trackingNumber || '').toUpperCase().includes(trackingNumber.toUpperCase()),
+      );
+    }
+    const pickupCode = url.searchParams.get('pickupCode');
+    if (pickupCode) items = items.filter((p) => (p.pickupCode || '') === pickupCode);
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(ok({
-        items: PARCELS,
-        total: PARCELS.length,
-        page: 1,
-        pageSize: 20,
-        totalPages: 1,
+        items,
+        total: items.length,
+        page: Number(url.searchParams.get('page') || 1),
+        pageSize: Number(url.searchParams.get('pageSize') || 20),
+        totalPages: Math.max(1, Math.ceil(items.length / Number(url.searchParams.get('pageSize') || 20))),
       })),
     });
   });
@@ -573,32 +587,52 @@ export async function mockServerError(page: Page, pattern: string, message = '�
   });
 }
 
-// ===== 1.2.0 仓库 3D 布局相关 mock =====
+// ===== 1.2.0 门店 3D 布局相关 mock =====
 
-// 默认仓库户型配置（含 1 个门口 + bounds + 1 个办公区 + 1 个揽收区）
+// 默认门店布局配置（含 1 个门口 + bounds + 服务台/待取件区/出库记录区/异常件区）
 export const DEFAULT_LAYOUT_CONFIG = {
-  bounds: { width: 20, depth: 15 },
-  doors: [{ x: 0, y: 7.5, width: 1.2, label: '正门' }],
+  bounds: { width: 12, depth: 8 },
+  doors: [{ x: 0, y: 4, width: 1.2, label: '正门' }],
   areas: [
     {
-      id: 'area-office-1',
-      x: -7,
-      y: -5,
-      width: 3,
-      depth: 3,
-      height: 2.5,
-      type: 'office',
-      label: '办公区 1',
+      id: 'area-counter-1',
+      x: -3.5,
+      y: 2.8,
+      width: 3.2,
+      depth: 1.4,
+      height: 1.4,
+      type: 'counter',
+      label: '服务台 1',
     },
     {
       id: 'area-pickup-1',
-      x: 7,
-      y: -5,
-      width: 4,
+      x: 3.2,
+      y: 2.4,
+      width: 3.6,
       depth: 2,
-      height: 2.5,
+      height: 1.8,
       type: 'pickup',
-      label: '揽收区 1',
+      label: '待取件区 1',
+    },
+    {
+      id: 'area-outbound-record-1',
+      x: 4.5,
+      y: -1.4,
+      width: 2.6,
+      depth: 0.8,
+      height: 2.2,
+      type: 'outboundRecord',
+      label: '出库记录区 1',
+    },
+    {
+      id: 'area-exception-1',
+      x: -4.4,
+      y: -1.8,
+      width: 2,
+      depth: 1.2,
+      height: 1.2,
+      type: 'exception',
+      label: '异常件区 1',
     },
   ],
   obstacles: [],
@@ -613,7 +647,7 @@ export const SHELVES_WITH_POS = SHELVES.map((s, i) => ({
   zone: s.size_type === 'small' ? 'A' : s.size_type === 'medium' ? 'B' : 'C',
 }));
 
-// mock 1.2.0 仓库布局相关接口（管理员端 + Kiosk 端）
+// mock 1.2.0 门店布局相关接口（管理员端 + Kiosk 端）
 export async function mockLayoutApis(page: Page) {
   // 管理员：获取驿站户型配置
   await page.route('**/api/admin/station/layout-config', (route) => {
@@ -654,7 +688,7 @@ export async function mockLayoutApis(page: Page) {
     });
   });
 
-  // 管理员：仓库 3D 布局统一保存（货架 + bounds + doors + areas）
+  // 管理员：门店 3D 布局统一保存（货架 + bounds + doors + areas）
   await page.route('**/api/admin/station/layout', (route) => {
     if (route.request().method() === 'PUT') {
       const body = route.request().postDataJSON() || {};

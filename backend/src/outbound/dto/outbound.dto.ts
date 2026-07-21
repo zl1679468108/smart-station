@@ -26,6 +26,11 @@ export class SelfServiceOutboundDto {
   @IsString()
   @IsNotEmpty({ message: '运单号不能为空' })
   trackingNumber!: string;
+
+  /** 可选：扫描机绑定驿站，避免跨站误出库 */
+  @IsOptional()
+  @IsString()
+  stationId?: string;
 }
 
 /**

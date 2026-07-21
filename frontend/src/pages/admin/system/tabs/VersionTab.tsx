@@ -1,5 +1,5 @@
 import React from 'react';
-import Icon from '@/components/ui/Icon';
+import Logo from '@/components/brand/Logo';
 import { systemInfo, changelog, type ChangelogEntry } from '@/config/version';
 
 // 版本说明 Tab：系统介绍 + 版本更新日志（PRD §4.12.6）
@@ -9,8 +9,8 @@ const VersionTab: React.FC = () => {
       {/* 系统介绍卡片 */}
       <div className="rounded-lg border border-gray-200 bg-white p-5">
         <div className="mb-4 flex items-center gap-3">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primaryLight text-primary">
-            <Icon name="box" size={28} />
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primaryLight">
+            <Logo size={32} />
           </span>
           <div>
             <h2 className="text-lg font-bold text-gray-800">{systemInfo.name}</h2>

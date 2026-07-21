@@ -12,12 +12,12 @@ import {
 } from 'class-validator';
 
 /**
- * 仓库 3D 布局配置 DTO（对应 ss_stations.layout_config JSONB 字段）
+ * 驿站门店 3D 布局配置 DTO（对应 ss_stations.layout_config JSONB 字段）
  *
  * 结构：
  *   bounds: { width, depth }   仓库内部尺寸（米）
  *   doors:  [{ x, y, width, label }]   门口列表
- *   areas:  [{ id, x, y, width, depth, height, type, label }]   区域（办公区/揽收区等）
+ *   areas:  [{ id, x, y, width, depth, height, type, label }]   区域（服务台/出库记录区/异常件区等）
  *   obstacles?: [{ x, y, width, depth, height, type }]   障碍物（柱子/柜台，可选）
  */
 export class LayoutBoundsDto {
@@ -70,7 +70,9 @@ export class LayoutAreaDto {
   @Min(0.1)
   height!: number;
 
-  @IsIn(['office', 'pickup'], { message: '区域类型必须为 office 或 pickup' })
+  @IsIn(['office', 'pickup', 'counter', 'outboundRecord', 'exception', 'oversize'], {
+    message: '区域类型必须为 office/pickup/counter/outboundRecord/exception/oversize 之一',
+  })
   type!: string;
 
   @IsString()

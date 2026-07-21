@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/utils/auth';
-import Icon from '@/components/ui/Icon';
+import Logo from '@/components/brand/Logo';
 
 // 登录页：账号（手机号或邮箱）+ 密码，对接 /api/auth/login
 const Login: React.FC = () => {
@@ -47,8 +47,8 @@ const Login: React.FC = () => {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primaryLight to-gray-100 p-4">
       <div className="w-full max-w-sm rounded-xl bg-white p-8 shadow-md">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-white">
-            <Icon name="box" size={26} />
+          <div className="mx-auto mb-3 flex justify-center">
+            <Logo size={52} />
           </div>
           <h1 className="text-xl font-bold text-gray-800">智能快递驿站</h1>
           <p className="mt-1 text-sm text-gray-500">工作人员登录</p>
