@@ -1088,6 +1088,85 @@ export async function mockBusinessApis(page: Page) {
     });
   });
 
+  // ===== Stats 报表（M26） =====
+  await page.route('**/api/stats/trend**', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        granularity: 'day',
+        span: 7,
+        points: [
+          { label: '2026-07-10', inbound: 12, outbound: 8 },
+          { label: '2026-07-11', inbound: 15, outbound: 11 },
+          { label: '2026-07-12', inbound: 9, outbound: 13 },
+          { label: '2026-07-13', inbound: 20, outbound: 14 },
+          { label: '2026-07-14', inbound: 18, outbound: 16 },
+          { label: '2026-07-15', inbound: 22, outbound: 19 },
+          { label: '2026-07-16', inbound: 17, outbound: 15 },
+        ],
+      })),
+    });
+  });
+
+  await page.route('**/api/stats/funnel**', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        days: 30,
+        stages: [
+          { key: 'inbound', label: '入库', count: 200, percent: 100 },
+          { key: 'outbound', label: '出库', count: 160, percent: 80 },
+          { key: 'overdue', label: '滞留', count: 24, percent: 12 },
+          { key: 'returned', label: '退回', count: 6, percent: 3 },
+        ],
+      })),
+    });
+  });
+
+  await page.route('**/api/stats/retention**', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        days: 30,
+        total: 200,
+        overdue: 24,
+        rate: 12,
+        couriers: [
+          { courierCompanyId: 'c-001', courierName: '顺丰速运', total: 100, overdue: 8, rate: 8 },
+          { courierCompanyId: 'c-002', courierName: '中通快递', total: 80, overdue: 12, rate: 15 },
+          { courierCompanyId: 'c-003', courierName: '圆通速递', total: 20, overdue: 4, rate: 20 },
+        ],
+      })),
+    });
+  });
+
+  await page.route('**/api/stats/peak-hours**', (route) => {
+    const hours = [];
+    for (let h = 8; h <= 22; h++) hours.push({ hour: h, count: h === 18 ? 30 : Math.max(0, 20 - Math.abs(18 - h) * 2) });
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        days: 30,
+        total: 160,
+        peakHour: 18,
+        hours,
+        weekdays: [
+          { weekday: 0, label: '周日', count: 30 },
+          { weekday: 1, label: '周一', count: 20 },
+          { weekday: 2, label: '周二', count: 18 },
+          { weekday: 3, label: '周三', count: 22 },
+          { weekday: 4, label: '周四', count: 25 },
+          { weekday: 5, label: '周五', count: 28 },
+          { weekday: 6, label: '周六', count: 17 },
+        ],
+      })),
+    });
+  });
+
   await page.route('**/api/finance/bills?**', (route) => {
     const url = new URL(route.request().url());
     let items = [...BILLS];

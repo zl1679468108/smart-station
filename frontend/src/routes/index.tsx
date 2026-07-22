@@ -20,6 +20,7 @@ const Overdue = React.lazy(() => import('@/pages/admin/overdue/Overdue'));
 const Exception = React.lazy(() => import('@/pages/admin/exception/Exception'));
 const Shipping = React.lazy(() => import('@/pages/admin/shipping/Shipping'));
 const Finance = React.lazy(() => import('@/pages/admin/finance/Finance'));
+const Stats = React.lazy(() => import('@/pages/admin/stats/Stats'));
 const Scan = React.lazy(() => import('@/pages/scan/Scan'));
 const MHome = React.lazy(() => import('@/pages/m/Home'));
 const QueryHome = React.lazy(() => import('@/pages/query/Home'));
@@ -84,6 +85,15 @@ export const AppRoutes: React.FC = () => {
             element={
               <RequireRole roles={['admin', 'clerk']}>
                 <Finance />
+              </RequireRole>
+            }
+          />
+          {/* 数据统计：admin + clerk */}
+          <Route
+            path="stats"
+            element={
+              <RequireRole roles={['admin', 'clerk']}>
+                <Stats />
               </RequireRole>
             }
           />

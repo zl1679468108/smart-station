@@ -484,9 +484,9 @@
 
 | ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
 |---|---|---|---|---|---|
-| M26.1 | P2 | 统计后端模块（stats 扩展） | backend/stats | todo | 扩展 stats 模块；GET /api/stats/trend 业务量趋势（日/周/月）；GET /api/stats/funnel 转化漏斗；GET /api/stats/retention 滞留率；GET /api/stats/peak-hours 取件高峰；后端 tsc+build exit 0 |
-| M26.2 | P2 | 统计前端页面 | frontend/pages/admin/stats | todo | 新增 /admin/stats 路由；ECharts 双折线趋势图 + 漏斗图 + 滞留率柱状图 + 高峰热力图；路由守卫 admin+clerk；前端 tsc+build exit 0 |
-| M26.3 | P2 | 端到端验证 | qa | todo | Playwright 验证统计页面渲染 + 图表交互；三端响应式 |
+| M26.1 | P2 | 统计后端模块（stats 扩展） | backend/stats | done | StatsReportService 提供 GET /api/stats/trend（日/周/月分桶）、/funnel（入库→出库→滞留→退回）、/retention（总体+按快递公司）、/peak-hours（8-22 小时+星期分布）；均 StationId 隔离；后端 tsc+build exit 0（2026-07-23） |
+| M26.2 | P2 | 统计前端页面 | frontend/pages/admin/stats | done | 新增 /admin/stats 路由 + 侧栏入口；纯 SVG 图表（双折线趋势 + 粒度切换、水平漏斗、按快递公司滞留率柱状、按小时高峰柱状），与 Dashboard 一致不引入 ECharts；统计窗口 7/30/90 天切换；路由守卫 admin+clerk；前端 tsc+build exit 0（2026-07-23） |
+| M26.3 | P2 | 端到端验证 | qa | done | Playwright stats.spec.ts 7 项：四类图表渲染、SVG、粒度切换、漏斗/滞留率/高峰数据、viewer 路由守卫拦截；全过（2026-07-23） |
 
 > 注：1.2.0 版本号已用于「仓库 3D 布局 + 真实位置取件引导」（M15-M18），1.2.2/1.2.3/1.2.4 用于 3D 体验优化（M20-M23、M27），原计划版本号顺延。2.0.0 连锁多站点管理暂不拆任务。
 
