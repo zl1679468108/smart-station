@@ -7,6 +7,7 @@ import { useAuth } from '@/utils/auth';
 import { canWrite } from '@/utils/permission';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import EmptyState from '@/components/ui/EmptyState';
+import PageHeader from '@/components/ui/PageHeader';
 import Pagination from '@/components/ui/Pagination';
 
 const LEVEL_TABS: { key: '' | OverdueLevel; label: string }[] = [
@@ -98,25 +99,22 @@ const OverduePage: React.FC = () => {
 
   return (
     <div className="w-full space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-800">滞留件管理</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            阈值：预警 {thresholds.warnDays} 天 · 提醒 {thresholds.remindDays} 天 · 退回{' '}
-            {thresholds.returnDays} 天
-          </p>
-        </div>
-        {writable && (
-          <button
-            type="button"
-            onClick={onScan}
-            disabled={scanning}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
-          >
-            {scanning ? '扫描中…' : '立即扫描'}
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="滞留件管理"
+        description={`阈值：预警 ${thresholds.warnDays} 天 · 提醒 ${thresholds.remindDays} 天 · 退回 ${thresholds.returnDays} 天`}
+        actions={
+          writable && (
+            <button
+              type="button"
+              onClick={onScan}
+              disabled={scanning}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
+            >
+              {scanning ? '扫描中…' : '立即扫描'}
+            </button>
+          )
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         {LEVEL_TABS.map((t) => {

@@ -6,6 +6,7 @@ import { useShelves } from '@/hooks/useDictionary';
 import { useDashboard } from '@/hooks/useDashboardData';
 import { useLayoutConfig } from '@/hooks/useSystemAdmin';
 import { useAuth } from '@/utils/auth';
+import PageHeader from '@/components/ui/PageHeader';
 
 const WarehouseScreen = React.lazy(() =>
   import('@/components/warehouse3d').then((m) => ({ default: m.WarehouseScreen })),
@@ -69,19 +70,20 @@ const Dashboard: React.FC = () => {
   if (isEditingLayout) {
     return (
       <div className="w-full space-y-5">
-        <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-          <div>
-            <h1 className="text-lg font-semibold text-gray-800">工作台 · 调整门店布局</h1>
-            <p className="mt-1 text-sm text-gray-500">拖动货架、入口或区域后，统一保存全部改动。</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSearchParams({})}
-            className="border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
-          >
-            返回工作台
-          </button>
-        </div>
+        <PageHeader
+          className="border-b border-gray-200 pb-3"
+          title="工作台 · 调整门店布局"
+          description="拖动货架、入口或区域后，统一保存全部改动。"
+          actions={
+            <button
+              type="button"
+              onClick={() => setSearchParams({})}
+              className="border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              返回工作台
+            </button>
+          }
+        />
         <React.Suspense fallback={<WarehouseFallback height={520} />}>
           <StationLayoutTab />
         </React.Suspense>
@@ -138,28 +140,28 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="w-full space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-800">工作台</h1>
-          <p className="mt-1 text-xs text-gray-500">运营概览与待办处理；数字孪生统一进入全屏大屏查看。</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setSearchParams({ view: 'screen' })}
-            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
-          >
-            数字孪生大屏
-          </button>
-          <button
-            type="button"
-            onClick={() => setSearchParams({ layout: 'edit' })}
-            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            调整布局
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="工作台"
+        description="运营概览与待办处理；数字孪生统一进入全屏大屏查看。"
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => setSearchParams({ view: 'screen' })}
+              className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+            >
+              数字孪生大屏
+            </button>
+            <button
+              type="button"
+              onClick={() => setSearchParams({ layout: 'edit' })}
+              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              调整布局
+            </button>
+          </>
+        }
+      />
 
       {/* 概览卡片 */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

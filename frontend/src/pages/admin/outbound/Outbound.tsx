@@ -12,6 +12,7 @@ import type {
 import Icon from '@/components/ui/Icon';
 import EmptyState from '@/components/ui/EmptyState';
 import Modal from '@/components/ui/Modal';
+import PageHeader from '@/components/ui/PageHeader';
 
 type Tab = 'manual' | 'records';
 type QueryTab = 'phone' | 'tracking' | 'code';
@@ -22,7 +23,7 @@ const Outbound: React.FC = () => {
 
   return (
     <div className="w-full">
-      <h1 className="mb-4 text-lg font-semibold text-gray-800">出库管理</h1>
+      <PageHeader title="出库管理" className="mb-4" />
 
       <div className="mb-4 flex gap-1 border-b border-gray-200">
         {([

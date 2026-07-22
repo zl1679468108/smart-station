@@ -14,6 +14,7 @@ import { canWrite } from '@/utils/permission';
 import { notifyError } from '@/utils/notification';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
+import PageHeader from '@/components/ui/PageHeader';
 import Modal from '@/components/ui/Modal';
 import SearchSelect, { type SearchSelectOption } from '@/components/ui/SearchSelect';
 
@@ -193,21 +194,21 @@ const ExceptionPage: React.FC = () => {
 
   return (
     <div className="w-full space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-800">异常件管理</h1>
-          <p className="mt-1 text-sm text-gray-500">登记、处理丢失/破损/错投等末端异常</p>
-        </div>
-        {writable && (
-          <button
-            type="button"
-            onClick={openCreate}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
-          >
-            登记异常
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="异常件管理"
+        description="登记、处理丢失/破损/错投等末端异常"
+        actions={
+          writable && (
+            <button
+              type="button"
+              onClick={openCreate}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
+            >
+              登记异常
+            </button>
+          )
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <select

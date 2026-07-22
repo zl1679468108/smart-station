@@ -14,6 +14,7 @@ import { notifyError } from '@/utils/notification';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
+import PageHeader from '@/components/ui/PageHeader';
 import type {
   InventoryQuery,
   ParcelListItem,
@@ -215,7 +216,7 @@ const Inventory: React.FC = () => {
 
   return (
     <div className="w-full">
-      <h1 className="mb-4 text-lg font-semibold text-gray-800">库存查询</h1>
+      <PageHeader title="库存查询" className="mb-4" />
 
       {/* 筛选栏 */}
       <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">

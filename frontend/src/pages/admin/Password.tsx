@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import PageHeader from '@/components/ui/PageHeader';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/utils/auth';
 import * as authService from '@/services/auth';
@@ -49,7 +50,7 @@ const Password: React.FC = () => {
 
   return (
     <div className="w-full max-w-md">
-      <h1 className="mb-4 text-lg font-semibold text-gray-800">修改密码</h1>
+      <PageHeader title="修改密码" className="mb-4" />
 
       <section className="rounded-lg border border-gray-200 bg-white p-5">
         <form onSubmit={handleSubmit} className="space-y-4">

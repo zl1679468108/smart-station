@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PageHeader from '@/components/ui/PageHeader';
 import { useAuth } from '@/utils/auth';
 import { notifyError } from '@/utils/notification';
 import * as authService from '@/services/auth';
@@ -46,7 +47,7 @@ const Profile: React.FC = () => {
 
   return (
     <div className="w-full max-w-2xl">
-      <h1 className="mb-4 text-lg font-semibold text-gray-800">个人资料</h1>
+      <PageHeader title="个人资料" className="mb-4" />
 
       <div className="space-y-6">
         {/* 只读信息卡 */}

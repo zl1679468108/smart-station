@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import Icon, { IconName } from '@/components/ui/Icon';
+import PageHeader from '@/components/ui/PageHeader';
 import { useAuth } from '@/utils/auth';
 
 const StationTab = React.lazy(() => import('./tabs/StationTab'));
@@ -58,7 +59,7 @@ const System: React.FC = () => {
 
   return (
     <div className="w-full">
-      <h1 className="mb-4 text-lg font-semibold text-gray-800">系统管理</h1>
+      <PageHeader title="系统管理" className="mb-4" />
 
       {/* Tab 头 */}
       <div className="mb-4 flex gap-1 overflow-x-auto border-b border-gray-200">
