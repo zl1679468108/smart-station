@@ -151,7 +151,7 @@ const Home: React.FC = () => {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="mb-1 block text-sm text-gray-600">手机号</label>
+          <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>手机号</label>
           <input
             type="tel"
             value={phone}
@@ -164,7 +164,7 @@ const Home: React.FC = () => {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm text-gray-600">验证码</label>
+          <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>验证码</label>
           <div className="flex gap-2">
             <input
               ref={codeRef}

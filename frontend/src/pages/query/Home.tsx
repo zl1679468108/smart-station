@@ -259,7 +259,7 @@ const PhoneQueryView: React.FC<{
       </div>
 
       <div>
-        <label className="mb-1 block text-sm text-gray-600">手机号</label>
+        <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>手机号</label>
         <input
           ref={phoneRef}
           type="tel"
@@ -337,7 +337,7 @@ const TrackingQueryView: React.FC<{
         <p className="mt-1 text-xs text-gray-500">输入运单号查询包裹状态</p>
       </div>
       <div>
-        <label className="mb-1 block text-sm text-gray-600">运单号</label>
+        <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>运单号</label>
         <input
           ref={inputRef}
           type="text"
@@ -417,7 +417,7 @@ const CodeQueryView: React.FC<{
         <p className="mt-1 text-xs text-gray-500">输入取件码查询包裹位置</p>
       </div>
       <div>
-        <label className="mb-1 block text-sm text-gray-600">取件码</label>
+        <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>取件码</label>
         <input
           ref={inputRef}
           type="text"

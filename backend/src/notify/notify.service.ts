@@ -69,6 +69,34 @@ export class NotifyService {
    * 通用日志写入：ss_sms_logs
    * status: sent / failed
    */
+  
+  /**
+   * 滞留二次提醒（stub）
+   */
+  async sendOverdueRemind(opts: {
+    stationName: string;
+    phone: string;
+    recipientName?: string | null;
+    days: number;
+    pickupCode?: string;
+    parcelId?: string;
+    stationId?: string;
+  }): Promise<void> {
+    const content = `【${opts.stationName}】您的包裹已到 ${opts.days} 天，即将退回，请立即取件${opts.pickupCode ? `，取件码 ${opts.pickupCode}` : ''}。`;
+    const provider = this.getProvider();
+    // eslint-disable-next-line no-console
+    console.log(`[Notify/${provider}] SMS overdue_remind -> ${opts.phone}: ${content}`);
+    await this.log({
+      phone: opts.phone,
+      recipientName: opts.recipientName,
+      templateCode: 'overdue_remind',
+      content,
+      status: 'sent',
+      parcelId: opts.parcelId,
+      stationId: opts.stationId,
+    });
+  }
+
   private async log(opts: {
     phone: string;
     recipientName?: string | null;

@@ -12,6 +12,9 @@ import { OutboundModule } from './outbound/outbound.module';
 import { KioskModule } from './kiosk/kiosk.module';
 import { StatsModule } from './stats/stats.module';
 import { NotifyModule } from './notify/notify.module';
+import { OverdueModule } from './overdue/overdue.module';
+import { ExceptionModule } from './exception/exception.module';
+import { ScheduleModule } from '@nestjs/schedule';
 import { TokenAuthGuard } from './common/guards/token-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -31,6 +34,7 @@ import { RolesGuard } from './common/guards/roles.guard';
         '.env',
       ],
     }),
+    ScheduleModule.forRoot(),
     // 限流模块：Kiosk 等公开接口按需用 @Throttle 覆盖
     ThrottlerModule.forRoot([
       {
@@ -58,9 +62,10 @@ import { RolesGuard } from './common/guards/roles.guard';
     KioskModule,
     // 统计模块（M7，工作台 Dashboard）
     StatsModule,
-    // TODO: 后续阶段按需导入业务模块：
-    // - OverdueModule     滞留件模块
-    // - ExceptionModule   异常件模块
+    // 滞留件 / 异常件（M24 / 1.3.0）
+    OverdueModule,
+    ExceptionModule,
+    // TODO: 后续阶段按需导入：
     // - ShippingModule    寄件模块
     // - FinanceModule     财务结算模块
   ],

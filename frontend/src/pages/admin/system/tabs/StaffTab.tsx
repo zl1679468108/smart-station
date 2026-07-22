@@ -141,7 +141,7 @@ const StaffTab: React.FC = () => {
         >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm text-gray-600">手机号 *</label>
+              <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>手机号</label>
               <input
                 type="tel"
                 value={newStaff.phone}
@@ -173,7 +173,7 @@ const StaffTab: React.FC = () => {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm text-gray-600">角色</label>
+              <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>角色</label>
               <select
                 value={newStaff.role}
                 onChange={(e) =>

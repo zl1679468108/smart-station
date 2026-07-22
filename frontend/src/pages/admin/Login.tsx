@@ -56,7 +56,7 @@ const Login: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm text-gray-600">账号</label>
+            <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>账号</label>
             <input
               type="text"
               value={account}
@@ -68,7 +68,7 @@ const Login: React.FC = () => {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-gray-600">密码</label>
+            <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>密码</label>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}

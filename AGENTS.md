@@ -137,7 +137,7 @@ backend/
     stats/                统计模块（工作台 Dashboard）
     admin/                系统管理模块
     notify/               通知模块（短信 stub，SMS_PROVIDER 可切换）
-    # 未实现（见 docs/TASKS.md M24-M26）：overdue / exception / shipping / finance
+    # 已实现 M24 overdue/exception；未实现（见 TASKS M25-M26）：shipping / finance / stats 扩展
     supabase/             Supabase 客户端
     common/               公共模块（interceptors / filters / pipes / guards / decorators）
 
@@ -210,7 +210,7 @@ scripts/                  部署脚本
 
 ## 7. Backend（NestJS）规则
 
-- 模块（已实现）：Auth、Inbound、Inventory、Outbound、Kiosk、Stats、Admin、Notify、Health。`SupabaseModule` 为 `@Global()`。未实现：Overdue、Exception、Shipping、Finance（见 TASKS M24–M26）。
+- 模块（已实现）：Auth、Inbound、Inventory、Outbound、Kiosk、Stats、Admin、Notify、Health、Overdue、Exception。`SupabaseModule` 为 `@Global()`。未实现：Shipping、Finance、独立 Stats 扩展（见 TASKS M25–M26）。
 - REST API 基础路径为 `/api`。
 - 每个模块保持三件套：`controller`、`service`、`module`。
 - 全局中间件：

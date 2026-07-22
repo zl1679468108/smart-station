@@ -456,14 +456,18 @@
 
 ### 1.3.0 滞留件 + 异常件管理（强必要）
 
+> 规格见 PRD §4.7 / §4.8（1.3.0 已细化 API、级别算法、`ss_exceptions` 表与页面交互）。  
+> 阈值复用 `ss_stations.overdue_*_days`；滞留列表基于 `ss_parcels` 计算级别。
+
 | ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
 |---|---|---|---|---|---|
-| M24.1 | P0 | 滞留件后端模块（overdue） | backend/overdue | todo | 新增 overdue 模块；GET /api/overdue/list 按超期级别筛选；POST /api/overdue/scan 手动触发扫描；POST /api/overdue/:id/return 标记退回；每天 09:00 定时任务自动扫描（cron）；后端 tsc+build exit 0 |
-| M24.2 | P0 | 滞留件前端页面 | frontend/pages/admin/overdue | todo | 新增 /admin/overdue 路由；列表按超期级别（预警黄/提醒橙/退回红）分色展示；支持标记退回流程（待退回→退回中→已退回）；路由守卫 admin+clerk；前端 tsc+build exit 0 |
-| M24.3 | P0 | 异常件后端模块（exception） | backend/exception | todo | 新增 exception 模块；GET /api/exception/list；POST /api/exception 登记异常（类型/描述/责任人/附件）；PATCH /api/exception/:id 处理（赔偿/退回/销毁/重新投递）；附件上传到 Supabase Storage；后端 tsc+build exit 0 |
-| M24.4 | P0 | 异常件前端页面 | frontend/pages/admin/exception | todo | 新增 /admin/exception 路由；列表 + 登记表单 + 处理操作；状态轨迹展示（登记→处理中→已解决/已赔偿）；路由守卫 admin+clerk；前端 tsc+build exit 0 |
-| M24.5 | P1 | Dashboard 接入滞留/异常真实数据 | frontend+backend | todo | Dashboard 概览卡片「滞留件」「异常件未处理」点击跳转对应列表页（替代当前 mock 跳库存的逻辑） |
-| M24.6 | P1 | 端到端验证 | qa | todo | Playwright 验证滞留件扫描+退回流程、异常件登记+处理流程；三端响应式 |
+| M24.0 | P0 | DDL：`ss_exceptions` + 事件类型确认 | docs/database-init.sql | done | 新增异常件表与索引；注释说明；提醒用户在 Supabase SQL Editor 手动执行 |
+| M24.1 | P0 | 滞留件后端模块（overdue） | backend/overdue | done | 模块三件套；GET /api/overdue；POST /api/overdue/scan；POST /api/overdue/:id/return；@nestjs/schedule 每天 09:00 Asia/Shanghai 扫描全站；后端 tsc+build exit 0 |
+| M24.2 | P0 | 滞留件前端页面 | frontend/pages/admin/overdue | done | /admin/overdue；级别 Tab+搜索+扫描；分色列表；退回 start/complete；侧栏入口；admin+clerk 写 / viewer 读；前端 tsc+build exit 0 |
+| M24.3 | P0 | 异常件后端模块（exception） | backend/exception | done | GET/POST/PATCH /api/exception；登记写 ss_exceptions + parcel=exception + 事件；处理更新状态/resolution；attachments 为 URL 数组≤5；后端 tsc+build exit 0 |
+| M24.4 | P0 | 异常件前端页面 | frontend/pages/admin/exception | done | /admin/exception；列表筛选+登记表单+处理弹窗；侧栏入口；前端 tsc+build exit 0 |
+| M24.5 | P1 | Dashboard / 大屏跳转真实列表 | frontend | done | 工作台与大屏待办点击跳转 `/admin/overdue`、`/admin/exception`（不再仅跳 inventory status） |
+| M24.6 | P1 | 端到端验证 | qa | todo | Playwright：扫描后列表出现级别、退回完成、异常登记与处理；tsc/build 双端 exit 0 |
 
 ### 1.4.0 寄件管理 + 财务结算（必要）
 

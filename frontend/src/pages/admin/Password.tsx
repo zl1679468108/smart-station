@@ -54,7 +54,7 @@ const Password: React.FC = () => {
       <section className="rounded-lg border border-gray-200 bg-white p-5">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm text-gray-600">旧密码</label>
+            <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>旧密码</label>
             <input
               type="password"
               value={oldPassword}
@@ -65,7 +65,7 @@ const Password: React.FC = () => {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-gray-600">新密码</label>
+            <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>新密码</label>
             <input
               type="password"
               value={newPassword}
@@ -77,7 +77,7 @@ const Password: React.FC = () => {
             <p className="mt-1 text-xs text-gray-400">8-32 位，需含字母和数字</p>
           </div>
           <div>
-            <label className="mb-1 block text-sm text-gray-600">确认新密码</label>
+            <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>确认新密码</label>
             <input
               type="password"
               value={confirmPassword}

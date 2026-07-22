@@ -70,7 +70,7 @@ const SizeSelector: React.FC<{
   });
   return (
     <div>
-      <label className="mb-1 block text-sm text-gray-600">包裹大小 *</label>
+      <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>包裹大小</label>
       <div className="flex gap-2">
         {options.map((opt) => (
           <button
@@ -187,7 +187,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     <div className="space-y-4">
       <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-gray-200 bg-white p-5">
         <div>
-          <label className="mb-1 block text-sm text-gray-600">运单号（扫码）</label>
+          <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>运单号（扫码）</label>
           <input
             ref={inputRef}
             type="text"
@@ -200,7 +200,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm text-gray-600">收件人姓名</label>
+            <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>收件人姓名</label>
             <input
               type="text"
               value={recipientName}
@@ -210,7 +210,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-gray-600">收件人手机号</label>
+            <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>收件人手机号</label>
             <input
               type="tel"
               value={recipientPhone}
@@ -320,7 +320,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-gray-200 bg-white p-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm text-gray-600">运单号 *</label>
+            <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>运单号</label>
             <input
               type="text"
               value={form.trackingNumber}
@@ -346,7 +346,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm text-gray-600">收件人姓名 *</label>
+            <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>收件人姓名</label>
             <input
               type="text"
               value={form.recipientName}
@@ -356,7 +356,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-gray-600">收件人手机号 *</label>
+            <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>收件人手机号</label>
             <input
               type="tel"
               value={form.recipientPhone}

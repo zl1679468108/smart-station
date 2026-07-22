@@ -11,6 +11,7 @@ import type {
 } from '@/types/outbound';
 import Icon from '@/components/ui/Icon';
 import EmptyState from '@/components/ui/EmptyState';
+import Modal from '@/components/ui/Modal';
 
 type Tab = 'manual' | 'records';
 type QueryTab = 'phone' | 'tracking' | 'code';
@@ -166,7 +167,7 @@ const PhoneSearchView: React.FC<{
   return (
     <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-gray-200 bg-white p-5">
       <div>
-        <label className="mb-1 block text-sm text-gray-600">手机号</label>
+        <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>手机号</label>
         <input
           type="tel"
           value={phone}
@@ -216,7 +217,7 @@ const TrackingSearchView: React.FC<{
   return (
     <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-gray-200 bg-white p-5">
       <div>
-        <label className="mb-1 block text-sm text-gray-600">运单号</label>
+        <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>运单号</label>
         <input
           type="text"
           value={trackingNumber}
@@ -266,7 +267,7 @@ const CodeSearchView: React.FC<{
   return (
     <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-gray-200 bg-white p-5">
       <div>
-        <label className="mb-1 block text-sm text-gray-600">取件码</label>
+        <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>取件码</label>
         <input
           type="text"
           value={code}
@@ -353,19 +354,20 @@ const ConfirmDialog: React.FC<{
   onConfirm: () => void;
   onCancel: () => void;
 }> = ({ item, onConfirm, onCancel }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-    <div className="mx-4 w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
-      <div className="mb-4 flex items-center gap-2">
+  <Modal
+    open
+    onClose={onCancel}
+    widthClassName="max-w-sm"
+    title={
+      <span className="flex items-center gap-2">
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primaryLight text-primary">
           <Icon name="outbound" size={18} />
         </span>
-        <h3 className="text-base font-medium text-gray-800">确认出库</h3>
-      </div>
-      <p className="mb-4 text-sm text-gray-600">
-        确认将运单号 <span className="font-medium text-gray-800">{item.trackingNumber}</span>{' '}
-        （收件人：{item.recipientName}）的包裹标记为已出库？
-      </p>
-      <div className="flex gap-3">
+        确认出库
+      </span>
+    }
+    footer={
+      <>
         <button
           onClick={onCancel}
           className="flex-1 rounded-md border border-gray-300 py-2 text-sm text-gray-600 hover:bg-gray-50"
@@ -378,9 +380,14 @@ const ConfirmDialog: React.FC<{
         >
           确认出库
         </button>
-      </div>
-    </div>
-  </div>
+      </>
+    }
+  >
+    <p className="text-sm text-gray-600">
+      确认将运单号 <span className="font-medium text-gray-800">{item.trackingNumber}</span>{' '}
+      （收件人：{item.recipientName}）的包裹标记为已出库？
+    </p>
+  </Modal>
 );
 
 // ============ 出库记录列表 ============

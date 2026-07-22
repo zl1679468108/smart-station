@@ -13,6 +13,7 @@ import { canWrite } from '@/utils/permission';
 import { notifyError } from '@/utils/notification';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
+import Modal from '@/components/ui/Modal';
 import type {
   InventoryQuery,
   ParcelListItem,
@@ -417,48 +418,55 @@ const Inventory: React.FC = () => {
       )}
 
       {/* 批量标记异常弹窗（仅 admin/clerk 可触发） */}
-      {writable && showBatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
-            <h3 className="mb-3 text-base font-medium text-gray-800">
-              批量标记异常（{selected.size} 项）
-            </h3>
-            <textarea
-              value={batchReason}
-              onChange={(e) => setBatchReason(e.target.value)}
-              rows={3}
-              placeholder="请输入异常原因"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+      <Modal
+        open={writable && showBatch}
+        onClose={() => {
+          setShowBatch(false);
+          setBatchReason('');
+          setBatchResult(null);
+        }}
+        title={`批量标记异常（${selected.size} 项）`}
+        closeOnBackdrop={!batchSubmitting}
+        footer={
+          <>
+            <button
+              onClick={() => {
+                setShowBatch(false);
+                setBatchReason('');
+                setBatchResult(null);
+              }}
               disabled={batchSubmitting}
-            />
-            {batchResult && (
-              <div className="mt-3 rounded-md bg-success/10 px-3 py-2 text-sm text-success">
-                已更新 {batchResult.updated} 项，跳过 {batchResult.skipped} 项（非在库/滞留状态）
-              </div>
-            )}
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  setShowBatch(false);
-                  setBatchReason('');
-                  setBatchResult(null);
-                }}
-                disabled={batchSubmitting}
-                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleBatchException}
-                disabled={batchSubmitting}
-                className="rounded-md bg-warning px-3 py-1.5 text-sm text-white hover:bg-warning/90 disabled:opacity-60"
-              >
-                {batchSubmitting ? '提交中...' : '确认标记'}
-              </button>
-            </div>
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleBatchException}
+              disabled={batchSubmitting}
+              className="rounded-md bg-warning px-3 py-1.5 text-sm text-white hover:bg-warning/90 disabled:opacity-60"
+            >
+              {batchSubmitting ? '提交中...' : '确认标记'}
+            </button>
+          </>
+        }
+      >
+        <label className="mb-1 block text-sm text-gray-600">
+          <span className="mr-0.5 text-danger">*</span>异常原因
+        </label>
+        <textarea
+          value={batchReason}
+          onChange={(e) => setBatchReason(e.target.value)}
+          rows={3}
+          placeholder="请输入异常原因"
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+          disabled={batchSubmitting}
+        />
+        {batchResult && (
+          <div className="rounded-md bg-success/10 px-3 py-2 text-sm text-success">
+            已更新 {batchResult.updated} 项，跳过 {batchResult.skipped} 项（非在库/滞留状态）
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 };

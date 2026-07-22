@@ -84,7 +84,7 @@ const Profile: React.FC = () => {
           <h2 className="mb-4 text-sm font-medium text-gray-700">编辑资料</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="mb-1 block text-sm text-gray-600">用户名</label>
+              <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>用户名</label>
               <input
                 type="text"
                 value={username}

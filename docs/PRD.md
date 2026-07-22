@@ -353,46 +353,118 @@ smart-station
 
 ### 4.7 滞留件管理
 
-**路由**：`/admin/overdue`
+**路由**：`/admin/overdue`  
+**权限**：admin + clerk（viewer 只读列表）  
+**版本**：1.3.0（TASKS M24）
 
-#### 4.7.1 超期规则
-| 超期天数 | 级别 | 动作 |
-|----------|------|------|
-| 3 天 | 预警 | 状态置黄，列表标记 |
-| 7 天 | 提醒 | 状态置橙，自动发短信二次提醒 |
-| 15 天 | 退回 | 状态置红，标记待退回 |
+#### 4.7.1 业务目标
+- 货架周转：识别超期在库件，分级提醒与退回，避免长期占架。
+- 与现有数据复用：阈值来自 `ss_stations.overdue_*_days`；列表主体是 `ss_parcels`，不强制独立规则表。
 
-> 阈值可在系统设置中按驿站调整。
+#### 4.7.2 超期级别（按入库日起算，取整自然日）
+| 级别 | 条件（默认阈值） | 列表色 | 系统动作 |
+|------|------------------|--------|----------|
+| `warn` 预警 | 天数 ≥ `overdue_warn_days`（3）且 < remind | 黄 | 标记列表；首次达到时写 `overdue_warn` 事件；包裹 `status` 可保持 `in_stock` 或置 `overdue` |
+| `remind` 提醒 | 天数 ≥ `overdue_remind_days`（7）且 < return | 橙 | 写 `overdue_remind` 事件；触发短信 stub（`overdue_remind` 模板） |
+| `return` 待退回 | 天数 ≥ `overdue_return_days`（15） | 红 | 列表高亮「待退回」；引导人工退回流程 |
 
-#### 4.7.2 自动任务
-- 每天 09:00 扫描全部在库包裹
-- 按超期天数触发对应级别动作
-- 任务执行结果写入日志
+> 阈值可在系统设置按驿站调整（已有字段）。扫描任务将达到 warn 及以上且仍为 `in_stock` 的包裹批量更新为 `status=overdue`。
 
-#### 4.7.3 退回流程
-1. 工作人员标记「待退回」包裹为「退回中」
-2. 生成退回单（含退回快递公司、运单号）
-3. 等待快递员取走后标记「已退回」
-4. 包裹状态置 `returned`
+#### 4.7.3 退回子状态（`return_stage`）
+存在于列表计算字段 / 事件轨迹，不新增 parcel 列亦可：
+1. `none`：未进入退回
+2. `pending`：达到 return 级别或人工点「标记待退回」
+3. `returning`：已生成退回意图，等待快递员取走
+4. `returned`：完成退回 → 包裹 `status=returned`，写 `return_complete` 事件
+
+**人工操作**：
+- `POST /api/overdue/:id/return` body `{ action: 'start' | 'complete', note? }`
+  - `start`：`return_start` 事件，返回退回摘要（运单号、快递公司、取件码）
+  - `complete`：状态 `returned`，清空占用（不强制清 shelf 字段，保留历史位置）
+
+#### 4.7.4 自动扫描
+- **定时**：每天 **09:00 北京时间**（服务端 cron，时区 `Asia/Shanghai`）
+- **手动**：`POST /api/overdue/scan`（admin+clerk）
+- **逻辑**（单驿站维度，定时任务遍历活跃驿站）：
+  1. 读取驿站阈值
+  2. 查询 `status IN ('in_stock','overdue')` 且有 `inbound_at` 的包裹
+  3. 计算 `days = floor((now - inbound_at) / 1d)`
+  4. 升级：`in_stock` → `overdue`（若 days ≥ warn）
+  5. 事件防重：同 parcel 同 `event_type` 在「当前超期周期」内不重复写（以是否已有该事件为准）
+  6. remind 级触发短信 stub（失败不阻断扫描）
+- **返回**：`{ scanned, markedOverdue, warned, reminded, returnCandidates }`
+
+#### 4.7.5 API
+| 方法 | 路径 | 权限 | 说明 |
+|------|------|------|------|
+| GET | `/api/overdue` | Token | 分页列表；query：`level=warn\|remind\|return`、`page`、`pageSize`、`keyword`(手机尾号/运单/取件码) |
+| POST | `/api/overdue/scan` | admin+clerk | 手动扫描当前驿站 |
+| POST | `/api/overdue/:id/return` | admin+clerk | 退回 start/complete |
+
+列表项字段：`id, trackingNumber, pickupCode, recipientName, recipientPhone, inboundAt, days, level, returnStage, status, shelf, courier`
+
+#### 4.7.6 前端页面
+- 顶部：级别 Tab（全部 / 预警 / 提醒 / 待退回）+ 关键字搜索 +「立即扫描」按钮
+- 表格分色：黄/橙/红左边框或徽章
+- 行操作：进入退回（start）/ 完成退回（complete）；详情可跳库存详情
+- 工作台「滞留」卡片 → `/admin/overdue`；大屏待办同理
+- 响应式：PC 表格式；平板卡片列表
 
 ---
 
 ### 4.8 异常件管理
 
-**路由**：`/admin/exception`
+**路由**：`/admin/exception`  
+**权限**：登记/处理 admin+clerk；列表 admin+clerk+viewer 只读  
+**版本**：1.3.0（TASKS M24）
 
-#### 4.8.1 异常类型
-- 丢失、破损、地址错误、收件人拒收、其他
+#### 4.8.1 业务目标
+- 对丢失、破损、错投等末端问题登记定责，保留轨迹与处理结果。
+- 与库存「批量标记异常」对齐：登记成功后包裹 `status=exception`。
 
-#### 4.8.2 登记字段
-- 包裹 ID、异常类型、描述、责任人、附件照片（最多 5 张）
+#### 4.8.2 数据模型 `ss_exceptions`
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | uuid PK | |
+| station_id | uuid | 驿站隔离 |
+| parcel_id | uuid | 关联包裹 |
+| type | varchar | `lost` / `damaged` / `wrong_address` / `refused` / `other` |
+| description | text | 描述 |
+| responsible_user_id | uuid? | 责任人（员工） |
+| status | varchar | `registered` → `processing` → `resolved` / `compensated` |
+| resolution | varchar? | `compensate` / `return` / `destroy` / `redeliver` |
+| resolution_note | text? | 处理说明 |
+| attachments | jsonb | 图片 URL 数组，最多 5 |
+| created_by | uuid | 登记人 |
+| created_at / updated_at / resolved_at | timestamptz | |
 
-#### 4.8.3 状态轨迹
-- 登记 → 处理中 → 已解决 / 已赔偿
+索引：`(station_id, status)`、`(station_id, created_at desc)`、`parcel_id`
 
-#### 4.8.4 处理方式
-- 赔偿、退回、销毁、重新投递
-- 处理完成后包裹状态同步更新
+#### 4.8.3 异常类型与处理方式
+- 类型：丢失、破损、地址错误、收件人拒收、其他
+- 处理：赔偿、退回、销毁、重新投递
+- 状态机：
+  - 登记 → `registered`（同步 parcel=`exception`，事件 `exception_register`）
+  - 开始处理 → `processing`
+  - 结案 → `resolved` 或 `compensated`（事件 `exception_resolve`；若 resolution=`return` 可将 parcel 置 `returned`）
+
+#### 4.8.4 API
+| 方法 | 路径 | 权限 | 说明 |
+|------|------|------|------|
+| GET | `/api/exception` | Token | 分页；query：`status`、`type`、`page`、`pageSize`、`keyword` |
+| GET | `/api/exception/:id` | Token | 详情 + 关联包裹摘要 |
+| POST | `/api/exception` | admin+clerk | 登记；body：parcelId, type, description, responsibleUserId?, attachments? |
+| PATCH | `/api/exception/:id` | admin+clerk | 处理；body：status?, resolution?, resolutionNote? |
+| POST | `/api/inventory/batch-exception` | admin+clerk | **已有**快捷批量异常；1.3.0 起可同时写入 `ss_exceptions`（type=other） |
+
+附件：1.3.0 接受已上传 URL 列表（≤5）；完整 Storage 上传可复用后续统一上传组件。
+
+#### 4.8.5 前端页面
+- 列表：状态/类型筛选 + 关键字；展示类型、包裹运单、登记时间、状态
+- 登记：选择在库/滞留包裹（可运单搜索）+ 类型 + 描述 + 可选责任人
+- 处理抽屉/弹窗：选处理方式与说明，更新状态
+- 工作台「异常」卡片 → `/admin/exception?status=registered,processing`
+- 侧栏菜单增加「滞留件」「异常件」（admin+clerk；viewer 可见只读）
 
 ---
 
@@ -742,7 +814,7 @@ smart-station
 | 1.1.0 | 用户自助查询门户（/query + 常驻虚拟键盘 + 取件码查询）、人工辅助出库改造、版本说明 | **已交付** |
 | 1.2.0–1.2.7 | 门店 3D 布局/寻路/工作台数字孪生与体验优化 | **已交付** |
 | 1.2.8 | 稳定性与安全硬化（库存深链、自助出库限流、查件驿站隔离、文档对齐） | **已交付** |
-| 1.3.0 | 滞留件自动化 + 异常件完整流程 | 规划中（TASKS M24） |
+| 1.3.0 | 滞留件自动化 + 异常件完整流程 | 开发中（TASKS M24，待 DB 同步与 e2e） |
 | 1.4.0 | 寄件管理 + 财务结算 | 规划中（TASKS M25） |
 | 1.5.0 | 数据统计 + 报表 | 规划中（TASKS M26，可降级） |
 | 2.0.0 | 连锁多站点管理 | 预留 |

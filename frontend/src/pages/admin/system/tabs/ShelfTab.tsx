@@ -135,7 +135,7 @@ const ShelfTab: React.FC = () => {
         >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm text-gray-600">货架号 *</label>
+              <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>货架号</label>
               <input
                 type="number"
                 min={1}
@@ -147,7 +147,7 @@ const ShelfTab: React.FC = () => {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm text-gray-600">大小类型 *</label>
+              <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>大小类型</label>
               <select
                 value={newShelf.sizeType}
                 onChange={(e) => setNewShelf({ ...newShelf, sizeType: e.target.value as ShelfSizeType })}

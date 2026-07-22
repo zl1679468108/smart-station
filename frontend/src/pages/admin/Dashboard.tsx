@@ -60,7 +60,7 @@ const Dashboard: React.FC = () => {
           layoutConfig={layoutConfig}
           layoutLoading={layoutLoading}
           onExit={() => setSearchParams({})}
-          onTodoClick={(type) => navigate(`/admin/inventory?status=${type}`)}
+          onTodoClick={(type) => navigate(type === 'overdue' ? '/admin/overdue' : '/admin/exception')}
         />
       </React.Suspense>
     );
@@ -125,14 +125,14 @@ const Dashboard: React.FC = () => {
       value: today.overdue,
       color: 'text-warning',
       bg: 'bg-warning/10',
-      href: '/admin/inventory?status=overdue',
+      href: '/admin/overdue',
     },
     {
       label: '当前异常',
       value: today.exception,
       color: 'text-danger',
       bg: 'bg-danger/10',
-      href: '/admin/inventory?status=exception',
+      href: '/admin/exception',
     },
   ];
 
@@ -222,7 +222,7 @@ const Dashboard: React.FC = () => {
           <div className="space-y-3">
             <button
               type="button"
-              onClick={() => navigate('/admin/inventory?status=overdue')}
+              onClick={() => navigate('/admin/overdue')}
               className="flex w-full flex-col rounded-md bg-warning/5 px-3 py-3 text-left hover:bg-warning/10"
             >
               <div className="flex w-full items-center justify-between">
@@ -237,7 +237,7 @@ const Dashboard: React.FC = () => {
             </button>
             <button
               type="button"
-              onClick={() => navigate('/admin/inventory?status=exception')}
+              onClick={() => navigate('/admin/exception')}
               className="flex w-full flex-col rounded-md bg-danger/5 px-3 py-3 text-left hover:bg-danger/10"
             >
               <div className="flex w-full items-center justify-between">

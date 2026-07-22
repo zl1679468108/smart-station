@@ -118,7 +118,7 @@ const CourierTab: React.FC = () => {
         >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm text-gray-600">名称 *</label>
+              <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>名称</label>
               <input
                 type="text"
                 value={newCourier.name}
@@ -129,7 +129,7 @@ const CourierTab: React.FC = () => {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm text-gray-600">代码 *</label>
+              <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>代码</label>
               <input
                 type="text"
                 value={newCourier.code}
