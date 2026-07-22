@@ -137,7 +137,9 @@ backend/
     stats/                统计模块（工作台 Dashboard）
     admin/                系统管理模块
     notify/               通知模块（短信 stub，SMS_PROVIDER 可切换）
-    # 已实现 M24 overdue/exception；未实现（见 TASKS M25-M26）：shipping / finance / stats 扩展
+    shipping/             寄件模块（寄件单 + 运费试算 + 地址簿）
+    finance/              财务结算模块（费率 + 月结账单 + 对账 + CSV 导出）
+    # 已实现 M24 overdue/exception、M25 shipping/finance；未实现（见 TASKS M26）：独立 stats 报表扩展
     supabase/             Supabase 客户端
     common/               公共模块（interceptors / filters / pipes / guards / decorators）
 
@@ -207,10 +209,12 @@ scripts/                  部署脚本
 - 响应式断点：`sm: 768px`（H5/平板分界）/ `lg: 1200px`（平板/PC 分界）。移动端优先样式，向上适配。
 - 环境变量前缀：`VITE_`（Vite 约定）。
 - 构建工具：Vite 5+。
+- 页面布局留白：页面根节点只用 `w-full`（列表页配 `space-y-4`，表单页可加 `max-w-*` 限宽），四周留白统一由布局层 `page-layout-main` 提供（12/16/20px 三档断点）。**禁止**在页面根节点再叠 `p-*` / `mx-auto max-w-* 居中`，否则会造成双重内边距。
+- 页面标题：所有 admin 页面标题一律用 `PageHeader`（`src/components/ui/PageHeader.tsx`），统一字号/颜色（`text-lg font-semibold text-gray-800`）与「标题 + 描述 + 右侧操作」布局。紧邻内容需要间距时传 `className="mb-4"`，根节点已用 `space-y-*` 则不用传。不要在页面里手写 `<h1>` 标题。
 
 ## 7. Backend（NestJS）规则
 
-- 模块（已实现）：Auth、Inbound、Inventory、Outbound、Kiosk、Stats、Admin、Notify、Health、Overdue、Exception。`SupabaseModule` 为 `@Global()`。未实现：Shipping、Finance、独立 Stats 扩展（见 TASKS M25–M26）。
+- 模块（已实现）：Auth、Inbound、Inventory、Outbound、Kiosk、Stats、Admin、Notify、Health、Overdue、Exception、Shipping、Finance。`SupabaseModule` 为 `@Global()`。未实现：独立 Stats 报表扩展（见 TASKS M26）。
 - REST API 基础路径为 `/api`。
 - 每个模块保持三件套：`controller`、`service`、`module`。
 - 全局中间件：

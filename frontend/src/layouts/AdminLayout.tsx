@@ -19,6 +19,8 @@ const menuItems: { path: string; label: string; icon: IconName; roles: Role[] }[
   { path: '/admin/outbound', label: '出库管理', icon: 'outbound', roles: ['admin', 'clerk'] },
   { path: '/admin/overdue', label: '滞留件', icon: 'clock', roles: ['admin', 'clerk', 'viewer'] },
   { path: '/admin/exception', label: '异常件', icon: 'alert', roles: ['admin', 'clerk', 'viewer'] },
+  { path: '/admin/shipping', label: '寄件管理', icon: 'send', roles: ['admin', 'clerk'] },
+  { path: '/admin/finance', label: '财务结算', icon: 'wallet', roles: ['admin', 'clerk'] },
   { path: '/admin/system', label: '系统管理', icon: 'settings', roles: ['admin', 'clerk'] },
 ];
 

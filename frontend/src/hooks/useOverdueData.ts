@@ -5,6 +5,7 @@ import type { OverdueLevel, OverdueListResult } from '@/types/overdue';
 
 const OVERDUE_LIST_STALE_TIME = 1000 * 30;
 const OVERDUE_LIST_GC_TIME = 1000 * 60 * 5;
+const OVERDUE_LIST_REFETCH_INTERVAL = 1000 * 60;
 
 export const OVERDUE_LIST_KEY = ['overdue-list'] as const;
 
@@ -37,6 +38,7 @@ export function useOverdueList(query: OverdueListQuery) {
     enabled: Boolean(currentStationId),
     staleTime: OVERDUE_LIST_STALE_TIME,
     gcTime: OVERDUE_LIST_GC_TIME,
+    refetchInterval: OVERDUE_LIST_REFETCH_INTERVAL,
   });
 }
 

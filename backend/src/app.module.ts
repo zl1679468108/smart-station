@@ -14,6 +14,8 @@ import { StatsModule } from './stats/stats.module';
 import { NotifyModule } from './notify/notify.module';
 import { OverdueModule } from './overdue/overdue.module';
 import { ExceptionModule } from './exception/exception.module';
+import { ShippingModule } from './shipping/shipping.module';
+import { FinanceModule } from './finance/finance.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TokenAuthGuard } from './common/guards/token-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -65,9 +67,10 @@ import { RolesGuard } from './common/guards/roles.guard';
     // 滞留件 / 异常件（M24 / 1.3.0）
     OverdueModule,
     ExceptionModule,
-    // TODO: 后续阶段按需导入：
-    // - ShippingModule    寄件模块
-    // - FinanceModule     财务结算模块
+    // 寄件管理 + 地址簿（M25 / 1.4.0）
+    ShippingModule,
+    // 财务结算模块（M25 / 1.4.0）
+    FinanceModule,
   ],
   providers: [
     // 全局守卫：默认所有路由需登录，标记 @Public() 的放行

@@ -5,6 +5,7 @@ import type { ExceptionListResult, ExceptionStatus, ExceptionType } from '@/type
 
 const EXCEPTION_LIST_STALE_TIME = 1000 * 30;
 const EXCEPTION_LIST_GC_TIME = 1000 * 60 * 5;
+const EXCEPTION_LIST_REFETCH_INTERVAL = 1000 * 60;
 
 export const EXCEPTION_LIST_KEY = ['exception-list'] as const;
 
@@ -39,6 +40,7 @@ export function useExceptionList(query: ExceptionListQuery) {
     enabled: Boolean(currentStationId),
     staleTime: EXCEPTION_LIST_STALE_TIME,
     gcTime: EXCEPTION_LIST_GC_TIME,
+    refetchInterval: EXCEPTION_LIST_REFETCH_INTERVAL,
   });
 }
 

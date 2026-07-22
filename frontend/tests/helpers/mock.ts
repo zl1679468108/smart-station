@@ -193,6 +193,136 @@ export const EXCEPTION_ITEMS = [
   },
 ];
 
+export const SHIPPINGS = [
+  {
+    id: 'sp-001',
+    shippingNo: 'JJ20260715000001',
+    pickupType: 'in_store' as const,
+    pickupTime: null,
+    pickupAddress: null,
+    senderName: '张三',
+    senderPhone: '13800001234',
+    senderAddress: '北京市朝阳区测试路 1 号',
+    receiverName: '李四',
+    receiverPhone: '13900005678',
+    receiverAddress: '上海市浦东新区示范街 2 号',
+    itemType: '文件',
+    weight: 1,
+    insuredAmount: 0,
+    freight: 12,
+    status: 'pending' as const,
+    note: null,
+    createdAt: '2026-07-15 10:00:00.000',
+    updatedAt: '2026-07-15 10:00:00.000',
+    courierCompanyId: 'c-001',
+    courier: { id: 'c-001', name: '顺丰速运', code: 'SF' },
+  },
+  {
+    id: 'sp-002',
+    shippingNo: 'JJ20260716000002',
+    pickupType: 'door' as const,
+    pickupTime: '2026-07-17 14:00:00.000',
+    pickupAddress: '北京市海淀区上门路 8 号',
+    senderName: '王五',
+    senderPhone: '13700009876',
+    senderAddress: '北京市海淀区上门路 8 号',
+    receiverName: '赵六',
+    receiverPhone: '13600001111',
+    receiverAddress: '广州市天河区收货巷 3 号',
+    itemType: '数码产品',
+    weight: 3,
+    insuredAmount: 2000,
+    freight: 26,
+    status: 'picked' as const,
+    note: null,
+    createdAt: '2026-07-16 09:00:00.000',
+    updatedAt: '2026-07-16 09:30:00.000',
+    courierCompanyId: 'c-002',
+    courier: { id: 'c-002', name: '中通快递', code: 'ZTO' },
+  },
+];
+
+export const ADDRESSES = [
+  {
+    id: 'ad-001',
+    role: 'sender' as const,
+    name: '张三',
+    phone: '13800001234',
+    address: '北京市朝阳区测试路 1 号',
+    tag: 'company' as const,
+    createdAt: '2026-07-01 00:00:00.000',
+    updatedAt: '2026-07-01 00:00:00.000',
+  },
+  {
+    id: 'ad-002',
+    role: 'receiver' as const,
+    name: '李四',
+    phone: '13900005678',
+    address: '上海市浦东新区示范街 2 号',
+    tag: 'home' as const,
+    createdAt: '2026-07-02 00:00:00.000',
+    updatedAt: '2026-07-02 00:00:00.000',
+  },
+];
+
+export const RATES = [
+  {
+    id: 'rate-001',
+    courierCompanyId: 'c-001',
+    courier: { id: 'c-001', name: '顺丰速运', code: 'SF' },
+    effectiveMonth: '2026-07',
+    firstWeightPrice: 12,
+    additionalPrice: 2,
+    firstWeightKg: 1,
+    collectRate: 0.8,
+    deliverRate: 0.5,
+    insureRate: 0.005,
+    createdAt: '2026-07-01 00:00:00.000',
+    updatedAt: '2026-07-01 00:00:00.000',
+  },
+];
+
+export const BILLS = [
+  {
+    id: 'bill-001',
+    courierCompanyId: 'c-001',
+    courier: { id: 'c-001', name: '顺丰速运', code: 'SF' },
+    billMonth: '2026-06',
+    collectCount: 120,
+    deliverCount: 110,
+    shippingCount: 8,
+    receivable: 151,
+    payable: 96,
+    netAmount: 55,
+    status: 'unreconciled' as const,
+    reconciledAmount: null,
+    reconciledNote: null,
+    generatedAt: '2026-07-01 03:00:00.000',
+    reconciledAt: null,
+    createdAt: '2026-07-01 03:00:00.000',
+    updatedAt: '2026-07-01 03:00:00.000',
+  },
+  {
+    id: 'bill-002',
+    courierCompanyId: 'c-002',
+    courier: { id: 'c-002', name: '中通快递', code: 'ZTO' },
+    billMonth: '2026-06',
+    collectCount: 90,
+    deliverCount: 85,
+    shippingCount: 5,
+    receivable: 100,
+    payable: 60,
+    netAmount: 40,
+    status: 'reconciled' as const,
+    reconciledAmount: 40,
+    reconciledNote: '对账一致',
+    generatedAt: '2026-07-01 03:00:00.000',
+    reconciledAt: '2026-07-03 10:00:00.000',
+    createdAt: '2026-07-01 03:00:00.000',
+    updatedAt: '2026-07-03 10:00:00.000',
+  },
+];
+
 export const DASHBOARD_DATA = {
   today: { inbound: 12, outbound: 8, inStock: 56, overdue: 3, exception: 1 },
   yesterday: { inbound: 10, outbound: 7 },
@@ -781,6 +911,188 @@ export async function mockBusinessApis(page: Page) {
     if (status) items = items.filter((i) => i.status === status);
     const type = url.searchParams.get('type');
     if (type) items = items.filter((i) => i.type === type);
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        items,
+        total: items.length,
+        page: Number(url.searchParams.get('page') || 1),
+        pageSize: Number(url.searchParams.get('pageSize') || 20),
+      })),
+    });
+  });
+
+  // ===== Shipping（寄件，M25） =====
+  await page.route('**/api/shipping/list**', (route) => {
+    const url = new URL(route.request().url());
+    let items = [...SHIPPINGS];
+    const status = url.searchParams.get('status');
+    if (status) items = items.filter((i) => i.status === status);
+    const pickupType = url.searchParams.get('pickupType');
+    if (pickupType) items = items.filter((i) => i.pickupType === pickupType);
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        items,
+        total: items.length,
+        page: Number(url.searchParams.get('page') || 1),
+        pageSize: Number(url.searchParams.get('pageSize') || 20),
+      })),
+    });
+  });
+
+  await page.route('**/api/shipping/estimate', (route) => {
+    const body = JSON.parse(route.request().postData() || '{}');
+    const weight = Number(body.weight) || 1;
+    const additionalWeight = Math.max(0, Math.ceil(weight - 1));
+    const freightBeforeInsure = 12 + additionalWeight * 2;
+    const insureFee = Math.round((body.insuredAmount || 0) * 0.005 * 100) / 100;
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        firstWeightPrice: 12,
+        additionalPrice: 2,
+        firstWeightKg: 1,
+        additionalWeight,
+        freightBeforeInsure,
+        insureRate: 0.005,
+        insureFee,
+        freight: freightBeforeInsure + insureFee,
+        effectiveMonth: '2026-07',
+        usedDefaultRate: false,
+      })),
+    });
+  });
+
+  await page.route('**/api/shipping/create', (route) => {
+    const body = JSON.parse(route.request().postData() || '{}');
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        ...SHIPPINGS[0],
+        id: 'sp-new-' + Date.now(),
+        shippingNo: 'JJ20260716999999',
+        senderName: body.senderName,
+        receiverName: body.receiverName,
+        status: 'pending',
+      })),
+    });
+  });
+
+  await page.route('**/api/shipping/*/status', (route) => {
+    const url = new URL(route.request().url());
+    const id = url.pathname.split('/').slice(-2)[0];
+    const body = JSON.parse(route.request().postData() || '{}');
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({ ...SHIPPINGS[0], id, status: body.status })),
+    });
+  });
+
+  // ===== 地址簿（M25） =====
+  await page.route('**/api/address-book**', (route) => {
+    const method = route.request().method();
+    const url = new URL(route.request().url());
+    const tail = url.pathname.split('/').pop();
+    if (method === 'POST') {
+      const body = JSON.parse(route.request().postData() || '{}');
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({
+          id: 'ad-new-' + Date.now(),
+          role: body.role,
+          name: body.name,
+          phone: body.phone,
+          address: body.address,
+          tag: body.tag || null,
+          createdAt: '2026-07-16 15:00:00.000',
+          updatedAt: '2026-07-16 15:00:00.000',
+        })),
+      });
+      return;
+    }
+    if (method === 'PATCH') {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({ ...ADDRESSES[0], id: tail })),
+      });
+      return;
+    }
+    if (method === 'DELETE') {
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(ok({ id: tail })) });
+      return;
+    }
+    // GET 列表
+    let items = [...ADDRESSES];
+    const role = url.searchParams.get('role');
+    if (role) items = items.filter((i) => i.role === role);
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({ items, total: items.length, page: 1, pageSize: 50 })),
+    });
+  });
+
+  // ===== Finance（财务，M25） =====
+  await page.route('**/api/finance/rates**', (route) => {
+    if (route.request().method() === 'PUT') {
+      const body = JSON.parse(route.request().postData() || '{}');
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({ ...RATES[0], ...body, id: 'rate-1' })),
+      });
+      return;
+    }
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok(RATES)),
+    });
+  });
+
+  await page.route('**/api/finance/bills/generate', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({ month: '2026-06', generated: 2, skipped: 0, couriers: 2 })),
+    });
+  });
+
+  await page.route('**/api/finance/bills/*/reconcile', (route) => {
+    const url = new URL(route.request().url());
+    const id = url.pathname.split('/').slice(-2)[0];
+    const body = JSON.parse(route.request().postData() || '{}');
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({ ...BILLS[0], id, status: body.status })),
+    });
+  });
+
+  await page.route('**/api/finance/bills/*/items', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok([
+        { id: 'fi-1', itemType: 'collect', quantity: 120, amount: 96, direction: 'receivable', parcelId: null, shippingId: null, createdAt: '2026-07-01 00:00:00.000' },
+        { id: 'fi-2', itemType: 'deliver', quantity: 110, amount: 88, direction: 'receivable', parcelId: null, shippingId: null, createdAt: '2026-07-01 00:00:00.000' },
+      ])),
+    });
+  });
+
+  await page.route('**/api/finance/bills?**', (route) => {
+    const url = new URL(route.request().url());
+    let items = [...BILLS];
+    const status = url.searchParams.get('status');
+    if (status) items = items.filter((i) => i.status === status);
     route.fulfill({
       status: 200,
       contentType: 'application/json',

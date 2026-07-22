@@ -473,12 +473,12 @@
 
 | ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
 |---|---|---|---|---|---|
-| M25.1 | P0 | 寄件后端模块（shipping） | backend/shipping | todo | 新增 shipping 模块；GET /api/shipping/list；POST /api/shipping/create（上门取件/寄件下单）；POST /api/shipping/estimate 运费试算；地址簿 CRUD（/api/address-book）；后端 tsc+build exit 0 |
-| M25.2 | P0 | 寄件前端页面 | frontend/pages/admin/shipping | todo | 新增 /admin/shipping 路由；寄件下单表单（发件人/收件人/物品/保价）+ 运费试算；地址簿管理；路由守卫 admin+clerk；前端 tsc+build exit 0 |
-| M25.3 | P0 | 财务后端模块（finance） | backend/finance | todo | 新增 finance 模块；GET /api/finance/bills 月结账单列表；POST /api/finance/bills/generate 月初自动生成；费率配置 CRUD；账单导出 Excel；后端 tsc+build exit 0 |
-| M25.4 | P0 | 财务前端页面 | frontend/pages/admin/finance | todo | 新增 /admin/finance 路由；月结账单列表（按快递公司分组）+ 费率配置 Tab + 导出按钮；路由守卫 admin+clerk；前端 tsc+build exit 0 |
-| M25.5 | P1 | 对账流程 | backend+frontend | todo | 对账单录入 + 自动比对差异 + 标记差异行；简化版：先支持手动标记「已对账」，自动比对后期做 |
-| M25.6 | P1 | 端到端验证 | qa | todo | Playwright 验证寄件下单+运费试算、月结账单生成+导出；三端响应式 |
+| M25.1 | P0 | 寄件后端模块（shipping） | backend/shipping | done | ShippingModule 已注册；GET /api/shipping/list、POST /api/shipping/estimate、POST /api/shipping/create、GET /api/shipping/:id、PATCH /api/shipping/:id/status；寄件单号 JJ+日期+随机防重；运费 = 首重 + 续重(向上取整) + 保价费(保价额×费率)，无费率兜底默认值；地址簿 GET/POST/PATCH/DELETE /api/address-book；station_id 隔离；后端 tsc+build exit 0 |
+| M25.2 | P0 | 寄件前端页面 | frontend/pages/admin/shipping | done | /admin/shipping 双 Tab（寄件单/地址簿）；下单弹窗含快递公司/取件方式/发收件人/物品/保价 + 运费试算；状态流转（待处理→已取件→已发出/取消）；地址簿 CRUD；侧栏 send 图标；RequireRole admin+clerk；前端 tsc+build exit 0 |
+| M25.3 | P0 | 财务后端模块（finance） | backend/finance | done | FinanceModule 已注册；费率 GET/PUT /api/finance/rates（按月 upsert）；账单 GET /api/finance/bills、POST /api/finance/bills/generate（按快递公司内存聚合入库=代收/出库=代派/寄件运费，保留已对账账单）；每月 1 日 03:00 北京时间 cron 全站生成上月账单；GET /api/finance/bills/export 导出 UTF-8 BOM CSV（Excel 可打开，免新依赖）；后端 tsc+build exit 0 |
+| M25.4 | P0 | 财务前端页面 | frontend/pages/admin/finance | done | /admin/finance 双 Tab（月结账单/费率配置）；账单表格（件数/应收/应付/净额/状态）+ 月份/状态筛选 + 生成账单(admin) + 导出 CSV + 明细弹窗 + 对账弹窗；费率配置弹窗(admin)；侧栏 wallet 图标；RequireRole admin+clerk，写操作页内 isAdmin 控制；前端 tsc+build exit 0 |
+| M25.5 | P1 | 对账流程 | backend+frontend | done | POST /api/finance/bills/:id/reconcile 录入对账金额；金额与系统净额不一致自动置 discrepancy(有差异)，一致标记 reconciled(已对账)；前端对账弹窗展示系统净额 + 录入金额 + 备注 |
+| M25.6 | P1 | 端到端验证 | qa | done | Playwright shipping.spec.ts(6) + finance.spec.ts(7)：列表/状态过滤/下单试算/地址簿/账单明细/对账/费率/角色守卫全过；前后端 tsc+build exit 0（2026-07-23） |
 
 ### 1.5.0 数据统计报表（锦上添花，可降级）
 

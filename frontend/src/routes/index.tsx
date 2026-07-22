@@ -18,6 +18,8 @@ const InventoryDetail = React.lazy(() => import('@/pages/admin/inventory/Detail'
 const Outbound = React.lazy(() => import('@/pages/admin/outbound/Outbound'));
 const Overdue = React.lazy(() => import('@/pages/admin/overdue/Overdue'));
 const Exception = React.lazy(() => import('@/pages/admin/exception/Exception'));
+const Shipping = React.lazy(() => import('@/pages/admin/shipping/Shipping'));
+const Finance = React.lazy(() => import('@/pages/admin/finance/Finance'));
 const Scan = React.lazy(() => import('@/pages/scan/Scan'));
 const MHome = React.lazy(() => import('@/pages/m/Home'));
 const QueryHome = React.lazy(() => import('@/pages/query/Home'));
@@ -67,6 +69,24 @@ export const AppRoutes: React.FC = () => {
           {/* 滞留件 / 异常件：全员可读，写操作页内按 canWrite 控制 */}
           <Route path="overdue" element={<Overdue />} />
           <Route path="exception" element={<Exception />} />
+          {/* 寄件管理：admin + clerk */}
+          <Route
+            path="shipping"
+            element={
+              <RequireRole roles={['admin', 'clerk']}>
+                <Shipping />
+              </RequireRole>
+            }
+          />
+          {/* 财务结算：admin + clerk（费率/生成/对账仅 admin，页内控制） */}
+          <Route
+            path="finance"
+            element={
+              <RequireRole roles={['admin', 'clerk']}>
+                <Finance />
+              </RequireRole>
+            }
+          />
           {/* 系统管理：admin + clerk（店员可查看驿站信息/货架/快递公司/版本说明，写操作仅 admin） */}
           <Route
             path="system"

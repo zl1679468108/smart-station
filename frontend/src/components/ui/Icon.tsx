@@ -30,6 +30,8 @@ export type IconName =
   | 'externalLink' // 外部链接（新窗口打开）
   | 'clock' // 滞留件
   | 'alert' // 异常件
+  | 'send' // 寄件管理
+  | 'wallet' // 财务结算
 
 interface IconProps {
   name: IconName;
@@ -175,6 +177,21 @@ const paths: Record<IconName, React.ReactNode> = {
       <path d="M10.3 4.3 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z" />
       <path d="M12 9v4" />
       <path d="M12 17h.01" />
+    </>
+  ),
+  // 寄件：纸飞机
+  send: (
+    <>
+      <path d="M22 2 11 13" />
+      <path d="M22 2 15 22l-4-9-9-4 20-7Z" />
+    </>
+  ),
+  // 财务：钱包
+  wallet: (
+    <>
+      <path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+      <path d="M16 12h.01" />
+      <path d="M3 8h14a2 2 0 0 1 2 2" />
     </>
   ),
 };

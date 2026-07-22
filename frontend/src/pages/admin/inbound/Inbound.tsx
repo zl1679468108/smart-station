@@ -6,6 +6,7 @@ import { useInvalidateInventoryList } from '@/hooks/useInventoryData';
 import type { InboundResult, ParcelSize } from '@/types/inbound';
 import type { Shelf } from '@/types/admin';
 import Icon from '@/components/ui/Icon';
+import PageHeader from '@/components/ui/PageHeader';
 
 type Mode = 'scan' | 'manual' | 'batch';
 
@@ -20,7 +21,7 @@ const Inbound: React.FC = () => {
 
   return (
     <div className="w-full">
-      <h1 className="mb-4 text-lg font-semibold text-gray-800">入库管理</h1>
+      <PageHeader title="入库管理" className="mb-4" />
 
       {/* 模式切换 */}
       <div className="mb-4 flex gap-1 border-b border-gray-200">
