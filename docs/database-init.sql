@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS ss_stations (
   -- 仓库 3D 布局配置（户型 + 门口 + 障碍物）
   -- 结构示例：
   -- {
-  --   "bounds": { "width": 20, "depth": 15 },          -- 仓库内部尺寸（米）
+  --   "bounds": { "width": 20, "depth": 15, "height": 3.2 }, -- 仓库内部尺寸与层高（米）
   --   "doors": [                                         -- 门口列表
   --     { "x": 10, "y": 0, "width": 1.2, "label": "正门" }
   --   ],
@@ -144,7 +144,7 @@ COMMENT ON COLUMN ss_stations.overdue_warn_days IS '滞留预警天数（默认 
 COMMENT ON COLUMN ss_stations.overdue_remind_days IS '滞留二次提醒天数（默认 7 天）';
 COMMENT ON COLUMN ss_stations.overdue_return_days IS '滞留退回天数（默认 15 天）';
 COMMENT ON COLUMN ss_stations.sms_enabled IS '是否启用短信通知';
-COMMENT ON COLUMN ss_stations.layout_config IS '仓库 3D 布局配置 JSON：bounds（仓库尺寸）+ doors（门口列表）+ obstacles（障碍物）';
+COMMENT ON COLUMN ss_stations.layout_config IS '仓库 3D 布局配置 JSON：bounds（仓库尺寸与层高）+ doors（门口列表）+ obstacles（障碍物）';
 
 DROP TRIGGER IF EXISTS update_ss_stations_updated_at ON ss_stations;
 CREATE TRIGGER update_ss_stations_updated_at BEFORE UPDATE ON ss_stations
@@ -503,7 +503,7 @@ ON CONFLICT (code) DO NOTHING;
 -- ss_stations 加 layout_config 字段
 ALTER TABLE ss_stations
   ADD COLUMN IF NOT EXISTS layout_config JSONB NOT NULL DEFAULT '{}'::jsonb;
-COMMENT ON COLUMN ss_stations.layout_config IS '仓库 3D 布局配置 JSON：bounds（仓库尺寸）+ doors（门口列表）+ obstacles（障碍物）';
+COMMENT ON COLUMN ss_stations.layout_config IS '仓库 3D 布局配置 JSON：bounds（仓库尺寸与层高）+ doors（门口列表）+ obstacles（障碍物）';
 
 -- ss_shelves 加 4 个位置字段
 ALTER TABLE ss_shelves

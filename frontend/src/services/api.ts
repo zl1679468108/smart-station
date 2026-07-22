@@ -6,6 +6,7 @@ import { notifyError, notifySuccess } from '@/utils/notification';
 
 const TOKEN_KEY = 'ss_token';
 const STATION_ID_KEY = 'ss_station_id';
+export const AUTH_EXPIRED_EVENT = 'smart-station:auth-expired';
 
 // 短时去重：React Query 重试 / 多接口并发失败时避免刷屏
 const ERROR_NOTIFY_DEDUP_MS = 2500;
@@ -128,6 +129,8 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
     // 401 未授权：清除 token 并跳转登录页（HashRouter 用 hash 路径）
     if (response.status === 401) {
       clearToken();
+      clearStationId();
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
       if (!window.location.hash.includes('/admin/login')) {
         window.location.hash = '#/admin/login';
       }

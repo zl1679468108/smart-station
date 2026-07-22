@@ -385,6 +385,34 @@
   background: linear-gradient(90deg, #22c55e, #f59e0b, #ef4444);
 }
 
+.ws-pressure-item {
+  display: block;
+}
+
+.ws-pressure-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ws-pressure-item__head b {
+  color: #e0f2fe;
+  letter-spacing: 0.04em;
+}
+
+.ws-pressure-item__head strong {
+  color: #f8fafc;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+
+.ws-pressure-item__meta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
 .ws-stage {
   position: relative;
   min-width: 0;
@@ -522,46 +550,120 @@
 }
 
 @media (max-width: 1199px) {
+  .ws-screen__header {
+    padding: 10px 14px 6px;
+  }
+
+  .ws-screen__title h1 {
+    letter-spacing: 0.12em;
+  }
+
+  .ws-screen__title p {
+    display: none;
+  }
+
   .ws-screen__body {
-    grid-template-columns: 220px 1fr 240px;
+    grid-template-columns: minmax(188px, 216px) 1fr minmax(200px, 228px);
     gap: 8px;
-    padding: 4px 12px 10px;
+    padding: 2px 10px 8px;
   }
 
   .ws-screen__body--left-collapsed {
-    grid-template-columns: 36px 1fr 240px;
+    grid-template-columns: 32px 1fr minmax(200px, 228px);
   }
 
   .ws-screen__body--right-collapsed {
-    grid-template-columns: 220px 1fr 36px;
+    grid-template-columns: minmax(188px, 216px) 1fr 32px;
   }
 
   .ws-screen__body--left-collapsed.ws-screen__body--right-collapsed {
-    grid-template-columns: 36px 1fr 36px;
+    grid-template-columns: 32px 1fr 32px;
+  }
+
+  .ws-screen__panel {
+    gap: 8px;
+  }
+
+  .ws-card {
+    padding: 10px;
+  }
+
+  .ws-card__title {
+    margin-bottom: 8px;
+    font-size: 11px;
+  }
+
+  .ws-kpi-grid {
+    gap: 6px;
+  }
+
+  .ws-kpi {
+    padding: 8px;
   }
 
   .ws-kpi strong {
-    font-size: 18px;
+    font-size: 17px;
+  }
+
+  .ws-kpi em {
+    display: none; /* 平板收掉环比副文案，降低信息密度 */
+  }
+
+  .ws-list-item,
+  .ws-feed-item {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .ws-feed {
+    max-height: 150px;
+  }
+
+  .ws-chart {
+    height: 112px;
+  }
+
+  .ws-stage__badge {
+    top: 8px;
+    font-size: 10px;
+    padding: 4px 10px;
+  }
+
+  .ws-screen__footer {
+    padding: 4px 12px 10px;
+    font-size: 10px;
   }
 }
 
 @media (max-width: 900px) {
   .ws-screen__body {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: auto minmax(280px, 1fr) auto;
   }
 
   .ws-screen__panel {
-    max-height: 180px;
+    max-height: 156px;
     flex-direction: row;
     overflow-x: auto;
+    gap: 8px;
+  }
+
+  .ws-screen__panel-content {
+    flex-direction: row;
+    overflow: visible;
+    gap: 8px;
   }
 
   .ws-card {
-    min-width: 220px;
+    min-width: 200px;
+    max-width: 260px;
   }
 
   .ws-stage {
-    min-height: 360px;
+    min-height: 300px;
+  }
+
+  .ws-kpi em {
+    display: none;
   }
 }

@@ -89,13 +89,28 @@ function loadAsset(def: StationAssetDef): Promise<{ state: AssetLoadState; templ
           def.url,
           (gltf) => {
             const root = gltf.scene.clone(true);
+            const toRemove: Object3D[] = [];
             root.traverse((obj) => {
               const mesh = obj as any;
               if (mesh.isMesh) {
                 mesh.castShadow = true;
                 mesh.receiveShadow = true;
               }
+              const n = (obj.name || '').toLowerCase();
+              if (
+                n.includes('aisle label') ||
+                n.includes('aisle_label') ||
+                n.includes('label plate') ||
+                n.includes('label text') ||
+                n.includes('front printed label') ||
+                n.includes('shelf parcel')
+              ) {
+                toRemove.push(obj);
+              }
             });
+            for (const obj of toRemove) {
+              obj.parent?.remove(obj);
+            }
             fitToTarget(root, def.targetSize);
             resolve(finish('ready', root));
           },

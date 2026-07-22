@@ -11,12 +11,13 @@ import { canManageSystem } from '@/utils/permission';
 import Icon from '@/components/ui/Icon';
 import Warehouse3D, {
   type WarehouseEditableShelf,
+  type ModelLibraryItem,
   MODEL_LIBRARY,
   findModelByType,
   DEFAULT_STATION_LAYOUT,
   normalizeLayoutArea,
 } from '@/components/warehouse3d';
-import type { Shelf, StationLayoutConfig, LayoutDoor, LayoutArea, LayoutAreaType } from '@/types/admin';
+import type { Shelf, StationLayoutConfig, LayoutDoor, LayoutArea, LayoutAreaType, LayoutBounds } from '@/types/admin';
 
 const SIZE_LABEL: Record<string, string> = {
   small: '小件',
@@ -50,6 +51,16 @@ interface ShelfOverride {
   zone?: string | null;
 }
 
+type BoundsForm = { width: number; depth: number; height: number };
+
+function normalizeBounds(bounds?: LayoutBounds | null): BoundsForm {
+  return {
+    width: bounds?.width ?? DEFAULT_STATION_LAYOUT.bounds.width,
+    depth: bounds?.depth ?? DEFAULT_STATION_LAYOUT.bounds.depth,
+    height: bounds?.height ?? DEFAULT_STATION_LAYOUT.bounds.height ?? 3.2,
+  };
+}
+
 // 生成默认门：放在前墙中央（+Y 方向墙，y = depth/2）
 // 地面中心在原点，bounds 范围 [-w/2, w/2] × [-d/2, d/2]
 function makeDefaultDoor(depth: number): LayoutDoor {
@@ -69,6 +80,60 @@ function nextAreaLabel(areas: LayoutArea[], type: LayoutAreaType): string {
   const count = areas.filter((a) => a.type === type).length;
   return `${prefix} ${count + 1}`;
 }
+
+const ModelLibraryPreview: React.FC<{ model: ModelLibraryItem }> = ({ model }) => {
+  const baseStyle = { background: model.color };
+  const isArea = model.type !== 'door';
+
+  return (
+    <div className="relative mx-auto mb-2 h-16 w-full max-w-[160px] overflow-hidden rounded-md bg-slate-50">
+      <div className="absolute inset-x-4 bottom-2 h-4 skew-x-[-18deg] rounded bg-slate-200/80" />
+      {model.type === 'door' && (
+        <div className="absolute left-1/2 top-3 h-10 w-12 -translate-x-1/2 border-x-4 border-t-4 border-emerald-500">
+          <div className="absolute bottom-0 left-1/2 h-2 w-10 -translate-x-1/2 rounded-sm bg-emerald-300/70" />
+        </div>
+      )}
+      {model.type === 'counter' && (
+        <div className="absolute left-1/2 top-5 h-7 w-24 -translate-x-1/2 rounded-sm bg-sky-200 shadow-sm">
+          <div className="absolute inset-x-2 -top-2 h-3 rounded-sm bg-sky-400" />
+          <div className="absolute bottom-1 left-3 h-2 w-8 rounded-sm bg-slate-700" />
+          <div className="absolute bottom-1 right-3 h-2 w-5 rounded-sm bg-orange-400" />
+        </div>
+      )}
+      {model.type === 'outboundRecord' && (
+        <div className="absolute left-1/2 top-4 grid h-9 w-24 -translate-x-1/2 grid-cols-4 gap-1 rounded-sm bg-teal-100 p-1 shadow-sm">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <span key={i} className="rounded-sm bg-teal-400/80" />
+          ))}
+        </div>
+      )}
+      {(model.type === 'pickup' || model.type === 'oversize' || model.type === 'exception') && (
+        <div className="absolute left-1/2 top-4 grid w-24 -translate-x-1/2 grid-cols-4 gap-1.5">
+          {Array.from({ length: model.type === 'oversize' ? 5 : 8 }).map((_, i) => (
+            <span
+              key={i}
+              className="h-4 rounded-sm shadow-sm"
+              style={{ background: i % 2 === 0 ? model.color : '#C08457' }}
+            />
+          ))}
+        </div>
+      )}
+      {model.type === 'office' && (
+        <div className="absolute left-1/2 top-4 h-9 w-24 -translate-x-1/2 rounded-sm bg-blue-100 shadow-sm">
+          <div className="absolute bottom-2 left-4 h-3 w-10 rounded-sm bg-amber-300" />
+          <div className="absolute bottom-2 right-4 h-5 w-4 rounded-sm bg-slate-800" />
+          <div className="absolute right-2 top-2 h-4 w-6 rounded-sm bg-blue-500/80" />
+        </div>
+      )}
+      {isArea && (
+        <div
+          className="absolute bottom-2 left-1/2 h-1.5 -translate-x-1/2 rounded-full opacity-80"
+          style={{ ...baseStyle, width: `${Math.max(44, Math.min(92, model.width * 24))}px` }}
+        />
+      )}
+    </div>
+  );
+};
 
 // 驿站门店布局：管理员拖拽摆放货架 + 拖拽模型库建模 + 统一保存
 interface StationLayoutTabProps {
@@ -92,13 +157,13 @@ const StationLayoutTab: React.FC<StationLayoutTabProps> = ({ panelOnly = false }
   const invalidateKioskLayout = useInvalidateKioskLayout();
 
   // 服务器端原始数据（用于 dirty 判断 + 重置）
-  const [serverBounds, setServerBounds] = useState<{ width: number; depth: number } | null>(null);
+  const [serverBounds, setServerBounds] = useState<BoundsForm | null>(null);
   const [serverDoors, setServerDoors] = useState<LayoutDoor[]>([]);
   const [serverAreas, setServerAreas] = useState<LayoutArea[]>([]);
 
   // 本地可编辑数据
   const [layoutConfig, setLayoutConfig] = useState<StationLayoutConfig | null>(null);
-  const [boundsForm, setBoundsForm] = useState({ ...DEFAULT_STATION_LAYOUT.bounds });
+  const [boundsForm, setBoundsForm] = useState<BoundsForm>(normalizeBounds(DEFAULT_STATION_LAYOUT.bounds));
   const [doors, setDoors] = useState<LayoutDoor[]>([]);
   const [areas, setAreas] = useState<LayoutArea[]>([]);
   const [shelfOverrides, setShelfOverrides] = useState<Record<string, ShelfOverride>>({});
@@ -160,12 +225,12 @@ const StationLayoutTab: React.FC<StationLayoutTabProps> = ({ panelOnly = false }
     if (!layoutRes) return;
     const cfg = layoutRes.layoutConfig || {};
     setLayoutConfig(cfg);
-    const b = cfg.bounds ?? DEFAULT_STATION_LAYOUT.bounds;
+    const b = normalizeBounds(cfg.bounds);
     setBoundsForm(b);
     setServerBounds(b);
     // 默认保证至少一个门：如果没门，用默认门（前墙中央）
     const ds = cfg.doors ?? [];
-    const finalDoors = ds.length > 0 ? ds : [makeDefaultDoor(b?.depth ?? DEFAULT_STATION_LAYOUT.bounds.depth)];
+    const finalDoors = ds.length > 0 ? ds : [makeDefaultDoor(b.depth)];
     setDoors(finalDoors);
     setServerDoors(finalDoors);
     const ars = Array.isArray(cfg.areas)
@@ -192,7 +257,12 @@ const StationLayoutTab: React.FC<StationLayoutTabProps> = ({ panelOnly = false }
   // dirty 判断：货架有覆盖 / bounds 变了 / doors 变了 / areas 变了
   const isDirty = useMemo(() => {
     if (Object.keys(shelfOverrides).length > 0) return true;
-    if (serverBounds && (serverBounds.width !== boundsForm.width || serverBounds.depth !== boundsForm.depth)) {
+    if (
+      serverBounds &&
+      (serverBounds.width !== boundsForm.width ||
+        serverBounds.depth !== boundsForm.depth ||
+        serverBounds.height !== boundsForm.height)
+    ) {
       return true;
     }
     if (JSON.stringify(serverDoors) !== JSON.stringify(doors)) return true;
@@ -336,13 +406,11 @@ const StationLayoutTab: React.FC<StationLayoutTabProps> = ({ panelOnly = false }
       setLayoutConfigCache(res.layoutConfig);
       invalidateKioskLayout();
       setLayoutConfig(res.layoutConfig);
-      const b = res.layoutConfig.bounds;
-      if (b) {
-        setServerBounds(b);
-        setBoundsForm(b);
-      }
+      const b = normalizeBounds(res.layoutConfig.bounds);
+      setServerBounds(b);
+      setBoundsForm(b);
       const ds = res.layoutConfig.doors ?? [];
-      const finalDs = ds.length > 0 ? ds : [makeDefaultDoor(b?.depth ?? boundsForm.depth)];
+      const finalDs = ds.length > 0 ? ds : [makeDefaultDoor(b.depth)];
       setServerDoors(finalDs);
       setDoors(finalDs);
       const ars = (res.layoutConfig.areas ?? []).map((area) => normalizeLayoutArea(area as any) as LayoutArea);
@@ -391,7 +459,7 @@ const StationLayoutTab: React.FC<StationLayoutTabProps> = ({ panelOnly = false }
           <div className="border border-gray-200 bg-white p-4">
             <div className="text-xs text-gray-500">门店尺寸</div>
             <div className="mt-1 text-lg font-semibold text-gray-800">
-              {boundsForm.width}m × {boundsForm.depth}m
+              {boundsForm.width}m × {boundsForm.depth}m × {boundsForm.height}m
             </div>
           </div>
           <div className="border border-gray-200 bg-white p-4">
@@ -486,13 +554,12 @@ const StationLayoutTab: React.FC<StationLayoutTabProps> = ({ panelOnly = false }
         <div className="space-y-3">
           <div className="rounded-xl bg-white p-3 shadow-sm">
             <Warehouse3D
-              mode="edit"
+              variant="editor"
               shelves={editorShelves}
               layoutConfig={
                 { ...(layoutConfig ?? {}), bounds: boundsForm, doors, areas }
               }
               layoutLoading={layoutLoading}
-              showCeilingLights
               selectedId={selectedId}
               selectedType={selectedType || 'shelf'}
               onSelect={(id, type) => {
@@ -522,14 +589,12 @@ const StationLayoutTab: React.FC<StationLayoutTabProps> = ({ panelOnly = false }
                     onDragStart={(e) => {
                       e.dataTransfer.setData('text/model-type', m.type);
                       e.dataTransfer.effectAllowed = 'copy';
+                      e.dataTransfer.setDragImage(e.currentTarget, e.currentTarget.clientWidth / 2, 42);
                     }}
                     className="cursor-grab select-none rounded-lg border-2 border-dashed border-gray-200 p-3 text-center transition-colors hover:border-primary hover:bg-primary/5 active:cursor-grabbing"
                     title={`拖拽到 3D 场景创建${m.label}`}
                   >
-                    <div
-                      className="mx-auto mb-2 h-8 w-8 rounded"
-                      style={{ background: m.color, opacity: 0.7 }}
-                    />
+                    <ModelLibraryPreview model={m} />
                     <div className="text-xs font-medium text-gray-700">{m.label}</div>
                     <div className="text-[10px] text-gray-400">
                       {m.width}×{m.depth}×{m.height}m
@@ -546,7 +611,7 @@ const StationLayoutTab: React.FC<StationLayoutTabProps> = ({ panelOnly = false }
           {/* 门店尺寸 */}
           <div className="rounded-xl bg-white p-4 shadow-sm">
             <h4 className="mb-3 text-sm font-semibold text-gray-700">门店尺寸（米）</h4>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <label className="text-xs text-gray-500">
                 宽度
                 <input
@@ -570,6 +635,20 @@ const StationLayoutTab: React.FC<StationLayoutTabProps> = ({ panelOnly = false }
                   value={boundsForm.depth}
                   onChange={(e) =>
                     setBoundsForm((f) => ({ ...f, depth: Number(e.target.value) }))
+                  }
+                  disabled={!canEdit}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
+                />
+              </label>
+              <label className="text-xs text-gray-500">
+                层高
+                <input
+                  type="number"
+                  min={2}
+                  step={0.1}
+                  value={boundsForm.height}
+                  onChange={(e) =>
+                    setBoundsForm((f) => ({ ...f, height: Number(e.target.value) }))
                   }
                   disabled={!canEdit}
                   className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"

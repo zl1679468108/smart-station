@@ -31,6 +31,7 @@ export type {
   WarehouseShelf,
   WarehouseVisualTheme,
   Warehouse3DMode,
+  Warehouse3DVariant,
 } from './types';
 
 export {

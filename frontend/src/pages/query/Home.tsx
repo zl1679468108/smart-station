@@ -491,7 +491,7 @@ const ResultView: React.FC<{
         <div className="rounded-xl bg-white p-3 shadow-sm">
           <div className="mb-2 flex items-center justify-between px-1">
             <h4 className="text-sm font-semibold text-gray-700">货架位置 3D 视图</h4>
-            <span className="text-xs text-gray-400">橙色为您的包裹所在货架，蓝色为取件起点</span>
+            <span className="text-xs text-gray-400">点击地面可漫游，橙色为包裹货架</span>
           </div>
           <React.Suspense
             fallback={
@@ -501,6 +501,7 @@ const ResultView: React.FC<{
             }
           >
             <Warehouse3D
+              variant="guide"
               shelves={shelves}
               layoutConfig={layoutConfig}
               layoutLoading={layoutLoading}

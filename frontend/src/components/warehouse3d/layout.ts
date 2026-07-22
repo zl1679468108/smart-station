@@ -123,9 +123,10 @@ export function computeCameraInit(
   const dVertical = groundD / (2 * Math.tan(halfFov));
   const dist = Math.max(dHorizontal, dVertical, 5) * 1.2;
   if (mode === 'screen') {
+    // 大屏：略低一点、更靠前，优先看清货架号与前场，避免过高俯视
     return {
-      target: [0, 1.25, 0],
-      position: [dist * 0.52, dist * 0.46, dist * 1.02],
+      target: [0, 0.85, groundD * 0.04],
+      position: [dist * 0.38, dist * 0.34, dist * 0.92],
     };
   }
 

@@ -430,6 +430,21 @@
 
 ---
 
+## 1.2.9 只读 3D 点击漫游（已完成）
+
+> 范围：在现有只读 3D 视图上增加看房式点击移动能力，不引入寻路库，不修改数据库。编辑器仍保留拖拽建模优先。
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M31.1 | P1 | 只读 3D 支持点击地面平滑漫游 | frontend/components/warehouse3d + frontend/pages/query + frontend/pages/admin | done | 新增 `WalkthroughControls`；`Warehouse3D` 只读模式支持 `enableWalkthrough`；`/query` 与数字孪生大屏开启点击漫游；短点击地面后相机移动到目标点，拖拽旋转不误触；大屏巡航在漫游时暂停并延迟恢复；前端 tsc/build 验证 |
+| M31.2 | P1 | 工作台 3D 总览收敛到数字孪生大屏 | frontend/pages/admin/Dashboard | done | 移除 Dashboard 内嵌 `Warehouse3D` 总览，顶部保留「数字孪生大屏」入口直达 `?view=screen`，并保留「调整布局」入口；避免工作台与大屏两套 3D 视觉重复 |
+| M31.3 | P1 | 统一 3D 页面入口为 variant 预设 | frontend/components/warehouse3d | done | `Warehouse3D` 新增 `variant="guide" | "screen" | "editor"`；页面调用统一改为 variant 写法；guide/screen 的视觉主题、Bloom、点击漫游、巡航等默认值集中在入口预设中管理；内部仍保留 ShelfMap3D/ShelfMap3DEditor 分工 |
+| M31.4 | P1 | 3D variant 精确回归测试 | frontend/tests | done | 新增 `warehouse3d-variant.spec.ts` 覆盖 guide/screen/editor 三种预设；同步历史 e2e 中门口标签与工作台 3D 收敛断言；专项 Playwright 回归通过 |
+| M31.5 | P1 | 3D 货架包裹按真实库存渲染 | frontend/components/warehouse3d | done | 移除货架“最少 4 个”占位包裹逻辑；货架包裹数量严格取 `inStockCount`（最多截断展示）；`ParcelBox` 改为程序化纯色盒，避免占位 GLB 的 `A-12` 示意贴牌误导真实数据 |
+| M31.6 | P1 | 3D 门店真实层高与模型库一致性 | frontend/components/warehouse3d + frontend/pages/admin + backend/admin | done | `layout_config.bounds` 支持可选 `height`；编辑页门店尺寸可设置宽/深/层高；3D 外壳墙体、灯光与大屏巡航高度跟随层高；模型库卡片改为与拖入模型一致的实体预览，拖拽预览不再只是抽象色块 |
+
+---
+
 ## v1.0+ 后续版本规划
 
 > 5 个未实现模块的必要性判断（PRD §4.7-4.11 已有完整定义）：
@@ -513,4 +528,3 @@
 4. **O4–O7 版本与文档对齐** → version / AGENTS / PRD
 5. **O8–O9 查件隔离与待办体验** → 多租户正确性
 6. **O10+ 硬化项** 与 **M24 滞留/异常** 并行评估（建议先 O 后 M）
-

@@ -9,6 +9,7 @@ interface LightingRigProps {
   /** 仓库大致尺寸，用于阴影与氛围范围 */
   width?: number;
   depth?: number;
+  height?: number;
 }
 
 /**
@@ -18,8 +19,10 @@ const LightingRig: React.FC<LightingRigProps> = ({
   theme = 'ops',
   width = 20,
   depth = 16,
+  height = 3.2,
 }) => {
   const isScreen = theme === 'screen';
+  const ceilingH = Math.max(2, height);
   const rimRef = useRef<Group>(null);
 
   useFrame(({ clock }) => {
@@ -40,7 +43,7 @@ const LightingRig: React.FC<LightingRigProps> = ({
       />
 
       <directionalLight
-        position={[width * 0.45, 16, depth * 0.35]}
+        position={[width * 0.45, Math.max(12, ceilingH + 9), depth * 0.35]}
         intensity={isScreen ? 1.05 : 1.15}
         color={isScreen ? '#dbeafe' : '#fff7ed'}
         castShadow
@@ -61,14 +64,14 @@ const LightingRig: React.FC<LightingRigProps> = ({
       />
 
       <pointLight
-        position={[0, 4.2, 0]}
+        position={[0, ceilingH + 0.8, 0]}
         intensity={isScreen ? 0.55 : 0.25}
         color={isScreen ? '#ff8a3d' : '#fde68a'}
         distance={Math.max(width, depth) * 1.4}
       />
 
       {isScreen && (
-        <group ref={rimRef} position={[0, 3.2, 0]}>
+        <group ref={rimRef} position={[0, ceilingH + 0.35, 0]}>
           <pointLight color="#22d3ee" intensity={0.28} distance={12} />
         </group>
       )}

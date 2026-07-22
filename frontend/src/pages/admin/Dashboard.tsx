@@ -7,7 +7,6 @@ import { useDashboard } from '@/hooks/useDashboardData';
 import { useLayoutConfig } from '@/hooks/useSystemAdmin';
 import { useAuth } from '@/utils/auth';
 
-const Warehouse3D = React.lazy(() => import('@/components/warehouse3d'));
 const WarehouseScreen = React.lazy(() =>
   import('@/components/warehouse3d').then((m) => ({ default: m.WarehouseScreen })),
 );
@@ -22,7 +21,7 @@ const WarehouseFallback: React.FC<{ height?: string | number }> = ({ height = 36
   </div>
 );
 
-// 工作台 Dashboard：概览卡片 + 小时趋势 + 待办
+// 工作台 Dashboard：概览卡片 + 小时趋势 + 待办 + 数字孪生大屏入口
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -142,15 +141,24 @@ const Dashboard: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-gray-800">工作台</h1>
-          <p className="mt-1 text-xs text-gray-500">运营概览 + 仓内数字孪生，可一键进入大屏演示。</p>
+          <p className="mt-1 text-xs text-gray-500">运营概览与待办处理；数字孪生统一进入全屏大屏查看。</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setSearchParams({ view: 'screen' })}
-          className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
-        >
-          数字孪生大屏
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setSearchParams({ view: 'screen' })}
+            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+          >
+            数字孪生大屏
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchParams({ layout: 'edit' })}
+            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            调整布局
+          </button>
+        </div>
       </div>
 
       {/* 概览卡片 */}
@@ -248,45 +256,6 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      <section className="overflow-hidden border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-medium text-gray-700">驿站实时占用 · 3D 数字孪生</h2>
-            <p className="mt-1 text-xs text-gray-500">
-              按当前库存渲染货架热力与仓内细节；进入大屏可获得科技可视化演示效果。
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setSearchParams({ view: 'screen' })}
-              className="border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              全屏大屏
-            </button>
-            <button
-              type="button"
-              onClick={() => setSearchParams({ layout: 'edit' })}
-              className="bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primaryHover"
-            >
-              调整布局
-            </button>
-          </div>
-        </div>
-        <React.Suspense fallback={<WarehouseFallback height="min(680px, calc(100vh - 240px))" />}>
-          <Warehouse3D
-            mode="view"
-            shelves={viewShelves}
-            layoutConfig={layoutConfig}
-            layoutLoading={layoutLoading}
-            showOccupancy
-            showCeilingLights
-            visualTheme="ops"
-            enableBloom
-            height="min(680px, calc(100vh - 240px))"
-          />
-        </React.Suspense>
-      </section>
     </div>
   );
 };

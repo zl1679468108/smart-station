@@ -75,7 +75,7 @@ export const ParcelBox: React.FC<{
 
   return (
     <group position={position} rotation={rotation}>
-      <GltfModel assetKey="parcel.box" size={size} opacity={opacity} fallback={procedural} />
+      {procedural}
     </group>
   );
 };

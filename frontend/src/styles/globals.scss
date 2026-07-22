@@ -1,3 +1,4 @@
+@use './warehouse-screen';
 @import './design-tokens.css';
 
 @tailwind base;
@@ -273,5 +274,3 @@ select {
     animation: none;
   }
 }
-
-@import './warehouse-screen.scss';

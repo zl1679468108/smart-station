@@ -1,6 +1,8 @@
 import type { LayoutDoor, LayoutArea, StationLayoutConfig } from '@/types/kiosk';
 import type { ShelfBounds } from './layout';
 
+export const DEFAULT_WAREHOUSE_HEIGHT = 3.2;
+
 export function normalizeLayoutAreaType(type: string): LayoutArea['type'] {
   const normalized = type.toLowerCase();
   if (normalized === 'locker' || normalized === 'safebox' || normalized === 'safe_box') {
@@ -23,7 +25,7 @@ export function normalizeLayoutArea(area: LayoutArea): LayoutArea {
 }
 
 export const DEFAULT_STATION_LAYOUT: Required<Pick<StationLayoutConfig, 'bounds' | 'doors' | 'areas'>> = {
-  bounds: { width: 14, depth: 9 },
+  bounds: { width: 14, depth: 9, height: DEFAULT_WAREHOUSE_HEIGHT },
   doors: [{ x: 0, y: 4.5, width: 1.4, label: '正门' }],
   areas: [
     {
@@ -132,9 +134,12 @@ export function normalizeStationLayout(
   const depth = isPositiveNumber(layoutConfig?.bounds?.depth)
     ? layoutConfig.bounds.depth
     : Math.max(DEFAULT_STATION_LAYOUT.bounds.depth, shelfDepth);
+  const height = isPositiveNumber(layoutConfig?.bounds?.height)
+    ? layoutConfig.bounds.height
+    : DEFAULT_WAREHOUSE_HEIGHT;
 
   return {
-    bounds: { width, depth },
+    bounds: { width, depth, height },
     doors: sanitizeDoors(layoutConfig?.doors, depth),
     areas: sanitizeAreas(layoutConfig?.areas),
   };

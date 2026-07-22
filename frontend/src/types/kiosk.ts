@@ -58,6 +58,8 @@ export interface LayoutDoor {
 export interface LayoutBounds {
   width: number;
   depth: number;
+  /** 仓库层高（米），旧数据可能没有该字段 */
+  height?: number;
 }
 
 /** 驿站门店布局 - 可配置区域类型 */

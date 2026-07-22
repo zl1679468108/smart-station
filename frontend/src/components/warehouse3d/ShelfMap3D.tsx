@@ -11,6 +11,7 @@ import WarehouseShell from './WarehouseShell';
 import CameraRig from './CameraRig';
 import LightingRig from './LightingRig';
 import CameraPatrol from './CameraPatrol';
+import WalkthroughControls from './WalkthroughControls';
 import { GltfModel, shelfAssetKey } from './assets';
 import { computeShelfPositions, computeCameraInit } from './layout';
 import { normalizeStationLayout } from './layoutConfig';
@@ -103,7 +104,7 @@ const ShelfRack: React.FC<ShelfMeshProps> = ({
       : SIZE_ACCENT[shelf.sizeType];
   const packageStackCount = highlight && highlightCount > 0 ? Math.min(3, Math.max(1, highlightCount)) : 0;
   const shelfPackages = useMemo(() => {
-    const count = Math.min(14, Math.max(4, Math.round((shelf.inStockCount ?? shelf.layers * 3) * 0.18)));
+    const count = Math.min(14, Math.max(0, shelf.inStockCount ?? 0));
     return Array.from({ length: count }, (_, i) => {
       const layer = i % Math.max(1, shelf.layers);
       const col = Math.floor(i / Math.max(1, shelf.layers)) % 4;
@@ -242,14 +243,18 @@ const ShelfRack: React.FC<ShelfMeshProps> = ({
         </group>
       )}
 
-      {/* 货架号 */}
+      {/* 货架号：大屏只表达位置；占用状态用色条/编号色，明细留给侧栏 */}
       <Text
-        position={[0, totalH + 0.38, 0]}
-        fontSize={0.4}
-        color={labelColor}
+        position={[0, totalH + (isScreen ? 0.3 : 0.38), 0]}
+        fontSize={isScreen ? 0.32 : 0.4}
+        color={
+          isScreen && showOccupancy && !highlight
+            ? occupancyColor
+            : labelColor
+        }
         anchorX="center"
         anchorY="middle"
-        outlineWidth={isScreen ? 0.014 : 0.008}
+        outlineWidth={isScreen ? 0.012 : 0.008}
         outlineColor="#020617"
       >
         {`#${shelf.number}`}
@@ -328,10 +333,13 @@ const DoorMesh: React.FC<{
   door: LayoutDoor;
   distanceLabel?: string;
   showLabel?: boolean;
+  /** 大屏紧凑位置标签，避免 Html 胶囊遮挡巡航视野 */
+  compact?: boolean;
 }> = ({
   door,
   distanceLabel,
   showLabel = true,
+  compact = false,
 }) => {
   const procedural = (
     <>
@@ -361,7 +369,20 @@ const DoorMesh: React.FC<{
         size={[Math.max(1.2, door.width), 2.2, 0.4]}
         fallback={procedural}
       />
-      {showLabel && (
+      {showLabel && compact && (
+        <Text
+          position={[0, 2.15, 0]}
+          fontSize={0.26}
+          color={DOOR_COLOR}
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.01}
+          outlineColor="#020617"
+        >
+          {door.label}
+        </Text>
+      )}
+      {showLabel && !compact && (
         <Html position={[0, 2.4, 0]} center distanceFactor={5.5}>
           <div
             style={{
@@ -399,33 +420,38 @@ const AreaMesh: React.FC<{
   area: LayoutArea;
   isStartPoint: boolean;
   showLabel?: boolean;
+  /** 大屏紧凑位置标签；「您在这里」仅导览使用 */
+  compact?: boolean;
 }> = ({
   area,
   isStartPoint,
   showLabel = true,
+  compact = false,
 }) => {
   const palette = getStationAreaPalette(area.type);
   const totalH = area.height;
 
   return (
     <group position={[area.x, 0, area.y]}>
-      <StationAreaModel area={area} selected={isStartPoint} />
+      <StationAreaModel area={area} selected={isStartPoint && !compact} />
 
-      {/* 区域标签 */}
+      {/* 区域标签：大屏只标位置，字号更小，避免与货架号争抢视线 */}
       {showLabel && (
         <Text
-          position={[0, totalH + 0.35, 0]}
-          fontSize={0.32}
+          position={[0, totalH + (compact ? 0.28 : 0.35), 0]}
+          fontSize={compact ? 0.24 : 0.32}
           color={palette.color}
           anchorX="center"
           anchorY="middle"
+          outlineWidth={compact ? 0.01 : 0}
+          outlineColor="#020617"
         >
           {area.label}
         </Text>
       )}
 
-      {/* 服务台/办公区作为寻路起点：显示「您在这里」悬浮标注 */}
-      {showLabel && isStartPoint && (
+      {/* 服务台/办公区作为寻路起点：仅取件导览显示「您在这里」 */}
+      {showLabel && isStartPoint && !compact && (
         <Html position={[0, totalH + 0.75, 0]} center distanceFactor={5.5}>
           <div
             style={{
@@ -543,7 +569,6 @@ interface SceneProps {
   containerWidth: number;
   containerHeight: number;
   showOccupancy?: boolean;
-  showCeilingLights?: boolean;
   enableCameraFly?: boolean;
   enableBloom?: boolean;
   enablePath?: boolean;
@@ -551,6 +576,7 @@ interface SceneProps {
   /** 大屏自动环绕巡航 */
   enableCameraPatrol?: boolean;
   showGuidanceLabels?: boolean;
+  enableWalkthrough?: boolean;
 }
 
 const Scene: React.FC<SceneProps> = ({
@@ -560,13 +586,13 @@ const Scene: React.FC<SceneProps> = ({
   containerWidth,
   containerHeight,
   showOccupancy = false,
-  showCeilingLights = false,
   enableCameraFly,
   enableBloom = true,
   enablePath,
   visualTheme = 'ops',
   enableCameraPatrol,
   showGuidanceLabels,
+  enableWalkthrough = false,
 }) => {
   const isScreen = visualTheme === 'screen';
   const shouldShowGuidanceLabels = showGuidanceLabels ?? !isScreen;
@@ -600,16 +626,17 @@ const Scene: React.FC<SceneProps> = ({
   // 地面尺寸：统一走归一化配置，接口未返回/字段不全时使用稳定默认门店尺寸
   const groundW = normalizedLayout.bounds.width;
   const groundD = normalizedLayout.bounds.depth;
+  const groundH = normalizedLayout.bounds.height ?? 3.2;
   const shouldShowPath = enablePath ?? highlights.length > 0;
   const shouldFlyToTarget = enableCameraFly ?? highlights.length > 0;
   const shouldPatrol =
     (enableCameraPatrol ?? isScreen) && !shouldFlyToTarget && highlights.length === 0;
   const patrolRadius = isScreen
-    ? Math.max(9, groundW * 0.62)
+    ? Math.max(8, Math.min(groundW, groundD) * 0.55)
     : Math.max(10, Math.max(groundW, groundD) * 0.7);
   const patrolHeight = isScreen
-    ? Math.max(4.4, Math.max(groundW, groundD) * 0.26)
-    : Math.max(7.5, Math.max(groundW, groundD) * 0.4);
+    ? Math.max(groundH + 0.9, Math.min(4.2, Math.max(groundW, groundD) * 0.2))
+    : Math.max(groundH + 4.2, Math.max(groundW, groundD) * 0.4);
 
   // 寻路起点：优先选服务台，其次办公区；无配置时 fallback 到最近门口
   const startPoint = useMemo<{ x: number; z: number } | null>(() => {
@@ -646,13 +673,13 @@ const Scene: React.FC<SceneProps> = ({
 
   return (
     <>
-      <LightingRig theme={visualTheme} width={groundW} depth={groundD} />
+      <LightingRig theme={visualTheme} width={groundW} depth={groundD} height={groundH} />
 
-      {/* 门店外壳（地面 + 墙体 + 灯带） */}
+      {/* 门店外壳（地面 + 墙体） */}
       <WarehouseShell
         width={groundW}
         depth={groundD}
-        showCeilingLights={showCeilingLights}
+        height={groundH}
         visualTheme={visualTheme}
       />
 
@@ -662,6 +689,7 @@ const Scene: React.FC<SceneProps> = ({
           key={a.id}
           area={a}
           showLabel={shouldShowGuidanceLabels}
+          compact={isScreen}
           isStartPoint={
             startPoint !== null &&
             (a.type === 'counter' || a.type === 'office') &&
@@ -672,7 +700,12 @@ const Scene: React.FC<SceneProps> = ({
       ))}
 
       {doors.map((d, i) => (
-        <DoorMesh key={`door-${i}`} door={d} showLabel={shouldShowGuidanceLabels} />
+        <DoorMesh
+          key={`door-${i}`}
+          door={d}
+          showLabel={shouldShowGuidanceLabels}
+          compact={isScreen}
+        />
       ))}
 
       {/* 货架 */}
@@ -690,7 +723,8 @@ const Scene: React.FC<SceneProps> = ({
             highlightCount={info?.count ?? 0}
             dimmed={highlights.length > 0 && !isHighlighted}
             showOccupancy={showOccupancy && !isHighlighted}
-            showOccupancyLabel={shouldShowGuidanceLabels}
+            // 大屏侧栏已经展示逐货架库存明细，避免 3D 货架再次显示同样的数字。
+            showOccupancyLabel={!isScreen && shouldShowGuidanceLabels}
             visualTheme={visualTheme}
           />
         );
@@ -734,7 +768,12 @@ const Scene: React.FC<SceneProps> = ({
         height={patrolHeight}
         speed={isScreen ? 0.052 : 0.05}
         resumeDelaySec={6}
-        lookAtY={isScreen ? 1.35 : 0.8}
+        lookAtY={isScreen ? Math.min(groundH * 0.38, 1.35) : 0.8}
+      />
+      <WalkthroughControls
+        enabled={enableWalkthrough}
+        width={groundW}
+        depth={groundD}
       />
 
       {/* 后处理：Bloom 让门口绿光 + 包裹橙色高亮真实发光 */}
@@ -761,7 +800,6 @@ export interface ShelfMap3DProps {
   height?: number | string;
   className?: string;
   showOccupancy?: boolean;
-  showCeilingLights?: boolean;
   enableCameraFly?: boolean;
   enableBloom?: boolean;
   enablePath?: boolean;
@@ -769,6 +807,7 @@ export interface ShelfMap3DProps {
   visualTheme?: WarehouseVisualTheme;
   enableCameraPatrol?: boolean;
   showGuidanceLabels?: boolean;
+  enableWalkthrough?: boolean;
 }
 
 const ShelfMap3D: React.FC<ShelfMap3DProps> = ({
@@ -778,7 +817,6 @@ const ShelfMap3D: React.FC<ShelfMap3DProps> = ({
   height = 420,
   className,
   showOccupancy = false,
-  showCeilingLights = false,
   enableCameraFly,
   enableBloom = true,
   enablePath,
@@ -786,6 +824,7 @@ const ShelfMap3D: React.FC<ShelfMap3DProps> = ({
   visualTheme = 'ops',
   enableCameraPatrol,
   showGuidanceLabels,
+  enableWalkthrough = false,
 }) => {
   const isScreen = visualTheme === 'screen';
 
@@ -805,18 +844,6 @@ const ShelfMap3D: React.FC<ShelfMap3DProps> = ({
   }, []);
 
   const waitingForLayout = layoutLoading;
-  const screenStats = useMemo(() => {
-    const totalInStock = shelves.reduce((sum, shelf) => sum + (shelf.inStockCount ?? 0), 0);
-    const totalCapacity = shelves.reduce((sum, shelf) => sum + getShelfCapacity(shelf), 0);
-    const occupancy = totalCapacity > 0 ? totalInStock / totalCapacity : 0;
-    return {
-      shelfCount: shelves.length,
-      totalInStock,
-      occupancy,
-      highlightCount: highlights.length,
-    };
-  }, [highlights.length, shelves]);
-
   if (shelves.length === 0) {
     return (
       <div
@@ -845,6 +872,7 @@ const ShelfMap3D: React.FC<ShelfMap3DProps> = ({
           shadows
           dpr={[1, 1.75]}
           camera={{ fov: isScreen ? 42 : 45, near: 0.1, far: 120 }}
+          gl={{ preserveDrawingBuffer: true }}
           style={{
             background: isScreen
               ? 'radial-gradient(ellipse at center, #0b1f38 0%, #040b16 70%)'
@@ -859,13 +887,13 @@ const ShelfMap3D: React.FC<ShelfMap3DProps> = ({
               containerWidth={containerSize.width}
               containerHeight={containerSize.height}
               showOccupancy={showOccupancy}
-              showCeilingLights={showCeilingLights}
               enableCameraFly={enableCameraFly}
               enableBloom={enableBloom}
               enablePath={enablePath}
               visualTheme={visualTheme}
               enableCameraPatrol={enableCameraPatrol}
               showGuidanceLabels={showGuidanceLabels}
+              enableWalkthrough={enableWalkthrough}
             />
           </Suspense>
         </Canvas>
@@ -888,18 +916,11 @@ const ShelfMap3D: React.FC<ShelfMap3DProps> = ({
       )}
       {!isScreen && (
         <div className="pointer-events-none absolute bottom-2 left-3 rounded bg-black/30 px-2 py-0.5 text-xs text-white">
-          {showOccupancy ? '库存占用可视化 · 拖拽旋转 · 滚轮缩放' : '拖拽旋转 · 滚轮缩放'}
-        </div>
-      )}
-      {isScreen && (
-        <div className="pointer-events-none absolute left-4 top-4 z-10 flex items-center gap-2 rounded-none border border-cyan-400/25 bg-slate-950/55 px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-cyan-100 backdrop-blur-sm">
-          <span>货架 {screenStats.shelfCount}</span>
-          <span className="text-cyan-400">·</span>
-          <span>在库 {screenStats.totalInStock}</span>
-          <span className="text-cyan-400">·</span>
-          <span>占用 {(screenStats.occupancy * 100).toFixed(1)}%</span>
-          <span className="text-cyan-400">·</span>
-          <span>高亮 {screenStats.highlightCount}</span>
+          {enableWalkthrough
+            ? '点击地面漫游 · 拖拽旋转 · 滚轮缩放'
+            : showOccupancy
+              ? '库存占用可视化 · 拖拽旋转 · 滚轮缩放'
+              : '拖拽旋转 · 滚轮缩放'}
         </div>
       )}
     </div>

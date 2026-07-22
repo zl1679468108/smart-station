@@ -44,8 +44,13 @@ const WarehouseScreen: React.FC<WarehouseScreenProps> = ({
   onTodoClick,
 }) => {
   const [now, setNow] = useState(() => formatNow(new Date()));
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
+  // 平板默认收起侧栏，把舞台留给 3D；PC 默认展开
+  const [leftCollapsed, setLeftCollapsed] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 1199px)').matches : false,
+  );
+  const [rightCollapsed, setRightCollapsed] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 1199px)').matches : false,
+  );
   const { data: liveData = data } = useDashboard({
     initialData: data,
     refetchInterval: 15000,
@@ -75,6 +80,25 @@ const WarehouseScreen: React.FC<WarehouseScreenProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [onExit]);
 
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1199px)');
+    const apply = () => {
+      // 仅在断点切换时同步默认收起策略，不覆盖用户手动展开/收起意图以外的情况：
+      // 进入平板 -> 收起；回到 PC -> 展开
+      if (mq.matches) {
+        setLeftCollapsed(true);
+        setRightCollapsed(true);
+      } else {
+        setLeftCollapsed(false);
+        setRightCollapsed(false);
+      }
+    };
+    // 不在 mount 再强制覆盖（已用 initial state），只监听后续变化
+    const onChange = () => apply();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
   const shelfStats = useMemo(() => {
     const totalInStock = shelves.reduce((sum, s) => sum + (s.inStockCount ?? 0), 0);
     const totalCapacity = shelves.reduce((sum, s) => sum + getShelfCapacity(s), 0);
@@ -86,7 +110,7 @@ const WarehouseScreen: React.FC<WarehouseScreenProps> = ({
         remaining: getRemainingCapacity(s),
       }))
       .sort((a, b) => b.ratio - a.ratio)
-      .slice(0, 6);
+      .slice(0, 5);
     const occupancy = totalCapacity > 0 ? totalInStock / totalCapacity : 0;
     const highRisk = shelves.filter((s) => getOccupancyRatio(s) >= 0.85).length;
     return { totalInStock, totalCapacity, busy, occupancy, highRisk, shelfCount: shelves.length };
@@ -148,16 +172,29 @@ const WarehouseScreen: React.FC<WarehouseScreenProps> = ({
   }, [events, liveData, now.time, shelfStats.shelfCount]);
 
   const tickerText = useMemo(() => {
-    return [
-      `今日入库 ${liveData.today.inbound} 件`,
-      `今日出库 ${liveData.today.outbound} 件`,
-      `在库 ${liveData.today.inStock} 件`,
-      `滞留 ${liveData.today.overdue} 件`,
-      `异常 ${liveData.today.exception} 件`,
-      `货架占用 ${(shelfStats.occupancy * 100).toFixed(1)}%`,
-      eventsLoading ? '动态同步中' : `已同步 ${events.length} 条业务动态`,
-    ].join('   ·   ');
-  }, [liveData, shelfStats.occupancy, events.length, eventsLoading]);
+    // 底部 ticker 不再复读左侧 KPI 数字，只补场景/动态语义信息
+    const parts: string[] = [];
+    if (shelfStats.highRisk > 0) {
+      parts.push(`${shelfStats.highRisk} 组货架高占用(≥85%)`);
+    } else {
+      parts.push('货架压力整体平稳');
+    }
+    if (shelfStats.busy[0]) {
+      const top = shelfStats.busy[0];
+      parts.push(`压力最高 #${top.number}（${Math.round(top.ratio * 100)}%）`);
+    }
+    if (events.length > 0) {
+      parts.push(
+        ...events.slice(0, 3).map((e) => `${formatEventTime(e.createdAt)} ${e.text}`),
+      );
+    } else if (eventsLoading) {
+      parts.push('业务动态同步中');
+    } else {
+      parts.push('暂无新业务动态');
+    }
+    parts.push('场景：位置与状态 · 侧栏：统计与明细');
+    return parts.join('   ·   ');
+  }, [shelfStats.highRisk, shelfStats.busy, events, eventsLoading]);
 
   return (
     <div className="ws-screen">
@@ -205,7 +242,7 @@ const WarehouseScreen: React.FC<WarehouseScreenProps> = ({
           <div className="ws-screen__panel-content">
           <section className="ws-card">
             <div className="ws-card__title">
-              运营概况 <span>TODAY</span>
+              运营统计 <span>STATS</span>
             </div>
             <div className="ws-kpi-grid">
               <div className="ws-kpi ws-kpi--inbound">
@@ -243,7 +280,7 @@ const WarehouseScreen: React.FC<WarehouseScreenProps> = ({
 
           <section className="ws-card">
             <div className="ws-card__title">
-              货架压力 TOP <span>OCCUPANCY</span>
+              货架压力明细 <span>DETAIL</span>
             </div>
             <div className="ws-list">
               {shelfStats.busy.length === 0 && (
@@ -252,12 +289,13 @@ const WarehouseScreen: React.FC<WarehouseScreenProps> = ({
                 </div>
               )}
               {shelfStats.busy.map((item) => (
-                <div key={item.number} className="ws-list-item" style={{ display: 'block' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <b>#{item.number} 货架</b>
-                    <span>
-                      {item.inStock} 件 · 余 {item.remaining}
-                    </span>
+                <div key={item.number} className="ws-list-item ws-pressure-item">
+                  <div className="ws-pressure-item__head">
+                    <b>#{item.number}</b>
+                    <strong>{Math.round(item.ratio * 100)}%</strong>
+                  </div>
+                  <div className="ws-pressure-item__meta">
+                    在库 {item.inStock} · 余量 {item.remaining}
                   </div>
                   <div className="ws-bar">
                     <i style={{ width: `${Math.round(item.ratio * 100)}%` }} />
@@ -270,18 +308,13 @@ const WarehouseScreen: React.FC<WarehouseScreenProps> = ({
         </aside>
 
         <main className="ws-stage">
-          <div className="ws-stage__badge">仓内实时孪生 · 自动巡航</div>
+          <div className="ws-stage__badge">位置 / 状态 · 自动巡航 / 点击漫游</div>
           <Warehouse3D
-            mode="view"
+            variant="screen"
             shelves={shelves}
             layoutConfig={layoutConfig}
             layoutLoading={layoutLoading}
             showOccupancy
-            showCeilingLights
-            visualTheme="screen"
-            enableBloom
-            enableCameraPatrol
-            showGuidanceLabels
             height="100%"
             className="ws-stage__canvas h-full rounded-none"
           />
@@ -374,10 +407,6 @@ const WarehouseScreen: React.FC<WarehouseScreenProps> = ({
                 <span>异常件未处理</span>
                 <b style={{ color: '#f87171' }}>{liveData.todo.exceptionUnresolved}</b>
               </button>
-              <div className="ws-list-item">
-                <span>仓容利用率</span>
-                <b style={{ color: '#38bdf8' }}>{(shelfStats.occupancy * 100).toFixed(1)}%</b>
-              </div>
             </div>
           </section>
           </div>

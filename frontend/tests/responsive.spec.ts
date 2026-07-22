@@ -134,7 +134,7 @@ test.describe('M18.4 3D 视图三端响应式', () => {
       expect(canvasBox!.height).toBeGreaterThan(0);
     });
 
-    test(`${name} 视口下「🚪」门口标注可见`, async ({ page }) => {
+    test(`${name} 视口下门口标注可见`, async ({ page }) => {
       await mockBusinessApis(page);
       await mockLayoutApis(page);
       await page.setViewportSize(vp);
@@ -144,8 +144,7 @@ test.describe('M18.4 3D 视图三端响应式', () => {
       }
       await page.getByRole('button', { name: '查询包裹' }).click();
       await expect(page.getByText('找到 1 个包裹')).toBeVisible({ timeout: 8000 });
-      // 门口标签文案为「🚪 正门」
-      await expect(page.getByText(/🚪/).first()).toBeVisible({ timeout: 15000 });
+      await expect(page.getByText('正门').first()).toBeVisible({ timeout: 15000 });
     });
   }
 

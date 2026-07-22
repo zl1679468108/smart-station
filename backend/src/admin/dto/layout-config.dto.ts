@@ -15,7 +15,7 @@ import {
  * 驿站门店 3D 布局配置 DTO（对应 ss_stations.layout_config JSONB 字段）
  *
  * 结构：
- *   bounds: { width, depth }   仓库内部尺寸（米）
+ *   bounds: { width, depth, height? }   仓库内部尺寸与层高（米）
  *   doors:  [{ x, y, width, label }]   门口列表
  *   areas:  [{ id, x, y, width, depth, height, type, label }]   区域（服务台/出库记录区/异常件区等）
  *   obstacles?: [{ x, y, width, depth, height, type }]   障碍物（柱子/柜台，可选）
@@ -28,6 +28,11 @@ export class LayoutBoundsDto {
   @IsNumber()
   @Min(1, { message: '仓库深度必须大于 0' })
   depth!: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(2, { message: '仓库层高必须 ≥ 2 米' })
+  height?: number;
 }
 
 export class LayoutDoorDto {

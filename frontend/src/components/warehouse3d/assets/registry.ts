@@ -7,8 +7,7 @@ export type StationAssetKey =
   | 'door.main'
   | 'area.counter'
   | 'area.outboundRecord'
-  | 'area.office'
-  | 'parcel.box';
+  | 'area.office';
 
 export interface StationAssetDef {
   key: StationAssetKey;
@@ -22,19 +21,19 @@ export interface StationAssetDef {
 export const STATION_ASSET_REGISTRY: Record<StationAssetKey, StationAssetDef> = {
   'shelf.small': {
     key: 'shelf.small',
-    url: '/models/shelf-small.glb',
+    url: '/models/shelf-small.glb?v=strip-labels-1',
     label: '小型货架',
     targetSize: [2.0, 1.8, 1.0],
   },
   'shelf.medium': {
     key: 'shelf.medium',
-    url: '/models/shelf-medium.glb',
+    url: '/models/shelf-medium.glb?v=strip-labels-1',
     label: '中型货架',
     targetSize: [2.4, 2.2, 1.2],
   },
   'shelf.large': {
     key: 'shelf.large',
-    url: '/models/shelf-large.glb',
+    url: '/models/shelf-large.glb?v=strip-labels-1',
     label: '大型货架',
     targetSize: [2.8, 2.4, 1.4],
   },
@@ -61,12 +60,6 @@ export const STATION_ASSET_REGISTRY: Record<StationAssetKey, StationAssetDef> = 
     url: '/models/office.glb',
     label: '办公区',
     targetSize: [2.4, 1.8, 1.8],
-  },
-  'parcel.box': {
-    key: 'parcel.box',
-    url: '/models/parcel-box.glb',
-    label: '纸箱',
-    targetSize: [0.46, 0.34, 0.38],
   },
 };
 

@@ -7,6 +7,7 @@ import {
   clearToken,
   setToken,
   getToken,
+  AUTH_EXPIRED_EVENT,
 } from '@/services/api';
 import type { AuthUser, StationBrief } from '@/types/auth';
 import type { Profile } from '@/types/auth';
@@ -47,6 +48,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // 应用启动时若有 token，拉取 profile 恢复登录态
   useEffect(() => {
+    const handleAuthExpired = () => {
+      clearToken();
+      clearStationId();
+      setUser(null);
+      setStations([]);
+      setCurrentStationId(null);
+      queryClient.clear();
+    };
+
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+  }, [queryClient]);
+
+  useEffect(() => {
     const token = getToken();
     if (!token) {
       setInitializing(false);
@@ -68,6 +83,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       })
       .catch(() => {
         clearToken();
+        clearStationId();
       })
       .finally(() => setInitializing(false));
   }, [queryClient]);

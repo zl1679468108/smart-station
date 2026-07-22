@@ -49,7 +49,7 @@ export interface ShelfPositionItem {
 
 export function saveStationLayout(payload: {
   shelves?: ShelfPositionItem[];
-  bounds?: { width: number; depth: number };
+  bounds?: { width: number; depth: number; height?: number };
   doors?: LayoutDoor[];
   areas?: LayoutArea[];
 }): Promise<{ shelvesUpdated: number; layoutConfig: StationLayoutConfig }> {

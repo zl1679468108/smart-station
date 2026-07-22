@@ -38,7 +38,7 @@ import {
 import type { WarehouseEditableShelf, WarehouseShelf } from './types';
 
 /**
- * 仓库 3D 编辑场景（内部实现，业务入口请用 Warehouse3D mode="edit"）
+ * 仓库 3D 编辑场景（内部实现，业务入口请用 Warehouse3D variant="editor"）
  * --------------------------------------------------
  * 交互：
  *  - 点击货架/门/区域选中（高亮）
@@ -115,7 +115,7 @@ const DraggableShelf: React.FC<DraggableShelfProps> = ({
   const occupancyColor = getOccupancyColor(occupancyRatio);
   const remainingCapacity = getRemainingCapacity(shelf);
   const shelfPackages = useMemo(() => {
-    const count = Math.min(14, Math.max(4, Math.round((shelf.inStockCount ?? shelf.layers * 3) * 0.18)));
+    const count = Math.min(14, Math.max(0, shelf.inStockCount ?? 0));
     return Array.from({ length: count }, (_, i) => {
       const layer = i % Math.max(1, shelf.layers);
       const col = Math.floor(i / Math.max(1, shelf.layers)) % 4;
@@ -656,6 +656,7 @@ const EditorScene: React.FC<{
   // 地面尺寸：统一走归一化配置，接口未返回/字段不全时使用稳定默认门店尺寸
   const groundW = normalizedLayout.bounds.width;
   const groundD = normalizedLayout.bounds.depth;
+  const groundH = normalizedLayout.bounds.height ?? 3.2;
 
   // 相机距离自适应：根据容器宽高比 + 地面尺寸计算，让地面网格铺满视口宽度
   // 注意：地面网格以原点 (0,0) 为中心绘制，相机 target 也对准原点，
@@ -681,9 +682,9 @@ const EditorScene: React.FC<{
 
   return (
     <>
-      <LightingRig theme="ops" width={groundW} depth={groundD} />
+      <LightingRig theme="ops" width={groundW} depth={groundD} height={groundH} />
 
-      <WarehouseShell width={groundW} depth={groundD} visualTheme="ops" />
+      <WarehouseShell width={groundW} depth={groundD} height={groundH} visualTheme="ops" />
 
       {/* 区域（办公区/揽收区，可拖拽） */}
       {areas.map((a) => {
@@ -848,6 +849,7 @@ const ShelfMap3DEditor: React.FC<ShelfMap3DEditorProps> = ({
           shadows
           dpr={[1, 2]}
           camera={{ fov: 45, near: 0.1, far: 100 }}
+          gl={{ preserveDrawingBuffer: true }}
           style={{ background: 'linear-gradient(180deg, #eef4fb 0%, #d9e4f2 100%)' }}
           onPointerMissed={() => handleSelect(null)}
         >

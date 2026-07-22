@@ -13,6 +13,9 @@ export type WarehouseEditableShelf = WarehouseShelf & { id: string };
 
 export type Warehouse3DMode = 'view' | 'edit';
 
+/** 页面级 3D 场景预设：导览 / 大屏 / 编辑 */
+export type Warehouse3DVariant = 'guide' | 'screen' | 'editor';
+
 /** ops=运营工作台质感，screen=数字孪生大屏科技感 */
 export type WarehouseVisualTheme = 'ops' | 'screen';
 
@@ -29,8 +32,6 @@ export interface Warehouse3DBaseProps {
   layoutConfig?: StationLayoutConfig | null;
   height?: number | string;
   className?: string;
-  /** 顶部黄灯带，默认关闭（避免遮挡） */
-  showCeilingLights?: boolean;
   /** 以库存数据渲染占用高亮 */
   showOccupancy?: boolean;
   /** 门店布局接口未完成时展示遮罩，避免露出不完整 3D 布局 */
@@ -41,10 +42,13 @@ export interface Warehouse3DBaseProps {
   enableCameraPatrol?: boolean;
   /** 大屏/运营总览可关闭取件引导标签，查询页默认保留 */
   showGuidanceLabels?: boolean;
+  /** 看房式点击漫游：点击地面后相机平滑移动到目标点 */
+  enableWalkthrough?: boolean;
 }
 
 export interface Warehouse3DViewProps extends Warehouse3DBaseProps {
   mode?: 'view';
+  variant?: 'guide' | 'screen';
   highlights?: WarehouseHighlight[];
   /** 有焦点才飞；默认：存在 highlights 时开启 */
   enableCameraFly?: boolean;
@@ -53,7 +57,8 @@ export interface Warehouse3DViewProps extends Warehouse3DBaseProps {
 }
 
 export interface Warehouse3DEditProps extends Warehouse3DBaseProps {
-  mode: 'edit';
+  mode?: 'edit';
+  variant?: 'editor';
   shelves: WarehouseEditableShelf[];
   selectedId?: string | null;
   selectedType?: SelectedTargetType;

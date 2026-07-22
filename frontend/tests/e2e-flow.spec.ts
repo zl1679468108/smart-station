@@ -148,7 +148,7 @@ test.describe('M18.3 端到端：门店 3D 布局配置 → 查询看寻路', ()
     expect(box!.height).toBeGreaterThan(0);
   });
 
-  test('查询页 3D 视图显示门口标签（🚪 + 正门）', async ({ page }) => {
+  test('查询页 3D 视图显示门口标签（正门）', async ({ page }) => {
     await mockBusinessApis(page);
     await mockLayoutApis(page);
 
@@ -159,8 +159,8 @@ test.describe('M18.3 端到端：门店 3D 布局配置 → 查询看寻路', ()
     await page.getByRole('button', { name: '查询包裹' }).click();
     await expect(page.getByText('找到 1 个包裹')).toBeVisible({ timeout: 8000 });
 
-    // drei <Html> 渲染到 DOM，门口标签文案为「🚪 正门」
-    await expect(page.getByText(/🚪/).first()).toBeVisible({ timeout: 15000 });
+    // drei <Html> 渲染到 DOM，门口标签文案为「正门」
+    await expect(page.getByText('正门').first()).toBeVisible({ timeout: 15000 });
   });
 
   test('查询页 3D 视图显示「该货架包裹」高亮标注 + 办公区「您在这里」起点', async ({ page }) => {
@@ -199,7 +199,7 @@ test.describe('v1.2.5 工作台门店 3D 工作区', () => {
     await expect(page.locator('canvas')).toHaveCount(0);
   });
 
-  test('工作台默认显示只读驿站 3D 总览', async ({ page }) => {
+  test('工作台默认不内嵌 3D，仅提供大屏和布局入口', async ({ page }) => {
     await mockLogin(page, 'admin');
     await mockBusinessApis(page);
     await mockLayoutApis(page);
@@ -207,11 +207,13 @@ test.describe('v1.2.5 工作台门店 3D 工作区', () => {
 
     await page.goto('/#/admin/dashboard');
 
-    await expect(page.getByText('驿站实时占用', { exact: true })).toBeVisible({ timeout: 8000 });
-    await expect(page.locator('canvas')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('button', { name: '数字孪生大屏' })).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole('button', { name: '调整布局' })).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('驿站实时占用', { exact: true })).toHaveCount(0);
+    await expect(page.locator('canvas')).toHaveCount(0);
   });
 
-  test('layout-config 未返回前不挂载 3D canvas', async ({ page }) => {
+  test('大屏 layout-config 未返回前不挂载 3D canvas', async ({ page }) => {
     await mockLogin(page, 'admin');
     await mockBusinessApis(page);
     await setLoggedIn(page, 'admin');
@@ -247,7 +249,7 @@ test.describe('v1.2.5 工作台门店 3D 工作区', () => {
       });
     });
 
-    await page.goto('/#/admin/dashboard');
+    await page.goto('/#/admin/dashboard?view=screen');
 
     await expect(page.getByText('正在加载门店布局...')).toBeVisible({ timeout: 8000 });
     await expect(page.locator('canvas')).toHaveCount(0);

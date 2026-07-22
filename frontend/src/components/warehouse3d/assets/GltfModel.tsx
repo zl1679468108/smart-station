@@ -25,6 +25,26 @@ export interface GltfModelProps {
  * 可选 GLB 模型：有资产用资产，无资产用 fallback。
  * 布局数据仍由外层 group 的 position/rotation 控制。
  */
+function shouldStripPlaceholderNode(name: string): boolean {
+  const n = (name || '').toLowerCase();
+  if (!n) return false;
+  // A-12 等通道假铭牌
+  if (
+    n.includes('aisle label') ||
+    n.includes('aisle_label') ||
+    n.includes('label plate') ||
+    n.includes('label text') ||
+    n.includes('front printed label')
+  ) {
+    return true;
+  }
+  // 货架 GLB 内嵌示意包裹，真实库存由业务侧 ParcelBox 渲染
+  if (n.includes('shelf parcel')) {
+    return true;
+  }
+  return false;
+}
+
 const GltfModel: React.FC<GltfModelProps> = ({
   assetKey,
   size,
@@ -49,6 +69,18 @@ const GltfModel: React.FC<GltfModelProps> = ({
     if (!ready || !template) return null;
     const cloned = template.clone(true);
     cloned.userData.__baseScale = cloned.scale.clone();
+
+    // 彻底移除占位铭牌 / 内嵌示意包裹（如 A-12），避免与真实货架号/库存混淆
+    const toRemove: Object3D[] = [];
+    cloned.traverse((obj) => {
+      if (shouldStripPlaceholderNode(obj.name || '')) {
+        toRemove.push(obj);
+      }
+    });
+    for (const obj of toRemove) {
+      obj.parent?.remove(obj);
+    }
+
     cloned.traverse((obj) => {
       const mesh = obj as any;
       if (!mesh.isMesh || !mesh.material) return;
