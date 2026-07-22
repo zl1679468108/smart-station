@@ -94,6 +94,105 @@ export const PARCELS = [
   },
 ];
 
+export const OVERDUE_ITEMS = [
+  {
+    id: 'p-002',
+    trackingNumber: 'ZTO9876543210',
+    pickupCode: '2-2-2002',
+    recipientName: '李四',
+    recipientPhone: '13900005678',
+    inboundAt: '2026-07-10 14:00:00.000',
+    days: 6,
+    level: 'warn' as const,
+    returnStage: 'none' as const,
+    status: 'overdue',
+    note: null,
+    shelf: { id: 'sh-002', number: 2, sizeType: 'small' },
+    courier: { id: 'c-002', name: '中通快递', code: 'ZTO' },
+  },
+  {
+    id: 'p-010',
+    trackingNumber: 'SF5555666677',
+    pickupCode: '3-1-3010',
+    recipientName: '赵六',
+    recipientPhone: '13600001111',
+    inboundAt: '2026-07-05 09:00:00.000',
+    days: 11,
+    level: 'remind' as const,
+    returnStage: 'none' as const,
+    status: 'overdue',
+    note: null,
+    shelf: { id: 'sh-005', number: 5, sizeType: 'medium' },
+    courier: { id: 'c-001', name: '顺丰速运', code: 'SF' },
+  },
+  {
+    id: 'p-011',
+    trackingNumber: 'YTO7777888899',
+    pickupCode: '8-1-8011',
+    recipientName: '孙七',
+    recipientPhone: '13500002222',
+    inboundAt: '2026-06-28 09:00:00.000',
+    days: 18,
+    level: 'return' as const,
+    returnStage: 'none' as const,
+    status: 'overdue',
+    note: null,
+    shelf: { id: 'sh-008', number: 8, sizeType: 'large' },
+    courier: { id: 'c-003', name: '圆通速递', code: 'YTO' },
+  },
+];
+
+export const EXCEPTION_ITEMS = [
+  {
+    id: 'ex-001',
+    type: 'damaged' as const,
+    description: '外包装严重破损，内部物品可能受损',
+    status: 'registered' as const,
+    resolution: null,
+    resolutionNote: null,
+    attachments: [],
+    responsibleUserId: null,
+    createdBy: 'u-admin-001',
+    createdAt: '2026-07-12 09:30:00.000',
+    updatedAt: '2026-07-12 09:30:00.000',
+    resolvedAt: null,
+    parcelId: 'p-003',
+    parcel: {
+      id: 'p-003',
+      trackingNumber: 'YTO1111222233',
+      pickupCode: '5-1-5003',
+      recipientName: '王五',
+      recipientPhone: '13700009876',
+      status: 'exception',
+      inboundAt: '2026-07-12 09:00:00.000',
+    },
+  },
+  {
+    id: 'ex-002',
+    type: 'lost' as const,
+    description: '包裹在库丢失，多次查找未果',
+    status: 'processing' as const,
+    resolution: null,
+    resolutionNote: null,
+    attachments: [],
+    responsibleUserId: null,
+    createdBy: 'u-admin-001',
+    createdAt: '2026-07-13 11:00:00.000',
+    updatedAt: '2026-07-13 12:00:00.000',
+    resolvedAt: null,
+    parcelId: 'p-020',
+    parcel: {
+      id: 'p-020',
+      trackingNumber: 'SF2222333344',
+      pickupCode: '1-2-1020',
+      recipientName: '周八',
+      recipientPhone: '13400003333',
+      status: 'exception',
+      inboundAt: '2026-07-11 10:00:00.000',
+    },
+  },
+];
+
 export const DASHBOARD_DATA = {
   today: { inbound: 12, outbound: 8, inStock: 56, overdue: 3, exception: 1 },
   yesterday: { inbound: 10, outbound: 7 },
@@ -549,6 +648,147 @@ export async function mockBusinessApis(page: Page) {
           inboundAt: '2026-07-16 10:00:00.000', stationName: '测试驿站一', courierName: '顺丰速运',
         }],
         total: 1,
+      })),
+    });
+  });
+
+  // ===== Overdue（滞留件，M24） =====
+  await page.route('**/api/overdue/scan', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        scanned: 3,
+        markedOverdue: 2,
+        warned: 1,
+        reminded: 1,
+        returnCandidates: 0,
+      })),
+    });
+  });
+
+  await page.route('**/api/overdue/*/return', (route) => {
+    const url = new URL(route.request().url());
+    const id = url.pathname.split('/').slice(-2)[0];
+    const body = JSON.parse(route.request().postData() || '{}');
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        id,
+        returnStage: body.action === 'complete' ? 'returned' : 'returning',
+      })),
+    });
+  });
+
+  await page.route('**/api/overdue**', (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const url = new URL(route.request().url());
+    const level = url.searchParams.get('level');
+    let items = [...OVERDUE_ITEMS];
+    if (level) items = items.filter((i) => i.level === level);
+    const keyword = url.searchParams.get('keyword');
+    if (keyword) {
+      items = items.filter(
+        (i) =>
+          i.trackingNumber.includes(keyword) ||
+          i.pickupCode.includes(keyword) ||
+          i.recipientPhone.includes(keyword),
+      );
+    }
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        items,
+        total: items.length,
+        page: Number(url.searchParams.get('page') || 1),
+        pageSize: Number(url.searchParams.get('pageSize') || 20),
+        counts: {
+          all: OVERDUE_ITEMS.length,
+          warn: OVERDUE_ITEMS.filter((i) => i.level === 'warn').length,
+          remind: OVERDUE_ITEMS.filter((i) => i.level === 'remind').length,
+          return: OVERDUE_ITEMS.filter((i) => i.level === 'return').length,
+        },
+        thresholds: { warnDays: 3, remindDays: 7, returnDays: 15 },
+      })),
+    });
+  });
+
+  // ===== Exception（异常件，M24） =====
+  await page.route('**/api/exception**', (route) => {
+    const method = route.request().method();
+    const url = new URL(route.request().url());
+    const tail = url.pathname.split('/').pop();
+
+    // POST /api/exception 登记
+    if (method === 'POST') {
+      const body = JSON.parse(route.request().postData() || '{}');
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({
+          id: 'ex-new-' + Date.now(),
+          type: body.type || 'other',
+          description: body.description || '',
+          status: 'registered',
+          resolution: null,
+          resolutionNote: null,
+          attachments: [],
+          responsibleUserId: null,
+          createdBy: 'u-admin-001',
+          createdAt: '2026-07-16 15:00:00.000',
+          updatedAt: '2026-07-16 15:00:00.000',
+          resolvedAt: null,
+          parcelId: body.parcelId,
+          parcel: null,
+        })),
+      });
+      return;
+    }
+
+    // PATCH /api/exception/:id 处理
+    if (method === 'PATCH') {
+      const body = JSON.parse(route.request().postData() || '{}');
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({
+          ...EXCEPTION_ITEMS[0],
+          id: tail,
+          status: body.status || 'processing',
+          resolution: body.resolution || null,
+          resolutionNote: body.resolutionNote || null,
+        })),
+      });
+      return;
+    }
+
+    // GET /api/exception/:id 详情
+    if (tail && tail !== 'exception' && !url.search) {
+      const found = EXCEPTION_ITEMS.find((e) => e.id === tail) || EXCEPTION_ITEMS[0];
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok(found)),
+      });
+      return;
+    }
+
+    // GET /api/exception 列表
+    let items = [...EXCEPTION_ITEMS];
+    const status = url.searchParams.get('status');
+    if (status) items = items.filter((i) => i.status === status);
+    const type = url.searchParams.get('type');
+    if (type) items = items.filter((i) => i.type === type);
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        items,
+        total: items.length,
+        page: Number(url.searchParams.get('page') || 1),
+        pageSize: Number(url.searchParams.get('pageSize') || 20),
       })),
     });
   });

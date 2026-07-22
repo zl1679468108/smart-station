@@ -9,19 +9,20 @@ test.describe('O5/O9 工作台待办与深链', () => {
     await setLoggedIn(page, 'admin');
   });
 
-  test('工作台滞留待办点击跳转库存 status=overdue', async ({ page }) => {
+  test('工作台滞留待办点击跳转滞留件管理', async ({ page }) => {
     await page.goto('/#/admin/dashboard');
     await expect(page.getByRole('heading', { name: '工作台' })).toBeVisible({ timeout: 8000 });
     await page.getByRole('button', { name: /超期待提醒/ }).click();
-    await expect(page).toHaveURL(/status=overdue/);
-    await expect(page.getByRole('heading', { name: '库存查询' })).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/overdue/);
+    await expect(page.getByRole('heading', { name: '滞留件管理' })).toBeVisible();
   });
 
-  test('工作台异常卡片可点击跳转', async ({ page }) => {
+  test('工作台异常卡片可点击跳转异常件管理', async ({ page }) => {
     await page.goto('/#/admin/dashboard');
     await expect(page.getByRole('heading', { name: '工作台' })).toBeVisible({ timeout: 8000 });
     await page.getByRole('button', { name: '当前异常' }).click();
-    await expect(page).toHaveURL(/status=exception/);
+    await expect(page).toHaveURL(/\/admin\/exception/);
+    await expect(page.getByRole('heading', { name: '异常件管理' })).toBeVisible();
   });
 });
 

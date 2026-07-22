@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as overdueService from '@/services/overdue';
+import { useOverdueList, useInvalidateOverdueList } from '@/hooks/useOverdueData';
 import type { OverdueCounts, OverdueItem, OverdueLevel } from '@/types/overdue';
 import { useAuth } from '@/utils/auth';
 import { canWrite } from '@/utils/permission';
@@ -44,37 +45,23 @@ const OverduePage: React.FC = () => {
   );
   const [keyword, setKeyword] = useState(searchParams.get('keyword') || '');
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [submittedKeyword, setSubmittedKeyword] = useState(searchParams.get('keyword') || '');
   const [scanning, setScanning] = useState(false);
-  const [items, setItems] = useState<OverdueItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [counts, setCounts] = useState<OverdueCounts>({ all: 0, warn: 0, remind: 0, return: 0 });
-  const [thresholds, setThresholds] = useState({ warnDays: 3, remindDays: 7, returnDays: 15 });
   const pageSize = 20;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await overdueService.fetchOverdueList({
-        level: level || undefined,
-        keyword: keyword || undefined,
-        page,
-        pageSize,
-      });
-      setItems(res.items);
-      setTotal(res.total);
-      if (res.counts) setCounts(res.counts);
-      if (res.thresholds) setThresholds(res.thresholds);
-    } catch (e: any) {
-      notifyError(e?.message || '加载失败');
-    } finally {
-      setLoading(false);
-    }
-  }, [level, keyword, page]);
+  const { data, isLoading, refetch } = useOverdueList({
+    level: level || undefined,
+    keyword: submittedKeyword || undefined,
+    page,
+    pageSize,
+  });
+  const invalidateOverdue = useInvalidateOverdueList();
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const loading = isLoading;
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const counts = data?.counts ?? { all: 0, warn: 0, remind: 0, return: 0 };
+  const thresholds = data?.thresholds ?? { warnDays: 3, remindDays: 7, returnDays: 15 };
 
   const onTab = (key: '' | OverdueLevel) => {
     setLevel(key);
@@ -92,7 +79,7 @@ const OverduePage: React.FC = () => {
       notifySuccess(
         `扫描完成：标记滞留 ${r.markedOverdue}，预警事件 ${r.warned}，提醒 ${r.reminded}，待退回候选 ${r.returnCandidates}`,
       );
-      await load();
+      await invalidateOverdue();
     } catch (e: any) {
       notifyError(e?.message || '扫描失败');
     } finally {
@@ -103,17 +90,17 @@ const OverduePage: React.FC = () => {
   const onReturn = async (id: string, action: 'start' | 'complete') => {
     try {
       await overdueService.returnOverdue(id, action);
-      await load();
+      await invalidateOverdue();
     } catch (e: any) {
       notifyError(e?.message || '操作失败');
     }
   };
 
   return (
-    <div className="space-y-4 p-4 lg:p-6">
+    <div className="w-full space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">滞留件管理</h1>
+          <h1 className="text-lg font-semibold text-gray-800">滞留件管理</h1>
           <p className="mt-1 text-sm text-gray-500">
             阈值：预警 {thresholds.warnDays} 天 · 提醒 {thresholds.remindDays} 天 · 退回{' '}
             {thresholds.returnDays} 天
@@ -162,7 +149,8 @@ const OverduePage: React.FC = () => {
           onSubmit={(e) => {
             e.preventDefault();
             setPage(1);
-            load();
+            setSubmittedKeyword(keyword);
+            if (submittedKeyword === keyword) refetch();
           }}
         >
           <input

@@ -467,7 +467,7 @@
 | M24.3 | P0 | 异常件后端模块（exception） | backend/exception | done | GET/POST/PATCH /api/exception；登记写 ss_exceptions + parcel=exception + 事件；处理更新状态/resolution；attachments 为 URL 数组≤5；后端 tsc+build exit 0 |
 | M24.4 | P0 | 异常件前端页面 | frontend/pages/admin/exception | done | /admin/exception；列表筛选+登记表单+处理弹窗；侧栏入口；前端 tsc+build exit 0 |
 | M24.5 | P1 | Dashboard / 大屏跳转真实列表 | frontend | done | 工作台与大屏待办点击跳转 `/admin/overdue`、`/admin/exception`（不再仅跳 inventory status） |
-| M24.6 | P1 | 端到端验证 | qa | todo | Playwright：扫描后列表出现级别、退回完成、异常登记与处理；tsc/build 双端 exit 0 |
+| M24.6 | P1 | 端到端验证 | qa | done | Playwright `overdue.spec.ts`(5)+`exception.spec.ts`(5)：级别徽标/Tab 过滤/立即扫描提示/标记退回/viewer 只读；异常列表标签/状态筛选/登记弹窗/处理保存/viewer 只读；同步修正 `dashboard.spec.ts`+`optimization.spec.ts` 跳转断言为 `/admin/overdue`、`/admin/exception`；前后端 tsc+build exit 0（2026-07-23） |
 
 ### 1.4.0 寄件管理 + 财务结算（必要）
 

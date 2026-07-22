@@ -62,16 +62,16 @@ test.describe('待办提醒', () => {
     );
   });
 
-  test('点击超期待提醒跳转库存筛选', async ({ page }) => {
+  test('点击超期待提醒跳转滞留件列表', async ({ page }) => {
     await page.goto('/#/admin/dashboard');
     await page.getByText('超期待提醒', { exact: true }).click();
-    await expect(page).toHaveURL(/\/admin\/inventory\?status=overdue/);
+    await expect(page).toHaveURL(/\/admin\/overdue/);
   });
 
-  test('点击异常件跳转库存筛选', async ({ page }) => {
+  test('点击异常件跳转异常件列表', async ({ page }) => {
     await page.goto('/#/admin/dashboard');
     await page.getByText('异常件未处理', { exact: true }).click();
-    await expect(page).toHaveURL(/\/admin\/inventory\?status=exception/);
+    await expect(page).toHaveURL(/\/admin\/exception/);
   });
 });
 

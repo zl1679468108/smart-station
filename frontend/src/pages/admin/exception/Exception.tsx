@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as exceptionService from '@/services/exception';
+import { useExceptionList, useInvalidateExceptionList } from '@/hooks/useExceptionData';
 import * as inventoryService from '@/services/inventory';
 import type {
-  ExceptionItem,
   ExceptionResolution,
   ExceptionStatus,
   ExceptionType,
@@ -64,10 +64,8 @@ const ExceptionPage: React.FC = () => {
   );
   const [type, setType] = useState<ExceptionType | ''>('');
   const [keyword, setKeyword] = useState('');
+  const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<ExceptionItem[]>([]);
-  const [total, setTotal] = useState(0);
 
   const [showCreate, setShowCreate] = useState(false);
   const [parcelKeyword, setParcelKeyword] = useState('');
@@ -86,28 +84,18 @@ const ExceptionPage: React.FC = () => {
 
   const pageSize = 20;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await exceptionService.fetchExceptionList({
-        status: status || undefined,
-        type: type || undefined,
-        keyword: keyword || undefined,
-        page,
-        pageSize,
-      });
-      setItems(res.items);
-      setTotal(res.total);
-    } catch (e: any) {
-      notifyError(e?.message || '加载失败');
-    } finally {
-      setLoading(false);
-    }
-  }, [status, type, keyword, page]);
+  const { data, isLoading, refetch } = useExceptionList({
+    status: status || undefined,
+    type: type || undefined,
+    keyword: submittedKeyword || undefined,
+    page,
+    pageSize,
+  });
+  const invalidateException = useInvalidateExceptionList();
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const loading = isLoading;
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
 
   const parcelSelectOptions = useMemo<SearchSelectOption[]>(
     () =>
@@ -174,7 +162,7 @@ const ExceptionPage: React.FC = () => {
         description: form.description.trim(),
       });
       setShowCreate(false);
-      await load();
+      await invalidateException();
     } catch (e: any) {
       notifyError(e?.message || '登记失败');
     } finally {
@@ -195,7 +183,7 @@ const ExceptionPage: React.FC = () => {
         resolutionNote: processForm.resolutionNote || undefined,
       });
       setProcessId(null);
-      await load();
+      await invalidateException();
     } catch (e: any) {
       notifyError(e?.message || '更新失败');
     } finally {
@@ -204,10 +192,10 @@ const ExceptionPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 p-4 lg:p-6">
+    <div className="w-full space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">异常件管理</h1>
+          <h1 className="text-lg font-semibold text-gray-800">异常件管理</h1>
           <p className="mt-1 text-sm text-gray-500">登记、处理丢失/破损/错投等末端异常</p>
         </div>
         {writable && (
@@ -257,7 +245,8 @@ const ExceptionPage: React.FC = () => {
           onSubmit={(e) => {
             e.preventDefault();
             setPage(1);
-            load();
+            setSubmittedKeyword(keyword);
+            if (submittedKeyword === keyword) refetch();
           }}
         >
           <input
