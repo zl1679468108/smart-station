@@ -33,6 +33,7 @@ export type IconName =
   | 'send' // 寄件管理
   | 'wallet' // 财务结算
   | 'chart' // 数据统计
+  | 'camera' // 拍照 / 面单识别
 
 interface IconProps {
   name: IconName;
@@ -202,6 +203,13 @@ const paths: Record<IconName, React.ReactNode> = {
       <path d="M7 15v3" />
       <path d="M12 9v9" />
       <path d="M17 5v13" />
+    </>
+  ),
+  // 拍照 / 面单识别：相机
+  camera: (
+    <>
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z" />
+      <circle cx="12" cy="13" r="4" />
     </>
   ),
 };

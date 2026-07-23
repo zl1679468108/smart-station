@@ -5,12 +5,13 @@ import type { KioskParcelItem, KioskShelf, StationLayoutConfig } from '@/types/k
 import Icon from '@/components/ui/Icon';
 import Logo from '@/components/brand/Logo';
 import EmptyState from '@/components/ui/EmptyState';
-import Keypad, { KeypadMode } from '@/components/ui/Keypad';
+import Keypad from '@/components/ui/Keypad';
 import {
   parseShelfNumberFromCode,
   parseLayerFromCode,
   getZoneLetter,
 } from '@/components/warehouse3d';
+import { formatBeijingTimestamp } from '@/utils/date';
 
 const Warehouse3D = React.lazy(() => import('@/components/warehouse3d'));
 
@@ -86,7 +87,7 @@ const Home: React.FC = () => {
             <button
               key={t.key}
               onClick={() => switchTab(t.key)}
-              className={`rounded-md px-3 py-1.5 text-sm transition-colors sm:px-4 ${
+              className={`min-h-[44px] rounded-md px-2 py-2 text-sm transition-colors sm:px-4 ${
                 tab === t.key
                   ? 'bg-white text-primary shadow-sm'
                   : 'text-gray-500 hover:text-gray-700'
@@ -163,15 +164,6 @@ const Home: React.FC = () => {
 
 // ============ 虚拟键盘面板 ============
 const KeypadPanel: React.FC<{ tab: QueryTab }> = ({ tab }) => {
-  // 数字输入目标：phone 表单的 phone/code、code 表单的 code
-  // 字母输入目标：tracking 表单的 trackingNumber
-  const [mode, setMode] = useState<KeypadMode>('numeric');
-
-  useEffect(() => {
-    // 切 Tab 时重置键盘模式
-    setMode(tab === 'tracking' ? 'alpha' : 'numeric');
-  }, [tab]);
-
   // 通过全局事件分发按键输入，由当前聚焦输入框监听
   const dispatchKey = (type: string, payload?: string) => {
     window.dispatchEvent(new CustomEvent('keypad-input', { detail: { type, payload } }));
@@ -186,14 +178,15 @@ const KeypadPanel: React.FC<{ tab: QueryTab }> = ({ tab }) => {
         <div className="mb-2 flex justify-end">
           <button
             onClick={() => dispatchKey('clear')}
-            className="rounded-md bg-gray-100 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-200"
+            className="min-h-[44px] rounded-md bg-gray-100 px-3 py-2 text-xs text-gray-600 hover:bg-gray-200"
           >
             清空
           </button>
         </div>
       )}
       <Keypad
-        mode={mode}
+        key={tab}
+        mode="numeric"
         allowModeSwitch={allowSwitch}
         enableDash={enableDash}
         onInput={(char) => dispatchKey('input', char)}
@@ -380,7 +373,7 @@ const CodeQueryView: React.FC<{
       if (detail.type === 'input') {
         const ch = detail.payload as string;
         if (/^[\d-]$/.test(ch)) {
-          setCode((v) => (v.length < 11 ? v + ch : v));
+          setCode((v) => (v.length < 13 ? v + ch : v));
         }
       } else if (detail.type === 'backspace') {
         setCode((v) => v.slice(0, -1));
@@ -395,8 +388,8 @@ const CodeQueryView: React.FC<{
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
-    if (!/^\d{1,2}-[1-9]-\d{4}$/.test(code)) {
-      showToast('error', '取件码格式不正确，如 22-9-2132');
+    if (!/^\d{1,3}-\d{1,2}-\d{1,6}$/.test(code)) {
+      showToast('error', '取件码格式不正确，如 3-2-9903');
       return;
     }
     setSubmitting(true);
@@ -423,7 +416,7 @@ const CodeQueryView: React.FC<{
           type="text"
           value={code}
           onChange={(e) => setCode(e.target.value)}
-          placeholder="如 22-9-2132"
+          placeholder="如 3-2-9903"
           className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base font-mono tracking-wider outline-none focus:border-primary"
           readOnly
           autoComplete="off"
@@ -549,7 +542,7 @@ const ResultView: React.FC<{
                 <span className="text-gray-400">{item.recipientPhoneTail}</span>
               </div>
               <div className="text-xs text-gray-400">
-                入库：{new Date(item.inboundAt).toLocaleString('zh-CN')}
+                入库：{formatBeijingTimestamp(item.inboundAt)}
               </div>
             </div>
           </div>

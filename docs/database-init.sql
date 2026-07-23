@@ -2,8 +2,10 @@
 -- 用途：创建表结构、索引、触发器，提升查询性能
 -- 在 Supabase SQL 编辑器中执行
 -- 表前缀：ss_（smart-station）
--- 版本：v1.0（核心存取件闭环）
+-- 版本：v1.6（存取件闭环 + 货架 3D 布局 + 异常件 + 寄件/财务 + OCR 额度）
 -- 维护规则：本文件是数据库 schema 的唯一真相源，DDL 变更必须同步更新本文件并手动在 SQL Editor 执行
+--   已废弃独立 migration-*.sql，所有历史迁移的终态均已内联到本文件对应表定义中。
+--   全脚本幂等（IF NOT EXISTS / DROP ... IF EXISTS / ON CONFLICT），新建库与已部署库均可直接整体执行。
 
 -- ==============================================
 -- 触发器函数：自动更新 updated_at
@@ -486,11 +488,8 @@ VALUES
 ON CONFLICT (code) DO NOTHING;
 
 -- ==============================================
--- 后续版本预留表（v1.1+，暂不创建，注释占位）
+-- 14. 异常件表（1.3.0 / M24）
 -- ==============================================
--- ---------------------------------------------------------------------------
--- 异常件表（1.3.0 / M24）
--- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ss_exceptions (
   id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   station_id            UUID NOT NULL REFERENCES ss_stations(id),
@@ -524,19 +523,13 @@ COMMENT ON COLUMN ss_exceptions.status IS 'registered → processing → resolve
 COMMENT ON COLUMN ss_exceptions.resolution IS 'compensate/return/destroy/redeliver';
 COMMENT ON COLUMN ss_exceptions.attachments IS '图片 URL 数组，最多 5 个';
 
--- v1.1: ss_overdue_rules（滞留规则，v1.0 用 ss_stations 字段；1.3.0 仍用 ss_stations 阈值）
--- v1.3: ss_exceptions（异常件，见上表）
-
--- v1.3: ss_shippings（寄件单）
--- v1.3: ss_address_book（地址簿）
--- v1.3: ss_finance_bills（月结账单）
--- v1.3: ss_finance_items（账单明细）
--- v1.4: ss_devices（设备管理，v1.0 PAD/扫描机不绑定记录）
--- v2.0: ss_station_group / ss_station_group_members（连锁多站点）
+-- 未来版本预留（尚未实现，仅登记规划，勿在本文件建表）：
+--   v1.x: ss_overdue_rules（独立滞留规则，当前仍用 ss_stations 阈值字段）
+--   v1.x: ss_devices（设备管理，当前 PAD/扫描机不绑定记录）
+--   v2.0: ss_station_group / ss_station_group_members（连锁多站点）
 
 -- ==============================================
--- v1.4.0: 寄件管理 + 财务结算（M25）
---   新建库执行本段即可；已部署库同样可直接执行（全部 IF NOT EXISTS）。
+-- 15. 寄件管理 + 财务结算（1.4.0 / M25）
 -- ==============================================
 
 -- 地址簿：常用发件人/收件人
@@ -703,9 +696,11 @@ COMMENT ON COLUMN ss_finance_items.item_type IS 'collect 代收 / deliver 代派
 COMMENT ON COLUMN ss_finance_items.direction IS 'receivable 应收 / payable 应付';
 
 -- ==============================================
--- v1.2.0 迁移：仓库 3D 布局（已部署的库执行此段即可，新建库走上方原始 DDL）
+-- 已部署库兼容补丁（ALTER）
+--   新建库执行上方 CREATE TABLE 即可，以下字段已内联；
+--   仅早于对应版本部署、缺少这些列的旧库需要执行本段补列（全部 IF NOT EXISTS，可安全重复执行）。
 -- ==============================================
--- ss_stations 加 layout_config 字段
+-- 仓库 3D 布局：ss_stations 加 layout_config 字段
 ALTER TABLE ss_stations
   ADD COLUMN IF NOT EXISTS layout_config JSONB NOT NULL DEFAULT '{}'::jsonb;
 COMMENT ON COLUMN ss_stations.layout_config IS '仓库 3D 布局配置 JSON：bounds（仓库尺寸与层高）+ doors（门口列表）+ obstacles（障碍物）';
@@ -720,3 +715,48 @@ COMMENT ON COLUMN ss_shelves.pos_x IS '货架在仓库内的 X 坐标（米）�
 COMMENT ON COLUMN ss_shelves.pos_y IS '货架在仓库内的 Y 坐标（米），NULL 时按 size_type 自动布局';
 COMMENT ON COLUMN ss_shelves.rotation IS '货架朝向角度：0/90/180/270';
 COMMENT ON COLUMN ss_shelves.zone IS '区域号（A/B/C...），NULL 时按 size_type 推断';
+
+-- ==============================================
+-- 16. 面单 OCR 月度额度计数表（防止免费额度用完后自动转按量付费）
+-- ==============================================
+-- 说明：腾讯云 OCR 免费额度用完后会「自动转按量付费」，不会报错拦截，
+-- 因此由后端维护「按月全局计数 + 硬上限」，调用腾讯云之前先原子占用一次额度，
+-- 到达上限直接拒绝（不再发起腾讯云请求 → 杜绝按量付费）。
+-- 计费按腾讯云「账号」全局计（所有驿站共享同一免费额度），故计数按月份全局，不按 station。
+CREATE TABLE IF NOT EXISTS ss_ocr_usage (
+  month       VARCHAR(7) PRIMARY KEY,          -- 计费月份，北京时间 YYYY-MM
+  used        INTEGER NOT NULL DEFAULT 0,      -- 当月已调用次数
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+COMMENT ON TABLE ss_ocr_usage IS '面单 OCR 月度调用计数 - 按月全局限额，防止免费额度用完后产生按量付费';
+COMMENT ON COLUMN ss_ocr_usage.month IS '计费月份（北京时间 YYYY-MM），与腾讯云免费额度按月重置对齐';
+COMMENT ON COLUMN ss_ocr_usage.used IS '当月已成功占用的调用次数';
+
+-- 原子占用一次额度：当月计数 +1，若超过 p_limit 则不自增并返回 allowed=false。
+-- 返回单行 (allowed BOOLEAN, used INTEGER)。用 INSERT ... ON CONFLICT 保证并发安全。
+DROP FUNCTION IF EXISTS ss_ocr_try_consume(VARCHAR, INTEGER);
+CREATE FUNCTION ss_ocr_try_consume(p_month VARCHAR, p_limit INTEGER)
+RETURNS TABLE(allowed BOOLEAN, used INTEGER) AS $$
+DECLARE
+  v_used INTEGER;
+BEGIN
+  -- 原子自增：首次插入为 1，冲突时在现有值上 +1，仅当未超上限时才自增
+  INSERT INTO ss_ocr_usage (month, used, updated_at)
+    VALUES (p_month, 1, now())
+  ON CONFLICT (month) DO UPDATE
+    SET used = ss_ocr_usage.used + 1, updated_at = now()
+    WHERE ss_ocr_usage.used < p_limit
+  RETURNING ss_ocr_usage.used INTO v_used;
+
+  IF v_used IS NULL THEN
+    -- 未发生自增（已达上限）：取当前值返回 allowed=false
+    SELECT ss_ocr_usage.used INTO v_used FROM ss_ocr_usage WHERE month = p_month;
+    RETURN QUERY SELECT false, COALESCE(v_used, p_limit);
+  ELSE
+    RETURN QUERY SELECT true, v_used;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION ss_ocr_try_consume(VARCHAR, INTEGER) IS '原子占用一次 OCR 额度：当月+1，超过上限返回 allowed=false（不自增）';

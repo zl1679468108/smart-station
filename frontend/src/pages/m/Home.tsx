@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import * as kioskService from '@/services/kiosk';
 import type { KioskParcelItem, KioskQueryResult } from '@/types/kiosk';
 import EmptyState from '@/components/ui/EmptyState';
+import { formatBeijingTimestamp } from '@/utils/date';
 
 // H5 远端查件：手机号 + 验证码 → 在库包裹列表（仅查看，不可出库）
 const Home: React.FC = () => {
@@ -129,7 +130,7 @@ const Home: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">入库时间</span>
-                    <span>{new Date(item.inboundAt).toLocaleString('zh-CN')}</span>
+                    <span>{formatBeijingTimestamp(item.inboundAt)}</span>
                   </div>
                 </div>
               </div>
@@ -157,7 +158,7 @@ const Home: React.FC = () => {
             value={phone}
             onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
             placeholder="11 位手机号"
-            className="w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary"
+            className="min-h-[44px] w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary"
             disabled={submitting}
             autoComplete="off"
           />
@@ -172,7 +173,7 @@ const Home: React.FC = () => {
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
               placeholder="6 位验证码"
-              className="flex-1 rounded-md border border-gray-300 px-3 py-2.5 text-sm tracking-widest outline-none focus:border-primary"
+              className="min-h-[44px] flex-1 rounded-md border border-gray-300 px-3 py-2.5 text-sm tracking-widest outline-none focus:border-primary"
               disabled={submitting}
               autoComplete="off"
             />
@@ -180,7 +181,7 @@ const Home: React.FC = () => {
               type="button"
               onClick={handleSendCode}
               disabled={sendingCode || countdown > 0 || phone.length !== 11}
-              className="min-w-[100px] rounded-md bg-primaryLight px-3 py-2.5 text-xs text-primary hover:bg-primary/10 disabled:opacity-50"
+              className="min-h-[44px] min-w-[100px] rounded-md bg-primaryLight px-3 py-2.5 text-xs text-primary hover:bg-primary/10 disabled:opacity-50"
             >
               {countdown > 0 ? `${countdown}s` : sendingCode ? '发送中' : '获取验证码'}
             </button>
@@ -197,7 +198,7 @@ const Home: React.FC = () => {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
+          className="min-h-[44px] w-full rounded-md bg-primary py-2.5 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
         >
           {submitting ? '查询中...' : '查询包裹'}
         </button>

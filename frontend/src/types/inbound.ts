@@ -32,3 +32,23 @@ export interface BatchInboundResult {
   results: Array<{ index: number; result: InboundResult }>;
   errors: Array<{ index: number; error: string; item: InboundPayload }>;
 }
+
+// 面单 OCR 识别结果（P1 智能入库）
+export interface WaybillOcrResult {
+  trackingNumber: string | null;
+  recipientName: string | null;
+  recipientPhone: string | null;
+  rawLines: string[];
+  matched: {
+    trackingNumber: boolean;
+    recipientName: boolean;
+    recipientPhone: boolean;
+  };
+  // 本月 OCR 额度使用情况，用于前端提示剩余次数（免费额度防超额）
+  quota: {
+    used: number;
+    limit: number;
+    remaining: number;
+    warning: boolean;
+  };
+}

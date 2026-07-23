@@ -1,5 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import * as statsReport from '@/services/stats-report';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   TrendResult,
   TrendGranularity,
@@ -7,7 +6,12 @@ import type {
   RetentionResult,
   PeakHoursResult,
 } from '@/types/stats-report';
-import { notifyError } from '@/utils/notification';
+import {
+  useStatsTrend,
+  useStatsFunnel,
+  useStatsRetention,
+  useStatsPeakHours,
+} from '@/hooks/useStatsReport';
 import PageHeader from '@/components/ui/PageHeader';
 
 const GRANULARITY_TABS: { key: TrendGranularity; label: string; span: number }[] = [
@@ -26,46 +30,18 @@ const StatsPage: React.FC = () => {
   const [granularity, setGranularity] = useState<TrendGranularity>('day');
   const [days, setDays] = useState(30);
 
-  const [trend, setTrend] = useState<TrendResult | null>(null);
-  const [funnel, setFunnel] = useState<FunnelResult | null>(null);
-  const [retention, setRetention] = useState<RetentionResult | null>(null);
-  const [peak, setPeak] = useState<PeakHoursResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const span = GRANULARITY_TABS.find((t) => t.key === granularity)?.span || 14;
+  const trendQuery = useStatsTrend(granularity, span);
+  const funnelQuery = useStatsFunnel(days);
+  const retentionQuery = useStatsRetention(days);
+  const peakQuery = useStatsPeakHours(days);
 
-  const loadTrend = useCallback(async () => {
-    try {
-      const span = GRANULARITY_TABS.find((t) => t.key === granularity)?.span || 14;
-      setTrend(await statsReport.fetchTrend({ granularity, span }));
-    } catch (e: any) {
-      notifyError(e?.message || '加载趋势失败');
-    }
-  }, [granularity]);
-
-  const loadRange = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [f, r, p] = await Promise.all([
-        statsReport.fetchFunnel(days),
-        statsReport.fetchRetention(days),
-        statsReport.fetchPeakHours(days),
-      ]);
-      setFunnel(f);
-      setRetention(r);
-      setPeak(p);
-    } catch (e: any) {
-      notifyError(e?.message || '加载统计失败');
-    } finally {
-      setLoading(false);
-    }
-  }, [days]);
-
-  useEffect(() => {
-    loadTrend();
-  }, [loadTrend]);
-
-  useEffect(() => {
-    loadRange();
-  }, [loadRange]);
+  const trend = trendQuery.data ?? null;
+  const funnel = funnelQuery.data ?? null;
+  const retention = retentionQuery.data ?? null;
+  const peak = peakQuery.data ?? null;
+  const rangeLoading =
+    funnelQuery.isPending || retentionQuery.isPending || peakQuery.isPending;
 
   return (
     <div className="w-full space-y-4">
@@ -119,7 +95,7 @@ const StatsPage: React.FC = () => {
         {/* 转化漏斗 */}
         <section className="rounded-xl bg-white p-4 shadow-sm">
           <h2 className="mb-3 text-sm font-medium text-gray-700">转化漏斗</h2>
-          {funnel ? <FunnelChart funnel={funnel} /> : <ChartEmpty loading={loading} />}
+          {funnel ? <FunnelChart funnel={funnel} /> : <ChartEmpty loading={rangeLoading} />}
         </section>
 
         {/* 滞留率 */}
@@ -133,7 +109,7 @@ const StatsPage: React.FC = () => {
               </span>
             )}
           </div>
-          {retention ? <RetentionChart retention={retention} /> : <ChartEmpty loading={loading} />}
+          {retention ? <RetentionChart retention={retention} /> : <ChartEmpty loading={rangeLoading} />}
         </section>
       </div>
 
@@ -147,7 +123,7 @@ const StatsPage: React.FC = () => {
             </span>
           )}
         </div>
-        {peak ? <PeakChart peak={peak} /> : <ChartEmpty loading={loading} />}
+        {peak ? <PeakChart peak={peak} /> : <ChartEmpty loading={rangeLoading} />}
       </section>
     </div>
   );
@@ -159,12 +135,23 @@ const ChartEmpty: React.FC<{ loading: boolean }> = ({ loading }) => (
 
 // ============ 趋势图（纯 SVG 双折线） ============
 const TrendChart: React.FC<{ points: TrendResult['points'] }> = ({ points }) => {
-  const W = 640;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [W, setW] = useState(640);
   const H = 220;
   const PAD_L = 32;
   const PAD_R = 12;
   const PAD_T = 12;
   const PAD_B = 40;
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => setW(Math.max(480, el.clientWidth));
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const maxVal = useMemo(
     () => Math.max(1, ...points.map((p) => Math.max(p.inbound, p.outbound))),
@@ -181,8 +168,8 @@ const TrendChart: React.FC<{ points: TrendResult['points'] }> = ({ points }) => 
   const labelStep = Math.ceil(points.length / 8);
 
   return (
-    <div className="w-full overflow-x-auto">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 480 }}>
+    <div ref={containerRef} className="w-full overflow-x-auto">
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H}>
         {yTicks.map((t, i) => (
           <g key={i}>
             <line x1={PAD_L} y1={yScale(t)} x2={W - PAD_R} y2={yScale(t)} stroke="#f0f0f0" strokeWidth={1} />

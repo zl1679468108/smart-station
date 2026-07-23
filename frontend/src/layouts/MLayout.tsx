@@ -10,7 +10,7 @@ const MLayout: React.FC = () => {
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="flex items-center gap-1 text-sm text-gray-600"
+          className="flex min-h-[44px] items-center gap-1 pr-3 text-sm text-gray-600"
         >
           <span>‹</span>
           <span>返回</span>

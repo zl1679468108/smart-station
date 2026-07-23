@@ -58,6 +58,8 @@ const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 export interface RequestOptions extends RequestInit {
   /** 设为 true 可跳过全局 loading toast（默认对 POST/PUT/PATCH/DELETE 自动显示） */
   skipLoading?: boolean;
+  /** 设为 true 可对 GET 等读取请求也显示全局 loading toast（如切换 tab/筛选时） */
+  forceLoading?: boolean;
   /** 设为 true 可跳过全局 notification（默认错误都提醒，写操作成功提醒） */
   skipNotify?: boolean;
   /** 覆盖成功提示文案；false 可关闭本次成功提示 */
@@ -119,7 +121,7 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
   // 对变更类方法（POST/PUT/PATCH/DELETE）自动显示全局 loading toast
   const method = (options.method || 'GET').toUpperCase();
   const isMutation = MUTATION_METHODS.has(method);
-  const shouldShowLoading = !options.skipLoading && isMutation;
+  const shouldShowLoading = !options.skipLoading && (isMutation || Boolean(options.forceLoading));
   const shouldNotify = !options.skipNotify;
   if (shouldShowLoading) showGlobalLoading();
 

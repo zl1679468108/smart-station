@@ -16,12 +16,33 @@ const QueryLayout: React.FC = () => {
       }, IDLE_TIMEOUT);
     };
 
+    const handleHardwareInput = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return;
+
+      if (event.key === 'Backspace') {
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent('keypad-input', { detail: { type: 'backspace' } }));
+        return;
+      }
+
+      if (event.key.length === 1 && /^[a-zA-Z0-9-]$/.test(event.key)) {
+        event.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent('keypad-input', {
+            detail: { type: 'input', payload: event.key.toUpperCase() },
+          }),
+        );
+      }
+    };
+
     const events = ['mousedown', 'touchstart', 'keydown'];
     events.forEach((e) => window.addEventListener(e, resetTimer));
+    window.addEventListener('keydown', handleHardwareInput);
     resetTimer();
 
     return () => {
       events.forEach((e) => window.removeEventListener(e, resetTimer));
+      window.removeEventListener('keydown', handleHardwareInput);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, []);

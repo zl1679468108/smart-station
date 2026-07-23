@@ -445,6 +445,30 @@
 
 ---
 
+## 1.6.0 面单 OCR 智能入库（已完成，2026-07-23）
+
+> 范围：拍照/上传快递面单 → 腾讯云 OCR 识别 → 解析运单号/收件人/手机号 → 回填入库表单，人工确认后再走既有 `POST /api/inbound`。仅识别回填，不落库。为防止腾讯云免费额度用完后自动转按量付费，新增按月全局额度硬限（`ss_ocr_usage` 表 + 原子占用函数）。对应 PRD §4.3.8、§5.2 AI 识别、候选池 P1 / B1。
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M32.1 | P1 | 后端 OCR 模块（腾讯云面单识别） | backend/ocr | done | 新增 `ocr.module/controller/service` + DTO；`POST /api/ocr/waybill`（TokenAuthGuard + Roles admin/clerk）；集成 `tencentcloud-sdk-nodejs-ocr` GeneralBasicOCR；启发式解析运单号/手机号/姓名；密钥仅存 `.env`，`.env.example` 加占位；注册到 app.module；后端 tsc+build 通过 |
+| M32.2 | P1 | 前端面单识别上传组件 + 入库回填 | frontend/components/ui + frontend/pages/admin/inbound | done | 新增 `WaybillOcrUploader`（拍照/上传、≤5MB、JPG/PNG/WebP、预览、命中提示、触摸友好 ≥44px）；`services/ocr.ts` + `WaybillOcrResult` 类型；扫码/手动录入两种模式均接入识别回填（仅覆盖识别到的字段）；新增 camera 图标；前端 tsc+build 通过 |
+| M32.3 | P1 | 端到端识别验证 | backend/ocr | done | 用 mock 面单图跑通腾讯云调用：鉴权成功，成功解析出运单号 `SF...`、手机号 `138...`、姓名「张伟」；密钥失败/图片解码失败均有友好降级提示 |
+| M32.4 | P1 | OCR 月度额度硬限（防按量付费） | backend/ocr + database | done | 新增 `ss_ocr_usage` 表 + 原子函数 `ss_ocr_try_consume`（写入 database-init.sql，需手动在 SQL Editor 执行）；调腾讯云前先按月全局原子占用额度，达上限直接拒绝、不发起计费请求；表/函数未迁移时降级为进程内内存计数同样硬顶；响应带 `quota{used,limit,remaining,warning}`；env 加 `TENCENT_OCR_MONTHLY_LIMIT`(默认1000)/`TENCENT_OCR_WARN_THRESHOLD`(默认50)；后端 tsc+build 通过 |
+| M32.5 | P2 | 面单预览点击放大 + 额度提醒 UI | frontend/components/ui | done | `WaybillOcrUploader` 缩略图可点击弹出大图（遮罩/右上角/Esc 关闭）；剩余额度低于阈值时展示 warning 提示条；前端 tsc+build 通过 |
+
+## 1.6.1 小程序端上线前检查（已完成，2026-07-23）
+
+> 范围：用户侧 `/query` 查询门户与 `/m` H5 查件页的功能、UI、交互和响应式上线检查。
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| QA-MINI-1 | P0 | 查询门户输入与取件码兼容性修复 | frontend/query | done | 虚拟键盘切 Tab 后模式正确重置；实体键盘/扫码枪可输入当前查询框；取件码校验与后端 `^\d{1,3}-\d{1,2}-\d{1,6}$` 对齐；`tests/query.spec.ts` 23 项通过 |
+| QA-MINI-2 | P1 | 移动端时间与触摸体验修复 | frontend/query + frontend/m | done | 北京时间字符串不再依赖浏览器 `Date` 解析；`/query` Tab/模式切换/键盘按钮与 `/m` 返回/验证码/提交按钮触摸热区 ≥44px；375px 视口无横向滚动 |
+| QA-MINI-3 | P1 | 上线前验证 | qa | done | `cd frontend && npx tsc --noEmit`、`npm run build`、`npx playwright test tests/query.spec.ts`、`npx playwright test tests/responsive.spec.ts --grep "/query"` 全部通过；浏览器复测 `/query` 与 `/m` 移动视口无明显遮挡/溢出 |
+
+---
+
 ## v1.0+ 后续版本规划
 
 > 5 个未实现模块的必要性判断（PRD §4.7-4.11 已有完整定义）：
@@ -532,3 +556,22 @@
 4. **O4–O7 版本与文档对齐** → version / AGENTS / PRD
 5. **O8–O9 查件隔离与待办体验** → 多租户正确性
 6. **O10+ 硬化项** 与 **M24 滞留/异常** 并行评估（建议先 O 后 M）
+
+---
+
+## 候选池 Backlog（新功能挖掘，2026-07-23，未拆解）
+
+> 从行业痛点与真实用户需求出发梳理，尚未拆解为可执行任务，仅登记方向与价值判断。
+> 选定某方向开工时，先在 PRD 补功能详述与数据模型，再拆 `M**` 任务到本文件。
+> 优先级判据：痛点真实度 × 价值 × 与现有架构契合度。
+
+| 编号 | 方向 | 核心痛点 | 关联现有模块 | 价值判断 | 状态 |
+|---|---|---|---|---|---|
+| B1 | 面单 OCR 自动识别入库 | 晚高峰逐件扫码 + 手录手机号，排队到门口；入库耗时是运营第一瓶颈 | inbound / notify（PRD §5.2 已列 AI 识别） | 强必要：直接砍半入库耗时，提效命门 | ✅ done（1.6.0，见 M32） |
+| B2 | 多通道通知触达 + 滞留转化 | 短信 stub 触达率低、成本高，用户不看即滞留；滞留率是核心 KPI | notify / overdue（PRD §4.13 已预留供应商接口） | 强必要：直接打滞留率 KPI，串起 notify+overdue | backlog |
+| B3 | 取件人身份核验 + 冒领留证 | 取件码可转发/偷看，晚高峰拿错件、冒领是真实纠纷源 | outbound / scan（PRD §4.5 出库两步流程） | 必要：降低纠纷与责任风险 | backlog |
+| B4 | 到付件 + 代收货款（对用户收款线） | 到付、代收货款是真实现金业务，当前 finance 只做「与快递公司月结」，对用户收款缺失，钱账对不上 | finance / inbound / outbound | 必要：补齐现金流闭环 | backlog |
+| B5 | 交接班 + 员工绩效 | 多店员轮班，谁入谁出、交接盘点、日结现金无汇总，只有事件轨迹 | admin / stats / parcel_events | 有价值：多店运营管理需求 | backlog |
+| B6 | 取件用户主动侧（订阅提醒 + 预约取件 + 到店导航） | 「有没有我的件」靠用户自查；跑空与滞留高 | query 门户 / notify | 有价值：提升留存、降跑空 | backlog |
+
+> **首推顺序建议**：B1（入库提效）或 B2（滞留 KPI）二选一先做；B3 冒领核验紧随其后（纠纷风险）。B4/B5/B6 依运营反馈再排。

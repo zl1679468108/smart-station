@@ -16,6 +16,7 @@ import { OverdueModule } from './overdue/overdue.module';
 import { ExceptionModule } from './exception/exception.module';
 import { ShippingModule } from './shipping/shipping.module';
 import { FinanceModule } from './finance/finance.module';
+import { OcrModule } from './ocr/ocr.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TokenAuthGuard } from './common/guards/token-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -71,6 +72,8 @@ import { RolesGuard } from './common/guards/roles.guard';
     ShippingModule,
     // 财务结算模块（M25 / 1.4.0）
     FinanceModule,
+    // 面单 OCR 智能入库模块（P1 / 1.6.0）
+    OcrModule,
   ],
   providers: [
     // 全局守卫：默认所有路由需登录，标记 @Public() 的放行

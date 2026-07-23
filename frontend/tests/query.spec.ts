@@ -80,6 +80,17 @@ test.describe('虚拟键盘', () => {
     await expect(page.getByRole('button', { name: '1', exact: true })).toBeVisible();
   });
 
+  test('切换 Tab 后键盘模式跟随当前查询方式重置', async ({ page }) => {
+    await page.goto('/#/query');
+    await page.getByRole('button', { name: '运单号' }).click();
+    await page.getByRole('button', { name: 'ABC 字母' }).click();
+    await expect(page.getByRole('button', { name: 'Q', exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: '手机号' }).click();
+    await expect(page.getByRole('button', { name: '1', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Q', exact: true })).toHaveCount(0);
+  });
+
   test('取件码 Tab 显示横杠按钮', async ({ page }) => {
     await page.goto('/#/query');
     await page.getByRole('button', { name: '取件码' }).click();
@@ -108,6 +119,15 @@ test.describe('虚拟键盘', () => {
     await page.getByRole('button', { name: '3', exact: true }).click();
     await clear(page);
     await expect(page.getByPlaceholder('11 位手机号')).toHaveValue('');
+  });
+
+  test('实体键盘可输入当前查询框', async ({ page }) => {
+    await page.goto('/#/query');
+    await expect(page.getByPlaceholder('11 位手机号')).toBeFocused({ timeout: 8000 });
+    await page.keyboard.type('13800001234');
+    await expect(page.getByPlaceholder('11 位手机号')).toHaveValue('13800001234');
+    await page.keyboard.press('Backspace');
+    await expect(page.getByPlaceholder('11 位手机号')).toHaveValue('1380000123');
   });
 });
 
@@ -166,10 +186,9 @@ test.describe('取件码查询', () => {
   test('格式错误显示 Toast', async ({ page }) => {
     await page.goto('/#/query');
     await page.getByRole('button', { name: '取件码' }).click();
-    // 输入格式错误的取件码 1-1-1（应为 1-1-1001 格式）
+    // 输入格式错误的取件码 1--1
     await typeViaKeypad(page, '1');
     await page.getByRole('button', { name: '-', exact: true }).click();
-    await typeViaKeypad(page, '1');
     await page.getByRole('button', { name: '-', exact: true }).click();
     await typeViaKeypad(page, '1');
     await page.getByRole('button', { name: '查询包裹' }).click();
@@ -185,6 +204,17 @@ test.describe('取件码查询', () => {
     await typeViaKeypad(page, '1');
     await page.getByRole('button', { name: '-', exact: true }).click();
     await typeViaKeypad(page, '1001');
+
+    await page.getByRole('button', { name: '查询包裹' }).click();
+    await expect(page.getByText('找到 1 个包裹')).toBeVisible({ timeout: 8000 });
+  });
+
+  test('支持后端允许的较长取件码格式', async ({ page }) => {
+    await page.goto('/#/query');
+    await page.getByRole('button', { name: '取件码' }).click();
+    for (const ch of '123-12-123456') {
+      await page.getByRole('button', { name: ch, exact: true }).click();
+    }
 
     await page.getByRole('button', { name: '查询包裹' }).click();
     await expect(page.getByText('找到 1 个包裹')).toBeVisible({ timeout: 8000 });
@@ -223,6 +253,6 @@ test.describe('Toast 提示', () => {
     await typeViaKeypad(page, '13800001234');
     await page.getByRole('button', { name: '查询包裹' }).click();
 
-    await expect(page.getByText('查询失败')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('查询失败').first()).toBeVisible({ timeout: 8000 });
   });
 });

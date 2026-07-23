@@ -15,20 +15,20 @@ export function fetchTrend(params: {
   if (params.granularity) q.set('granularity', params.granularity);
   if (params.span) q.set('span', String(params.span));
   const s = q.toString();
-  return get<TrendResult>(`/api/stats/trend${s ? `?${s}` : ''}`);
+  return get<TrendResult>(`/api/stats/trend${s ? `?${s}` : ''}`, { forceLoading: true });
 }
 
 export function fetchFunnel(days?: number): Promise<FunnelResult> {
   const q = days ? `?days=${days}` : '';
-  return get<FunnelResult>(`/api/stats/funnel${q}`);
+  return get<FunnelResult>(`/api/stats/funnel${q}`, { forceLoading: true });
 }
 
 export function fetchRetention(days?: number): Promise<RetentionResult> {
   const q = days ? `?days=${days}` : '';
-  return get<RetentionResult>(`/api/stats/retention${q}`);
+  return get<RetentionResult>(`/api/stats/retention${q}`, { forceLoading: true });
 }
 
 export function fetchPeakHours(days?: number): Promise<PeakHoursResult> {
   const q = days ? `?days=${days}` : '';
-  return get<PeakHoursResult>(`/api/stats/peak-hours${q}`);
+  return get<PeakHoursResult>(`/api/stats/peak-hours${q}`, { forceLoading: true });
 }

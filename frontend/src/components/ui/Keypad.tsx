@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 
 /**
  * 虚拟键盘面板组件（PRD §4.14.3）
@@ -38,6 +38,10 @@ const Keypad: React.FC<KeypadProps> = ({
 }) => {
   const [mode, setMode] = useState<KeypadMode>(initialMode);
 
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
+
   const handleKey = useCallback(
     (char: string) => {
       onInput(char);
@@ -62,7 +66,7 @@ const Keypad: React.FC<KeypadProps> = ({
         <div className="mb-2 flex justify-end">
           <button
             onClick={() => setMode(mode === 'numeric' ? 'alpha' : 'numeric')}
-            className="rounded-md bg-gray-100 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-200"
+            className="min-h-[44px] rounded-md bg-gray-100 px-3 py-2 text-xs text-gray-600 hover:bg-gray-200"
           >
             {mode === 'numeric' ? 'ABC 字母' : '123 数字'}
           </button>

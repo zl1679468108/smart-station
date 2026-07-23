@@ -3,10 +3,11 @@ import * as inboundService from '@/services/inbound';
 import { useCouriers, useInvalidateShelves, useShelves } from '@/hooks/useDictionary';
 import { useInvalidateDashboard } from '@/hooks/useDashboardData';
 import { useInvalidateInventoryList } from '@/hooks/useInventoryData';
-import type { InboundResult, ParcelSize } from '@/types/inbound';
+import type { InboundResult, ParcelSize, WaybillOcrResult } from '@/types/inbound';
 import type { Shelf } from '@/types/admin';
 import Icon from '@/components/ui/Icon';
 import PageHeader from '@/components/ui/PageHeader';
+import WaybillOcrUploader from '@/components/ui/WaybillOcrUploader';
 
 type Mode = 'scan' | 'manual' | 'batch';
 
@@ -144,6 +145,14 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     inputRef.current?.focus();
   }, []);
 
+  // 面单 OCR 识别回填：仅覆盖识别到的字段，未识别的保留用户已填内容
+  const handleOcrResult = (res: WaybillOcrResult) => {
+    setError('');
+    if (res.trackingNumber) setTrackingNumber(res.trackingNumber);
+    if (res.recipientName) setRecipientName(res.recipientName);
+    if (res.recipientPhone) setRecipientPhone(res.recipientPhone);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
@@ -187,6 +196,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   return (
     <div className="space-y-4">
       <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-gray-200 bg-white p-5">
+        <WaybillOcrUploader disabled={submitting} onResult={handleOcrResult} />
         <div>
           <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>运单号（扫码）</label>
           <input
@@ -275,6 +285,17 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   // 按当前选择的 size 过滤可选货架（仅显示启用中的货架）
   const filteredShelves = shelves.filter((s) => s.status === 'active' && s.size_type === form.size);
 
+  // 面单 OCR 识别回填：仅覆盖识别到的字段，未识别的保留用户已填内容
+  const handleOcrResult = (res: WaybillOcrResult) => {
+    setError('');
+    setForm((prev) => ({
+      ...prev,
+      trackingNumber: res.trackingNumber ?? prev.trackingNumber,
+      recipientName: res.recipientName ?? prev.recipientName,
+      recipientPhone: res.recipientPhone ?? prev.recipientPhone,
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
@@ -319,6 +340,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   return (
     <div className="space-y-4">
       <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-gray-200 bg-white p-5">
+        <WaybillOcrUploader disabled={submitting} onResult={handleOcrResult} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>运单号</label>
