@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as adminService from '@/services/admin';
 import * as statsService from '@/services/stats';
 import type { DashboardNotify } from '@/types/stats';
@@ -43,6 +43,7 @@ function isLogFilter(v: string): v is LogFilter {
  * - 触达筛选：未私信 / 已私信 / 私信失败
  */
 const NotifyTab: React.FC = () => {
+  const navigate = useNavigate();
   const [bindings, setBindings] = useState<NotifyBindingItem[]>([]);
   const [logs, setLogs] = useState<NotifyLogItem[]>([]);
   const [phoneSummaries, setPhoneSummaries] = useState<NotifyPhoneSummaryItem[]>([]);
@@ -805,16 +806,27 @@ const NotifyTab: React.FC = () => {
                 {log.errorMessage && (
                   <p className="mt-1 text-[11px] text-red-600">错误：{log.errorMessage}</p>
                 )}
-                {log.canResend && (
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => void onResend(log)}
-                      disabled={resendingId === log.id || batchResending}
-                      className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-700 hover:border-primary hover:text-primary disabled:opacity-60"
-                    >
-                      {resendingId === log.id ? '重发中…' : '重新发送'}
-                    </button>
+                {(log.parcelId || log.canResend) && (
+                  <div className="mt-2 flex flex-wrap justify-end gap-2">
+                    {log.parcelId && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/admin/inventory/${log.parcelId}`)}
+                        className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-700 hover:border-primary hover:text-primary"
+                      >
+                        看包裹
+                      </button>
+                    )}
+                    {log.canResend && (
+                      <button
+                        type="button"
+                        onClick={() => void onResend(log)}
+                        disabled={resendingId === log.id || batchResending}
+                        className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-700 hover:border-primary hover:text-primary disabled:opacity-60"
+                      >
+                        {resendingId === log.id ? '重发中…' : '重新发送'}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

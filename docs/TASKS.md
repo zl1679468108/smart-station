@@ -1059,3 +1059,10 @@
 | M76.2 | P2 | 批量/单件提醒回执条 | inventory | done | lastBatchRemind |
 | M76.3 | P1 | 查件「我的预约」状态白话 | query appointment | done | 色标+说明+空态 |
 | M76.4 | P2 | 展开自动查预约 | query appointment | done | 有手机号时 |
+
+## M77 通知记录跳包裹 + 入库会话计数（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M77.1 | P1 | 通知记录有包裹时可「看包裹」 | NotifyTab | done | 深链 `/admin/inventory/:id` |
+| M77.2 | P1 | 扫码入库本会话成功/未绑定/待收款计数 | inbound scan | done | 累计不限 5 条，可清零 |
+| M77.3 | P2 | 清零本会话列表与计数 | inbound scan | done | 不清服务端数据 |

@@ -500,6 +500,12 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const [result, setResult] = useState<InboundResult | null>(null);
   /** 本会话最近成功入库，便于连续扫码时回看取件码/通知 */
   const [recent, setRecent] = useState<InboundResult[]>([]);
+  /** 本会话累计（不限于 recent 5 条）：成功数 / 未绑定 / 待收款 */
+  const [sessionStats, setSessionStats] = useState({
+    success: 0,
+    unbound: 0,
+    unpaid: 0,
+  });
   /**
    * 连续同收件人：成功后保留姓名/手机号/尺寸，只清空运单与金额
    * 晚高峰同一人多件时少打字
@@ -621,6 +627,18 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       });
       setResult(res);
       setRecent((prev) => [res, ...prev].slice(0, 5));
+      setSessionStats((prev) => ({
+        success: prev.success + 1,
+        unbound:
+          prev.unbound +
+          (res.notify?.enabled && !res.notify?.customerBound ? 1 : 0),
+        unpaid:
+          prev.unpaid +
+          (Number(res.collectDueAmount || 0) > 0 &&
+          (res.collectStatus === 'unpaid' || !res.collectStatus)
+            ? 1
+            : 0),
+      }));
       saveLastParcelSize(size);
       playInboundSuccessBeep();
       invalidateShelves();
@@ -848,6 +866,43 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             setRecent((prev) => prev.map((x) => (x.id === next.id ? next : x)));
           }}
         />
+      )}
+
+      {sessionStats.success > 0 && (
+        <div className="rounded-lg border border-primary/20 bg-orange-50/60 px-3 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-700">
+              <span className="font-medium text-gray-800">本会话入库</span>
+              <span>
+                成功 <strong className="text-primary">{sessionStats.success}</strong> 件
+              </span>
+              {sessionStats.unbound > 0 && (
+                <span className="text-orange-700">
+                  未绑定 <strong>{sessionStats.unbound}</strong>
+                </span>
+              )}
+              {sessionStats.unpaid > 0 && (
+                <span className="text-rose-700">
+                  待收款 <strong>{sessionStats.unpaid}</strong>
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSessionStats({ success: 0, unbound: 0, unpaid: 0 });
+                setRecent([]);
+                setResult(null);
+              }}
+              className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+            >
+              清零本会话
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-gray-500">
+            只统计当前页面未刷新期间的入库，方便连续扫码时心里有数
+          </p>
+        </div>
       )}
 
       {recent.length > 0 && (
