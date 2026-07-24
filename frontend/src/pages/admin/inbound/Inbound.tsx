@@ -16,6 +16,7 @@ import type { Shelf } from '@/types/admin';
 import Icon from '@/components/ui/Icon';
 import PageHeader from '@/components/ui/PageHeader';
 import WaybillOcrUploader from '@/components/ui/WaybillOcrUploader';
+import NotifyBindHint from '@/components/NotifyBindHint';
 
 type Mode = 'scan' | 'manual' | 'batch';
 
@@ -381,6 +382,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
               disabled={submitting}
             />
+            <NotifyBindHint phone={recipientPhone} />
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
@@ -757,6 +759,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
               disabled={submitting}
             />
+            <NotifyBindHint phone={form.recipientPhone} />
           </div>
         </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
