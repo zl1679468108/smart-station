@@ -405,6 +405,16 @@ const Dashboard: React.FC = () => {
               >
                 复制绑定话术
               </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate('/admin/system?tab=notify&filter=unbound&view=byPhone');
+                }}
+                className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+              >
+                按手机号跟进
+              </button>
             </div>
           )}
         </div>

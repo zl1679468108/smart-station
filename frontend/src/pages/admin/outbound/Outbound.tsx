@@ -92,6 +92,7 @@ const Outbound: React.FC = () => {
 
 // ============ 人工辅助出库（查询 + 确认两步流程） ============
 const ManualOutbound: React.FC = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const invalidateShelves = useInvalidateShelves();
   const invalidateDashboard = useInvalidateDashboard();
@@ -106,8 +107,12 @@ const ManualOutbound: React.FC = () => {
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<{
     title: string;
-    script: string;
-    amountText: string;
+    script?: string;
+    amountText?: string;
+    parcelId: string;
+    phone?: string;
+    trackingNumber?: string;
+    pickupCode?: string | null;
   } | null>(null);
   const unpaidAutoLoadKey = searchParams.get('unpaid');
   const trackingAutoKey = (searchParams.get('tracking') || '').trim();
@@ -273,6 +278,10 @@ const ManualOutbound: React.FC = () => {
             title: '已免收并出库',
             script,
             amountText: `原应收 ¥${due.toFixed(2)}（已免收）`,
+            parcelId: item.id,
+            phone: item.recipientPhone,
+            trackingNumber: item.trackingNumber,
+            pickupCode: item.pickupCode,
           });
           notifySuccess(`已免收 ¥${due.toFixed(2)} 并出库`);
         } else {
@@ -287,11 +296,24 @@ const ManualOutbound: React.FC = () => {
             title: '收款出库成功',
             script,
             amountText: `已收 ¥${due.toFixed(2)}`,
+            parcelId: item.id,
+            phone: item.recipientPhone,
+            trackingNumber: item.trackingNumber,
+            pickupCode: item.pickupCode,
           });
           notifySuccess(`收款 ¥${due.toFixed(2)} 出库成功，可复制话术给客户`);
         }
       } else {
-        setLastReceipt(null);
+        setLastReceipt({
+          title: '出库成功',
+          amountText: item.pickupCode
+            ? `取件码 ${item.pickupCode}`
+            : item.trackingNumber,
+          parcelId: item.id,
+          phone: item.recipientPhone,
+          trackingNumber: item.trackingNumber,
+          pickupCode: item.pickupCode,
+        });
         notifySuccess('出库成功');
       }
 
@@ -322,23 +344,60 @@ const ManualOutbound: React.FC = () => {
       {lastReceipt && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-medium text-emerald-900">{lastReceipt.title}</p>
-              <p className="mt-0.5 text-xs text-emerald-800">{lastReceipt.amountText}</p>
-              <p className="mt-2 text-xs leading-relaxed text-emerald-900/90">{lastReceipt.script}</p>
+              {lastReceipt.amountText && (
+                <p className="mt-0.5 text-xs text-emerald-800">{lastReceipt.amountText}</p>
+              )}
+              {lastReceipt.trackingNumber && (
+                <p className="mt-1 font-mono text-[11px] text-emerald-900/80">
+                  运单 {lastReceipt.trackingNumber}
+                  {lastReceipt.pickupCode ? ` · 码 ${lastReceipt.pickupCode}` : ''}
+                </p>
+              )}
+              {lastReceipt.script && (
+                <p className="mt-2 text-xs leading-relaxed text-emerald-900/90">
+                  {lastReceipt.script}
+                </p>
+              )}
             </div>
-            <div className="flex shrink-0 gap-2">
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+              {lastReceipt.script && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const ok = await copyText(lastReceipt.script || '');
+                    if (ok) notifySuccess('已复制话术');
+                    else notifyError('复制失败，请长按文字手动复制');
+                  }}
+                  className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                >
+                  复制话术
+                </button>
+              )}
               <button
                 type="button"
-                onClick={async () => {
-                  const ok = await copyText(lastReceipt.script);
-                  if (ok) notifySuccess('已复制收款话术');
-                  else notifyError('复制失败，请长按文字手动复制');
-                }}
-                className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                onClick={() => navigate(`/admin/inventory/${lastReceipt.parcelId}`)}
+                className="rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs text-emerald-900 hover:bg-emerald-100/50"
               >
-                复制话术
+                看包裹
               </button>
+              {lastReceipt.phone && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const phone = lastReceipt.phone!.replace(/\D/g, '').slice(0, 11);
+                    navigate(
+                      phone
+                        ? `/admin/system?tab=notify&phone=${encodeURIComponent(phone)}`
+                        : '/admin/system?tab=notify',
+                    );
+                  }}
+                  className="rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs text-emerald-900 hover:bg-emerald-100/50"
+                >
+                  看通知
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setLastReceipt(null)}

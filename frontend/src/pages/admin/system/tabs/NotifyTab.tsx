@@ -53,7 +53,6 @@ const NotifyTab: React.FC = () => {
   const [logTotal, setLogTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [sub, setSub] = useState<'bindings' | 'logs' | 'byPhone'>('bindings');
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [batchResending, setBatchResending] = useState(false);
   const [resendTip, setResendTip] = useState('');
@@ -61,6 +60,14 @@ const NotifyTab: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialFilter = searchParams.get('filter') || '';
   const initialPhone = (searchParams.get('phone') || '').replace(/\D/g, '').slice(0, 11);
+  const initialView = searchParams.get('view') || '';
+  const initialSub: 'bindings' | 'logs' | 'byPhone' =
+    initialView === 'byPhone'
+      ? 'byPhone'
+      : initialPhone || (isLogFilter(initialFilter) && initialFilter)
+        ? 'logs'
+        : 'bindings';
+  const [sub, setSub] = useState<'bindings' | 'logs' | 'byPhone'>(initialSub);
   const [phoneInput, setPhoneInput] = useState(initialPhone);
   const [phoneQuery, setPhoneQuery] = useState(initialPhone);
   const [logFilter, setLogFilter] = useState<LogFilter>(
@@ -147,7 +154,7 @@ const NotifyTab: React.FC = () => {
     if ((logFilter || phoneQuery) && sub === 'bindings') setSub('logs');
   }, [logFilter, phoneQuery, sub]);
 
-  // URL filter/phone 变化时同步（工作台/库存详情深链）
+  // URL filter/phone/view 变化时同步（工作台/库存详情深链）
   useEffect(() => {
     const f = searchParams.get('filter') || '';
     if (isLogFilter(f) && f !== logFilter) {
@@ -159,6 +166,10 @@ const NotifyTab: React.FC = () => {
       setPhoneQuery(p);
       setLogPage(1);
       setSub('logs');
+    }
+    const view = searchParams.get('view') || '';
+    if (view === 'byPhone' && sub !== 'byPhone') {
+      setSub('byPhone');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -541,7 +552,13 @@ const NotifyTab: React.FC = () => {
           <button
             key={tab.key}
             type="button"
-            onClick={() => setSub(tab.key)}
+            onClick={() => {
+              setSub(tab.key);
+              const next = new URLSearchParams(searchParams);
+              if (tab.key === 'byPhone') next.set('view', 'byPhone');
+              else next.delete('view');
+              setSearchParams(next, { replace: true });
+            }}
             className={`min-h-[40px] flex-1 rounded-md text-xs font-medium ${
               sub === tab.key ? 'bg-white text-primary shadow-sm' : 'text-gray-600'
             }`}
