@@ -161,6 +161,8 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const [recipientPhone, setRecipientPhone] = useState('');
   const [size, setSize] = useState<ParcelSize>('small');
   const [note, setNote] = useState('');
+  const [freightCollectAmount, setFreightCollectAmount] = useState('');
+  const [codAmount, setCodAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<InboundResult | null>(null);
@@ -201,6 +203,10 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         recipientPhone: recipientPhone.trim(),
         size,
         note: note.trim() || undefined,
+        freightCollectAmount: freightCollectAmount.trim()
+          ? Number(freightCollectAmount)
+          : undefined,
+        codAmount: codAmount.trim() ? Number(codAmount) : undefined,
         inboundMethod: 'scan',
       });
       setResult(res);
@@ -213,6 +219,8 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       setRecipientName('');
       setRecipientPhone('');
       setNote('');
+      setFreightCollectAmount('');
+      setCodAmount('');
       // 稍后再聚焦，避免与成功区重绘抢焦点
       setTimeout(() => inputRef.current?.focus(), 30);
     } catch (err) {
@@ -262,6 +270,37 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           </div>
         </div>
         <SizeSelector value={size} onChange={setSize} disabled={submitting} shelves={shelves} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">到付运费（元）</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="0.01"
+              value={freightCollectAmount}
+              onChange={(e) => setFreightCollectAmount(e.target.value)}
+              placeholder="无则留空"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={submitting}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">代收货款（元）</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="0.01"
+              value={codAmount}
+              onChange={(e) => setCodAmount(e.target.value)}
+              placeholder="无则留空"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={submitting}
+            />
+          </div>
+        </div>
+        <p className="text-[11px] text-gray-400">有金额时，取件出库须先确认收款；普通件可不填。</p>
         <div>
           <label className="mb-1 block text-sm text-gray-600">备注（可选）</label>
           <input
@@ -348,6 +387,8 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     size: 'small' as ParcelSize,
     shelfId: '',
     note: '',
+    freightCollectAmount: '',
+    codAmount: '',
   });
   // 快递公司列表走 React Query 缓存；下拉仅展示启用中的公司
   const { data: allCouriers = [] } = useCouriers();
@@ -389,6 +430,10 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         size: form.size,
         shelfId: form.shelfId || undefined,
         note: form.note.trim() || undefined,
+        freightCollectAmount: form.freightCollectAmount.trim()
+          ? Number(form.freightCollectAmount)
+          : undefined,
+        codAmount: form.codAmount.trim() ? Number(form.codAmount) : undefined,
         inboundMethod: 'manual',
       });
       setResult(res);
@@ -403,6 +448,8 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         size: 'small',
         shelfId: '',
         note: '',
+        freightCollectAmount: '',
+        codAmount: '',
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : '入库失败');
@@ -489,6 +536,37 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
               ))}
             </select>
           </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm text-gray-600">到付运费（元）</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                value={form.freightCollectAmount}
+                onChange={(e) => setForm({ ...form, freightCollectAmount: e.target.value })}
+                placeholder="无则留空"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+                disabled={submitting}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm text-gray-600">代收货款（元）</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                value={form.codAmount}
+                onChange={(e) => setForm({ ...form, codAmount: e.target.value })}
+                placeholder="无则留空"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+                disabled={submitting}
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-gray-400">有金额时，取件出库须先确认收款；普通件可不填。</p>
           <div>
             <label className="mb-1 block text-sm text-gray-600">备注</label>
             <input

@@ -30,6 +30,8 @@ export interface DashboardTodo {
   financeUnreconciled?: number;
   /** 财务待办对应账期 YYYY-MM */
   financeMonth?: string;
+  /** 在库待收款（到付/代收货款）件数 */
+  collectUnpaid?: number;
 }
 
 /** 今日到件通知触达（工作台运营卡片） */

@@ -39,7 +39,7 @@ export class OutboundService {
       .getClient()
       .from('ss_parcels')
       .select(
-        'id, tracking_number, recipient_name, recipient_phone, pickup_code, status, inbound_at, shelf_layer, shelf_position, shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number), courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(id, name, code)',
+        'id, tracking_number, recipient_name, recipient_phone, pickup_code, status, inbound_at, shelf_layer, shelf_position, freight_collect_amount, cod_amount, collect_status, shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number), courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(id, name, code)',
       )
       .eq('station_id', stationId)
       .in('status', [...PICKABLE_STATUSES]);
@@ -63,6 +63,9 @@ export class OutboundService {
     const flatten = (v: any) => (Array.isArray(v) ? v[0] : v);
     return {
       items: (data || []).map((r: any) => {
+        const freight = Number(r.freight_collect_amount || 0);
+        const cod = Number(r.cod_amount || 0);
+        const due = Math.round((freight + cod) * 100) / 100;
         return {
           id: r.id,
           trackingNumber: r.tracking_number,
@@ -72,6 +75,10 @@ export class OutboundService {
           status: r.status as string,
           inboundAt: r.inbound_at,
           courierName: flatten(r.courier)?.name ?? null,
+          freightCollectAmount: freight,
+          codAmount: cod,
+          collectStatus: (r.collect_status as string) || 'none',
+          collectDueAmount: due,
         };
       }),
       total: (data || []).length,
@@ -97,7 +104,7 @@ export class OutboundService {
       .getClient()
       .from('ss_parcels')
       .select(
-        'id, tracking_number, recipient_name, recipient_phone, pickup_code, status, inbound_at, shelf_id, shelf_layer, shelf_position, shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number), courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(id, name, code)',
+        'id, tracking_number, recipient_name, recipient_phone, pickup_code, status, inbound_at, shelf_id, shelf_layer, shelf_position, freight_collect_amount, cod_amount, collect_status, shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number), courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(id, name, code)',
       )
       .eq('station_id', ctx.stationId);
 
@@ -144,6 +151,46 @@ export class OutboundService {
       throw new BadRequestException('手机号后 4 位不正确，请向取件人重新确认');
     }
 
+    // 到付/代收货款：待收款件须确认收款方式后再出库
+    const freight = Number(parcel.freight_collect_amount || 0);
+    const cod = Number(parcel.cod_amount || 0);
+    const collectDue = Math.round((freight + cod) * 100) / 100;
+    const collectStatus = String(parcel.collect_status || 'none');
+    let collectPayment:
+      | {
+          status: 'paid' | 'none' | 'waived' | 'unpaid';
+          method?: string;
+          amount: number;
+          freight: number;
+          cod: number;
+          note?: string;
+        }
+      | undefined;
+    if (collectStatus === 'unpaid' && collectDue > 0) {
+      if (!dto.collectPaidMethod) {
+        throw new BadRequestException(
+          `该件待收款 ¥${collectDue.toFixed(2)}（到付/代收货款），请选择收款方式后再出库`,
+        );
+      }
+      collectPayment = {
+        status: 'paid',
+        method: dto.collectPaidMethod,
+        amount: collectDue,
+        freight,
+        cod,
+        note: (dto.collectNote || '').trim() || undefined,
+      };
+    } else if (collectStatus === 'paid') {
+      collectPayment = {
+        status: 'paid',
+        amount: collectDue,
+        freight,
+        cod,
+      };
+    } else if (collectDue > 0 && collectStatus === 'waived') {
+      collectPayment = { status: 'waived', amount: collectDue, freight, cod };
+    }
+
     // 可选拍照 / 签名留证（失败不阻断出库）
     let evidenceUrl: string | undefined;
     let signatureUrl: string | undefined;
@@ -179,6 +226,7 @@ export class OutboundService {
         evidenceUrl,
         signatureUrl,
       },
+      collectPayment,
     });
   }
 
@@ -189,7 +237,7 @@ export class OutboundService {
       .getClient()
       .from('ss_parcels')
       .select(
-        'id, tracking_number, recipient_name, recipient_phone, pickup_code, status, inbound_at, station_id, shelf_layer, shelf_position, shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number), courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(id, name, code)',
+        'id, tracking_number, recipient_name, recipient_phone, pickup_code, status, inbound_at, station_id, shelf_layer, shelf_position, freight_collect_amount, cod_amount, collect_status, shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number), courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(id, name, code)',
       )
       .eq('tracking_number', dto.trackingNumber.trim().toUpperCase())
       .in('status', [...PICKABLE_STATUSES]);
@@ -202,6 +250,16 @@ export class OutboundService {
     if (error || !parcel) {
       throw new NotFoundException(
         dto.stationId ? '未找到本驿站匹配的在库包裹' : '未找到匹配的在库包裹',
+      );
+    }
+
+    // 待收款件禁止自助出库，须到服务台人工收款后出库
+    const selfFreight = Number(parcel.freight_collect_amount || 0);
+    const selfCod = Number(parcel.cod_amount || 0);
+    const selfDue = Math.round((selfFreight + selfCod) * 100) / 100;
+    if (String(parcel.collect_status || '') === 'unpaid' && selfDue > 0) {
+      throw new BadRequestException(
+        `该件待收款 ¥${selfDue.toFixed(2)}，请到服务台核验身份并收款后再出库`,
       );
     }
 
@@ -280,17 +338,36 @@ export class OutboundService {
         evidenceUrl?: string;
         signatureUrl?: string;
       };
+      collectPayment?: {
+        status: 'paid' | 'none' | 'waived' | 'unpaid';
+        method?: string;
+        amount: number;
+        freight: number;
+        cod: number;
+        note?: string;
+      };
     },
   ) {
+    const updatePayload: Record<string, unknown> = {
+      status: 'out_stock',
+      outbound_at: new Date().toISOString(),
+      outbound_operator_id: opts.operatorId,
+      outbound_method: opts.method,
+    };
+    if (opts.collectPayment?.status === 'paid') {
+      updatePayload.collect_status = 'paid';
+      updatePayload.collect_paid_at = new Date().toISOString();
+      updatePayload.collect_paid_method = opts.collectPayment.method || null;
+      updatePayload.collect_paid_operator_id = opts.operatorId;
+      if (opts.collectPayment.note) {
+        updatePayload.collect_note = opts.collectPayment.note;
+      }
+    }
+
     const { error } = await this.supabase
       .getClient()
       .from('ss_parcels')
-      .update({
-        status: 'out_stock',
-        outbound_at: new Date().toISOString(),
-        outbound_operator_id: opts.operatorId,
-        outbound_method: opts.method,
-      })
+      .update(updatePayload)
       .eq('id', parcel.id);
     if (error) throw new Error(`出库失败: ${error.message}`);
 
@@ -305,6 +382,18 @@ export class OutboundService {
       if (opts.verify.evidenceUrl) description += '（已拍照留证）';
       if (opts.verify.signatureUrl) description += '（已签名留证）';
       if (opts.verify.note) description += `：${opts.verify.note}`;
+    }
+    if (opts.collectPayment?.status === 'paid' && opts.collectPayment.amount > 0) {
+      const methodLabel: Record<string, string> = {
+        cash: '现金',
+        wechat: '微信',
+        alipay: '支付宝',
+        other: '其他',
+      };
+      const m = opts.collectPayment.method
+        ? methodLabel[opts.collectPayment.method] || opts.collectPayment.method
+        : '';
+      description += `（已收款¥${opts.collectPayment.amount.toFixed(2)}${m ? '/' + m : ''}）`;
     }
     await this.supabase.getClient().from('ss_parcel_events').insert({
       parcel_id: parcel.id,
@@ -326,6 +415,16 @@ export class OutboundService {
               verifiedAt: new Date().toISOString(),
             }
           : { type: 'none' },
+        collect: opts.collectPayment
+          ? {
+              status: opts.collectPayment.status,
+              method: opts.collectPayment.method || null,
+              amount: opts.collectPayment.amount,
+              freight: opts.collectPayment.freight,
+              cod: opts.collectPayment.cod,
+              note: opts.collectPayment.note || null,
+            }
+          : null,
       },
     });
 

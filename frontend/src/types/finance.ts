@@ -78,3 +78,29 @@ export interface GenerateBillsResult {
   skipped: number;
   couriers: number;
 }
+
+
+/** 对用户收款日结 */
+export interface CashDayItem {
+  id: string;
+  trackingNumber: string;
+  recipientName: string;
+  pickupCode: string | null;
+  freightCollectAmount: number;
+  codAmount: number;
+  amount: number;
+  collectPaidMethod: string;
+  collectPaidAt: string;
+  outboundAt: string | null;
+}
+
+export interface CashDaySummary {
+  date: string;
+  total: number;
+  freightTotal: number;
+  codTotal: number;
+  byMethod: { cash: number; wechat: number; alipay: number; other: number };
+  paidCount: number;
+  unpaidInStock: number;
+  items: CashDayItem[];
+}

@@ -25,6 +25,9 @@ export function manualOutbound(payload: {
   evidenceImageBase64?: string;
   /** 可选取件签名 base64（大件推荐） */
   signatureImageBase64?: string;
+  /** 待收款件必填：cash/wechat/alipay/other */
+  collectPaidMethod?: 'cash' | 'wechat' | 'alipay' | 'other';
+  collectNote?: string;
 }): Promise<OutboundResult> {
   return post<OutboundResult>('/api/outbound/manual', payload, { successMessage: '包裹已出库' });
 }

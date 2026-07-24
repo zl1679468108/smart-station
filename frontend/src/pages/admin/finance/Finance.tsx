@@ -16,8 +16,9 @@ import { notifyError, notifySuccess } from '@/utils/notification';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
+import CashDayPanel from './CashDayPanel';
 
-type Tab = 'bills' | 'rates';
+type Tab = 'bills' | 'rates' | 'cash';
 
 const STATUS_LABEL: Record<BillStatus, string> = {
   unreconciled: '未对账',
@@ -71,7 +72,12 @@ const FinancePage: React.FC = () => {
       ? queryStatus
       : '';
 
-  const [tab, setTab] = useState<Tab>('bills');
+  const initialTab = ((): Tab => {
+    const tabQ = searchParams.get('tab');
+    if (tabQ === 'rates' || tabQ === 'cash' || tabQ === 'bills') return tabQ;
+    return 'bills';
+  })();
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [couriers, setCouriers] = useState<CourierCompany[]>([]);
 
   // ===== 账单 =====
@@ -273,7 +279,7 @@ const FinancePage: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-gray-800">财务结算</h1>
-          <p className="mt-1 text-sm text-gray-500">代收代派月结账单、对账与快递公司费率配置</p>
+          <p className="mt-1 text-sm text-gray-500">月结账单、对用户收款日结、快递公司费率</p>
         </div>
       </div>
 
@@ -300,9 +306,22 @@ const FinancePage: React.FC = () => {
         >
           费率配置
         </button>
+        <button
+          type="button"
+          onClick={() => setTab('cash')}
+          className={`-mb-px border-b-2 px-4 py-2 text-sm ${
+            tab === 'cash'
+              ? 'border-primary font-medium text-primary'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          收款日结
+        </button>
       </div>
 
-      {tab === 'bills' ? (
+      {tab === 'cash' ? (
+        <CashDayPanel />
+      ) : tab === 'bills' ? (
         <>
           <div className="flex flex-wrap items-center gap-2">
             <input

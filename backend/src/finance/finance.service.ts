@@ -492,4 +492,101 @@ export class FinanceService {
       updatedAt: row.updated_at,
     };
   }
+
+  /**
+   * 当日对用户收款日结（到付 + 代收货款）
+   * date: YYYY-MM-DD（北京时间日），默认今天
+   */
+  async getCashDay(stationId: string, date?: string) {
+    const day = (date || this.beijingToday()).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      throw new BadRequestException('日期格式应为 YYYY-MM-DD');
+    }
+    // 北京时间日 → UTC 区间近似：北京 00:00 = UTC-8 前一天 16:00
+    const startUtc = new Date(`${day}T00:00:00+08:00`).toISOString();
+    const endUtc = new Date(`${day}T23:59:59.999+08:00`).toISOString();
+
+    const client = this.supabase.getClient();
+    const [paidRes, unpaidRes] = await Promise.all([
+      client
+        .from('ss_parcels')
+        .select(
+          'id, tracking_number, recipient_name, pickup_code, freight_collect_amount, cod_amount, collect_paid_method, collect_paid_at, outbound_at',
+        )
+        .eq('station_id', stationId)
+        .eq('collect_status', 'paid')
+        .gte('collect_paid_at', startUtc)
+        .lte('collect_paid_at', endUtc)
+        .order('collect_paid_at', { ascending: false })
+        .limit(200),
+      client
+        .from('ss_parcels')
+        .select('id', { count: 'exact', head: true })
+        .eq('station_id', stationId)
+        .eq('collect_status', 'unpaid')
+        .in('status', ['in_stock', 'overdue']),
+    ]);
+    if (paidRes.error) throw new Error(`查询收款日结失败: ${paidRes.error.message}`);
+    if (unpaidRes.error) throw new Error(`查询待收款失败: ${unpaidRes.error.message}`);
+
+    const byMethod: Record<string, number> = {
+      cash: 0,
+      wechat: 0,
+      alipay: 0,
+      other: 0,
+    };
+    let total = 0;
+    let freightTotal = 0;
+    let codTotal = 0;
+    const items = (paidRes.data || []).map((r: any) => {
+      const freight = Number(r.freight_collect_amount || 0);
+      const cod = Number(r.cod_amount || 0);
+      const amount = Math.round((freight + cod) * 100) / 100;
+      total += amount;
+      freightTotal += freight;
+      codTotal += cod;
+      const method = (r.collect_paid_method as string) || 'other';
+      if (byMethod[method] !== undefined) byMethod[method] += amount;
+      else byMethod.other += amount;
+      return {
+        id: r.id,
+        trackingNumber: r.tracking_number,
+        recipientName: r.recipient_name,
+        pickupCode: r.pickup_code,
+        freightCollectAmount: freight,
+        codAmount: cod,
+        amount,
+        collectPaidMethod: method,
+        collectPaidAt: r.collect_paid_at,
+        outboundAt: r.outbound_at,
+      };
+    });
+    // 四舍五入汇总
+    total = Math.round(total * 100) / 100;
+    freightTotal = Math.round(freightTotal * 100) / 100;
+    codTotal = Math.round(codTotal * 100) / 100;
+    for (const k of Object.keys(byMethod)) {
+      byMethod[k] = Math.round(byMethod[k] * 100) / 100;
+    }
+
+    return {
+      date: day,
+      total,
+      freightTotal,
+      codTotal,
+      byMethod,
+      paidCount: items.length,
+      unpaidInStock: unpaidRes.count || 0,
+      items,
+    };
+  }
+
+  private beijingToday(): string {
+    const now = new Date(Date.now() + 8 * 3600 * 1000);
+    const y = now.getUTCFullYear();
+    const m = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(now.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
 }

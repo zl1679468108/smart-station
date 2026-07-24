@@ -15,6 +15,7 @@ function buildQuery(q: InventoryQuery): Record<string, string> {
   if (q.courierCompanyId) params.courierCompanyId = q.courierCompanyId;
   if (q.shelfId) params.shelfId = q.shelfId;
   if (q.status) params.status = q.status;
+  if (q.collectStatus) params.collectStatus = q.collectStatus;
   if (q.startDate) params.startDate = q.startDate;
   if (q.endDate) params.endDate = q.endDate;
   if (q.page) params.page = String(q.page);

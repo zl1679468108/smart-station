@@ -113,7 +113,7 @@ export class InventoryService {
       .getClient()
       .from('ss_parcels')
       .select(
-        'id, tracking_number, recipient_name, recipient_phone, pickup_code, status, inbound_at, outbound_at, shelf_id, shelf_layer, shelf_position, size, note, courier_company_id, courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(id, name, code), shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number, size_type, layers, capacity_per_layer)',
+        'id, tracking_number, recipient_name, recipient_phone, pickup_code, status, inbound_at, outbound_at, shelf_id, shelf_layer, shelf_position, size, note, freight_collect_amount, cod_amount, collect_status, collect_paid_at, collect_paid_method, courier_company_id, courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(id, name, code), shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number, size_type, layers, capacity_per_layer)',
         { count: 'exact' },
       )
       .eq('station_id', stationId);
@@ -129,6 +129,7 @@ export class InventoryService {
     if (q.courierCompanyId) query = query.eq('courier_company_id', q.courierCompanyId);
     if (q.shelfId) query = query.eq('shelf_id', q.shelfId);
     if (q.status) query = query.eq('status', q.status);
+    if (q.collectStatus) query = query.eq('collect_status', q.collectStatus);
     if (q.startDate) query = query.gte('inbound_at', `${q.startDate}T00:00:00Z`);
     if (q.endDate) query = query.lte('inbound_at', `${q.endDate}T23:59:59Z`);
 
@@ -150,6 +151,12 @@ export class InventoryService {
         outboundAt: row.outbound_at,
         note: row.note,
         daysInStock: this.daysSince(row.inbound_at),
+        freightCollectAmount: Number(row.freight_collect_amount || 0),
+        codAmount: Number(row.cod_amount || 0),
+        collectStatus: row.collect_status || 'none',
+        collectDueAmount: Math.round((Number(row.freight_collect_amount || 0) + Number(row.cod_amount || 0)) * 100) / 100,
+        collectPaidAt: row.collect_paid_at || null,
+        collectPaidMethod: row.collect_paid_method || null,
         courier: row.courier
           ? { id: row.courier.id, name: row.courier.name, code: row.courier.code }
           : null,
@@ -180,7 +187,7 @@ export class InventoryService {
       .getClient()
       .from('ss_parcels')
       .select(
-        'id, tracking_number, recipient_name, recipient_phone, pickup_code, status, size, shelf_layer, shelf_position, inbound_at, outbound_at, returned_at, return_tracking_number, inbound_method, outbound_method, note, created_at, updated_at, courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(id, name, code, service_phone), shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number, size_type, layers, capacity_per_layer), inbound_operator:ss_users!ss_parcels_inbound_operator_id_fkey(id, username), outbound_operator:ss_users!ss_parcels_outbound_operator_id_fkey(id, username)',
+        'id, tracking_number, recipient_name, recipient_phone, pickup_code, status, size, shelf_layer, shelf_position, inbound_at, outbound_at, returned_at, return_tracking_number, inbound_method, outbound_method, note, freight_collect_amount, cod_amount, collect_status, collect_paid_at, collect_paid_method, collect_note, created_at, updated_at, courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(id, name, code, service_phone), shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number, size_type, layers, capacity_per_layer), inbound_operator:ss_users!ss_parcels_inbound_operator_id_fkey(id, username), outbound_operator:ss_users!ss_parcels_outbound_operator_id_fkey(id, username)',
       )
       .eq('id', id)
       .eq('station_id', stationId)
@@ -219,6 +226,16 @@ export class InventoryService {
       inboundMethod: parcel.inbound_method,
       outboundMethod: parcel.outbound_method,
       note: parcel.note,
+      freightCollectAmount: Number(parcel.freight_collect_amount || 0),
+      codAmount: Number(parcel.cod_amount || 0),
+      collectStatus: parcel.collect_status || 'none',
+      collectDueAmount:
+        Math.round(
+          (Number(parcel.freight_collect_amount || 0) + Number(parcel.cod_amount || 0)) * 100,
+        ) / 100,
+      collectPaidAt: parcel.collect_paid_at || null,
+      collectPaidMethod: parcel.collect_paid_method || null,
+      collectNote: parcel.collect_note || null,
       createdAt: parcel.created_at,
       updatedAt: parcel.updated_at,
       courier: flatten(parcel.courier)

@@ -25,6 +25,16 @@ import { StationId } from '../common/decorators/station-id.decorator';
 export class FinanceController {
   constructor(private readonly financeService: FinanceService) {}
 
+  /** 对用户收款日结（到付 + 代收货款） */
+  @Get('cash-day')
+  async cashDay(
+    @StationId() stationId: string,
+    @Query('date') date?: string,
+  ) {
+    return this.financeService.getCashDay(stationId, date);
+  }
+
+
   // ===== 费率配置 =====
 
   @Get('rates')

@@ -28,7 +28,7 @@ const FILTER_PARAM_KEYS = [
   'pickupCode',
   'courierCompanyId',
   'shelfId',
-  'status',
+  'status', 'collectStatus',
   'startDate',
   'endDate',
 ] as const;
@@ -40,6 +40,7 @@ type FilterFormState = {
   courierCompanyId: string;
   shelfId: string;
   status: string;
+  collectStatus: string;
   startDate: string;
   endDate: string;
 };
@@ -51,6 +52,7 @@ const EMPTY_FILTER_FORM: FilterFormState = {
   courierCompanyId: '',
   shelfId: '',
   status: '',
+  collectStatus: '',
   startDate: '',
   endDate: '',
 };
@@ -81,6 +83,12 @@ function formToInventoryQuery(form: FilterFormState, page = 1): InventoryQuery {
     courierCompanyId: form.courierCompanyId || undefined,
     shelfId: form.shelfId || undefined,
     status: (form.status || undefined) as ParcelStatus | undefined,
+    collectStatus: (form.collectStatus || undefined) as
+      | 'none'
+      | 'unpaid'
+      | 'paid'
+      | 'waived'
+      | undefined,
     startDate: form.startDate || undefined,
     endDate: form.endDate || undefined,
     page,
@@ -255,6 +263,17 @@ const Inventory: React.FC = () => {
             ))}
           </select>
           <select
+            value={filterForm.collectStatus}
+            onChange={(e) => setFilterForm({ ...filterForm, collectStatus: e.target.value })}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+          >
+            <option value="">全部收款</option>
+            <option value="unpaid">待收款</option>
+            <option value="paid">已收款</option>
+            <option value="none">无需收款</option>
+            <option value="waived">已免收</option>
+          </select>
+          <select
             value={filterForm.courierCompanyId}
             onChange={(e) => setFilterForm({ ...filterForm, courierCompanyId: e.target.value })}
             className="rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
@@ -377,6 +396,16 @@ const Inventory: React.FC = () => {
                     <span className={`rounded px-2 py-0.5 text-xs ${STATUS_META[item.status].cls}`}>
                       {STATUS_META[item.status].label}
                     </span>
+                    {item.collectStatus === 'unpaid' && Number(item.collectDueAmount || 0) > 0 && (
+                      <span className="ml-1 rounded px-2 py-0.5 text-xs bg-rose-100 text-rose-700">
+                        待收¥{Number(item.collectDueAmount || 0).toFixed(2)}
+                      </span>
+                    )}
+                    {item.collectStatus === 'paid' && (
+                      <span className="ml-1 rounded px-2 py-0.5 text-xs bg-emerald-100 text-emerald-700">
+                        已收款
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-xs">
                     {item.status === 'in_stock' || item.status === 'overdue' ? (

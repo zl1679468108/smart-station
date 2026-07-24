@@ -10,6 +10,10 @@ export interface InboundPayload {
   size: ParcelSize;
   shelfId?: string;
   note?: string;
+  /** 到付运费（元） */
+  freightCollectAmount?: number;
+  /** 代收货款（元） */
+  codAmount?: number;
   inboundMethod?: 'scan' | 'manual' | 'batch';
 }
 
@@ -33,6 +37,10 @@ export interface InboundResult {
   courierCompanyCode: string | null;
   courierCompanyName: string | null;
   recipientPhone?: string;
+  freightCollectAmount?: number;
+  codAmount?: number;
+  collectStatus?: string;
+  collectDueAmount?: number;
   notify?: InboundNotifyFeedback;
 }
 

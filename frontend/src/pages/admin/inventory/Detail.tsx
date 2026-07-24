@@ -129,6 +129,48 @@ const ParcelDetailPage: React.FC = () => {
           )}
           <InfoItem label="入库操作人" value={detail.inboundOperator || '-'} />
           <InfoItem label="出库操作人" value={detail.outboundOperator || '-'} />
+          <InfoItem
+            label="到付运费"
+            value={
+              Number(detail.freightCollectAmount || 0) > 0
+                ? `¥${Number(detail.freightCollectAmount || 0).toFixed(2)}`
+                : '-'
+            }
+          />
+          <InfoItem
+            label="代收货款"
+            value={
+              Number(detail.codAmount || 0) > 0
+                ? `¥${Number(detail.codAmount || 0).toFixed(2)}`
+                : '-'
+            }
+          />
+          <InfoItem
+            label="收款状态"
+            value={
+              detail.collectStatus === 'unpaid'
+                ? `待收款 ¥${Number(detail.collectDueAmount || 0).toFixed(2)}`
+                : detail.collectStatus === 'paid'
+                  ? `已收款${
+                      detail.collectPaidMethod
+                        ? `（${
+                            { cash: '现金', wechat: '微信', alipay: '支付宝', other: '其他' }[
+                              detail.collectPaidMethod
+                            ] || detail.collectPaidMethod
+                          }）`
+                        : ''
+                    }`
+                  : detail.collectStatus === 'waived'
+                    ? '已免收'
+                    : '无需收款'
+            }
+          />
+          {detail.collectPaidAt && (
+            <InfoItem
+              label="收款时间"
+              value={new Date(detail.collectPaidAt).toLocaleString('zh-CN')}
+            />
+          )}
         </div>
         {detail.note && (
           <div className="mt-3 border-t border-gray-100 pt-3">

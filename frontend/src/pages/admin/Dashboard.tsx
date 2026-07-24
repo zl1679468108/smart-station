@@ -337,6 +337,34 @@ const Dashboard: React.FC = () => {
             </button>
             <button
               type="button"
+              onClick={() => navigate('/admin/inventory?collectStatus=unpaid')}
+              className="flex w-full flex-col rounded-md bg-rose-50 px-3 py-3 text-left hover:bg-rose-100/80"
+            >
+              <div className="flex w-full items-center justify-between">
+                <span className="text-sm text-gray-600">待收款包裹</span>
+                <span className="text-lg font-bold text-rose-700">
+                  {todo.collectUnpaid ?? 0}
+                </span>
+              </div>
+              {(todo.collectUnpaid ?? 0) === 0 ? (
+                <span className="mt-1 text-xs text-gray-400">无到付/代收货款待收</span>
+              ) : (
+                <span className="mt-1 text-xs text-rose-700/80">取件时收款，点击查看</span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/finance?tab=cash')}
+              className="flex w-full flex-col rounded-md bg-teal-50 px-3 py-3 text-left hover:bg-teal-100/80"
+            >
+              <div className="flex w-full items-center justify-between">
+                <span className="text-sm text-gray-600">今日收款日结</span>
+                <span className="text-lg font-bold text-teal-700">→</span>
+              </div>
+              <span className="mt-1 text-xs text-teal-700/80">到付/货款按收款方式汇总</span>
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 const m = todo.financeMonth || '';
                 const q = new URLSearchParams();

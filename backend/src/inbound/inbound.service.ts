@@ -80,6 +80,12 @@ export class InboundService {
     }
     const { shelfId, shelfNumber, shelfLayer, shelfPosition, pickupCode } = allocation;
 
+    // 到付 / 代收货款（对用户收款）
+    const freightCollectAmount = this.normalizeMoney(dto.freightCollectAmount);
+    const codAmount = this.normalizeMoney(dto.codAmount);
+    const collectDue = Math.round((freightCollectAmount + codAmount) * 100) / 100;
+    const collectStatus = collectDue > 0 ? 'unpaid' : 'none';
+
     // 4. 写 ss_parcels（取件码 = 货架号-层号-件号，如 3-2-9903）
     const { data: parcel, error } = await this.supabase
       .getClient()
@@ -100,6 +106,9 @@ export class InboundService {
         inbound_operator_id: operatorId,
         inbound_method: method,
         note: dto.note ?? null,
+        freight_collect_amount: freightCollectAmount,
+        cod_amount: codAmount,
+        collect_status: collectStatus,
       })
       .select('id, pickup_code, inbound_at, tracking_number')
       .maybeSingle();
@@ -113,13 +122,30 @@ export class InboundService {
     if (!parcel) throw new Error('入库失败：未返回数据');
 
     // 5. 写 ss_parcel_events（取件码即位置：货架号-层号-件号）
+    let inboundDesc = `入库，取件码 ${pickupCode}`;
+    if (collectDue > 0) {
+      const parts: string[] = [];
+      if (freightCollectAmount > 0) parts.push(`到付¥${freightCollectAmount.toFixed(2)}`);
+      if (codAmount > 0) parts.push(`代收货款¥${codAmount.toFixed(2)}`);
+      inboundDesc += `，待收款 ${parts.join(' + ')}`;
+    }
     await this.supabase.getClient().from('ss_parcel_events').insert({
       parcel_id: parcel.id,
       event_type: 'inbound',
       operator_id: operatorId,
       operator_type: 'staff',
-      description: `入库，取件码 ${pickupCode}`,
-      metadata: { method, pickup_code: pickupCode, shelf_number: shelfNumber, shelf_layer: shelfLayer, shelf_position: shelfPosition, courier_code: courierCompanyCode },
+      description: inboundDesc,
+      metadata: {
+        method,
+        pickup_code: pickupCode,
+        shelf_number: shelfNumber,
+        shelf_layer: shelfLayer,
+        shelf_position: shelfPosition,
+        courier_code: courierCompanyCode,
+        freightCollectAmount,
+        codAmount,
+        collectStatus,
+      },
     });
 
     // 6. 触发通知（若驿站开启 sms_enabled；免费通道见 NotifyService）
@@ -183,6 +209,10 @@ export class InboundService {
       courierCompanyCode,
       courierCompanyName,
       recipientPhone: dto.recipientPhone,
+      freightCollectAmount,
+      codAmount,
+      collectStatus,
+      collectDueAmount: collectDue,
       notify,
     };
   }
@@ -264,6 +294,16 @@ export class InboundService {
   }
 
   // ============ 辅助 ============
+
+  /** 金额规范化：空/undefined → 0，最多两位小数 */
+  private normalizeMoney(v: unknown): number {
+    if (v === undefined || v === null || v === '') return 0;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new BadRequestException('金额须为非负数');
+    }
+    return Math.round(n * 100) / 100;
+  }
 
   /** 按运单号前缀识别快递公司 */
   private async identifyCourier(trackingNumber: string) {

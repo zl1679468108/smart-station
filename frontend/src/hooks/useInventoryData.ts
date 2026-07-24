@@ -19,6 +19,7 @@ function normalizeInventoryQuery(query: InventoryQuery): InventoryQuery {
     courierCompanyId: query.courierCompanyId || undefined,
     shelfId: query.shelfId || undefined,
     status: query.status || undefined,
+    collectStatus: query.collectStatus || undefined,
     startDate: query.startDate || undefined,
     endDate: query.endDate || undefined,
     page: query.page ?? 1,

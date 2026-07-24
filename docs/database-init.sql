@@ -289,6 +289,18 @@ CREATE TABLE IF NOT EXISTS ss_parcels (
   -- 退回
   returned_at       TIMESTAMPTZ,
   return_tracking_number VARCHAR(50),
+  -- 对用户收款（到付运费 + 代收货款）
+  freight_collect_amount NUMERIC(10,2) NOT NULL DEFAULT 0
+                      CHECK (freight_collect_amount >= 0),
+  cod_amount        NUMERIC(10,2) NOT NULL DEFAULT 0
+                      CHECK (cod_amount >= 0),
+  collect_status    VARCHAR(20) NOT NULL DEFAULT 'none'
+                      CHECK (collect_status IN ('none', 'unpaid', 'paid', 'waived')),
+  collect_paid_at   TIMESTAMPTZ,
+  collect_paid_method VARCHAR(20)
+                      CHECK (collect_paid_method IS NULL OR collect_paid_method IN ('cash', 'wechat', 'alipay', 'other')),
+  collect_paid_operator_id UUID REFERENCES ss_users(id) ON DELETE SET NULL,
+  collect_note      TEXT,
   -- 备注
   note              TEXT,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -302,6 +314,7 @@ CREATE INDEX IF NOT EXISTS idx_ss_parcels_status ON ss_parcels(status);
 CREATE INDEX IF NOT EXISTS idx_ss_parcels_recipient_phone ON ss_parcels(recipient_phone);
 CREATE INDEX IF NOT EXISTS idx_ss_parcels_station_status ON ss_parcels(station_id, status);
 CREATE INDEX IF NOT EXISTS idx_ss_parcels_inbound_at ON ss_parcels(inbound_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ss_parcels_station_collect ON ss_parcels(station_id, collect_status);
 -- 同驿站同日取件码唯一（防重，按北京时间日）
 -- 注意：DATE(timestamptz) 是 STABLE 不可用于索引表达式，
 -- 必须用 AT TIME ZONE '常量' 转为 IMMUTABLE 表达式
@@ -318,6 +331,10 @@ COMMENT ON COLUMN ss_parcels.shelf_layer IS '所在货架层号 1..N，取件码
 COMMENT ON COLUMN ss_parcels.status IS '包裹状态：in_stock(在库) / out_stock(已出库) / overdue(滞留) / exception(异常) / returned(退回)';
 COMMENT ON COLUMN ss_parcels.inbound_method IS '入库方式：scan(扫码) / manual(手动) / batch(批量)';
 COMMENT ON COLUMN ss_parcels.outbound_method IS '出库方式：manual(人工辅助) / self_service(自助扫描)';
+COMMENT ON COLUMN ss_parcels.freight_collect_amount IS '到付运费金额（元），取件时向用户收取';
+COMMENT ON COLUMN ss_parcels.cod_amount IS '代收货款金额（元），取件时向用户收取';
+COMMENT ON COLUMN ss_parcels.collect_status IS '对用户收款状态：none无 / unpaid待收 / paid已收 / waived免收';
+COMMENT ON COLUMN ss_parcels.collect_paid_method IS '收款方式：cash现金 / wechat微信 / alipay支付宝 / other其他';
 
 DROP TRIGGER IF EXISTS update_ss_parcels_updated_at ON ss_parcels;
 CREATE TRIGGER update_ss_parcels_updated_at BEFORE UPDATE ON ss_parcels

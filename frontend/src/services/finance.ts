@@ -8,6 +8,7 @@ import type {
   UpsertRateBody,
   GenerateBillsResult,
   BillStatus,
+  CashDaySummary,
 } from '@/types/finance';
 import { notifyError, notifySuccess } from '@/utils/notification';
 
@@ -92,4 +93,11 @@ export async function exportBills(params: { month?: string; status?: BillStatus 
   } catch (e: any) {
     notifyError(e?.message || '导出失败');
   }
+}
+
+
+/** 对用户收款日结（到付+代收货款） */
+export function getCashDay(date?: string): Promise<CashDaySummary> {
+  const q = date ? `?date=${encodeURIComponent(date)}` : '';
+  return get<CashDaySummary>(`/api/finance/cash-day${q}`);
 }

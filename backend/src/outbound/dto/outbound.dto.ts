@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 
 /** 取件码正则：货架号-层号-件号，如 3-2-9903 */
 const PICKUP_CODE_REGEX = /^\d{1,3}-\d{1,2}-\d{1,6}$/;
@@ -48,6 +48,21 @@ export class ManualOutboundDto {
   @IsOptional()
   @IsString()
   signatureImageBase64?: string;
+
+  /**
+   * 待收款件出库时必填：收款方式
+   * cash 现金 / wechat 微信 / alipay 支付宝 / other 其他
+   */
+  @IsOptional()
+  @IsString()
+  @IsIn(['cash', 'wechat', 'alipay', 'other'], { message: '收款方式不合法' })
+  collectPaidMethod?: 'cash' | 'wechat' | 'alipay' | 'other';
+
+  /** 收款备注（如：少收、已线下结清） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100, { message: '收款备注最长 100 字' })
+  collectNote?: string;
 }
 
 /**

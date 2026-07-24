@@ -79,6 +79,8 @@ const ManualOutbound: React.FC = () => {
       verifyNote?: string;
       evidenceImageBase64?: string;
       signatureImageBase64?: string;
+      collectPaidMethod?: 'cash' | 'wechat' | 'alipay' | 'other';
+      collectNote?: string;
     },
   ) => {
     if (confirmLoading) return;
@@ -96,6 +98,8 @@ const ManualOutbound: React.FC = () => {
         verifyNote: verify.verifyNote,
         evidenceImageBase64: verify.evidenceImageBase64,
         signatureImageBase64: verify.signatureImageBase64,
+        collectPaidMethod: verify.collectPaidMethod,
+        collectNote: verify.collectNote,
       });
       invalidateShelves();
       invalidateDashboard();
@@ -363,6 +367,11 @@ const SearchResultList: React.FC<{
                     滞留 · 仍可出库
                   </span>
                 )}
+                {Number(item.collectDueAmount || 0) > 0 && item.collectStatus === 'unpaid' && (
+                  <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+                    待收款 ¥{Number(item.collectDueAmount || 0).toFixed(2)}
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap gap-x-4 text-sm">
                 <span className="text-gray-600">
@@ -401,6 +410,8 @@ const ConfirmDialog: React.FC<{
     verifyNote?: string;
     evidenceImageBase64?: string;
     signatureImageBase64?: string;
+    collectPaidMethod?: 'cash' | 'wechat' | 'alipay' | 'other';
+    collectNote?: string;
   }) => void;
   onCancel: () => void;
 }> = ({ item, loading, onConfirm, onCancel }) => {
@@ -412,6 +423,10 @@ const ConfirmDialog: React.FC<{
   const [compressing, setCompressing] = useState(false);
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | undefined>();
   const [hasSignature, setHasSignature] = useState(false);
+  const [collectPaidMethod, setCollectPaidMethod] = useState<
+    '' | 'cash' | 'wechat' | 'alipay' | 'other'
+  >('');
+  const [collectNote, setCollectNote] = useState('');
   const sigCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const hasDrawnRef = useRef(false);
@@ -423,6 +438,11 @@ const ConfirmDialog: React.FC<{
     if (p.length >= 7) return `${p.slice(0, 3)}********`;
     return '***********';
   })();
+
+  const collectDue = Number(item.collectDueAmount || 0);
+  const needCollect =
+    (item.collectStatus === 'unpaid' || (!item.collectStatus && collectDue > 0)) &&
+    collectDue > 0;
 
   const initSignatureCanvas = () => {
     const canvas = sigCanvasRef.current;
@@ -578,6 +598,10 @@ const ConfirmDialog: React.FC<{
       setLocalError('请输入 4 位数字');
       return;
     }
+    if (needCollect && !collectPaidMethod) {
+      setLocalError('该件需收款，请选择收款方式');
+      return;
+    }
     // 提交前再导出一次签名，避免最后一笔未 flush
     let sig = signatureDataUrl;
     if (hasDrawnRef.current && sigCanvasRef.current) {
@@ -589,6 +613,8 @@ const ConfirmDialog: React.FC<{
       verifyNote: verifyNote.trim() || undefined,
       evidenceImageBase64: evidenceBase64,
       signatureImageBase64: hasDrawnRef.current ? sig : undefined,
+      collectPaidMethod: needCollect ? collectPaidMethod || undefined : undefined,
+      collectNote: needCollect ? collectNote.trim() || undefined : undefined,
     });
   };
 
@@ -618,7 +644,12 @@ const ConfirmDialog: React.FC<{
           <button
             type="button"
             onClick={submit}
-            disabled={loading || compressing || phoneTail.replace(/\D/g, '').length !== 4}
+            disabled={
+              loading ||
+              compressing ||
+              phoneTail.replace(/\D/g, '').length !== 4 ||
+              (needCollect && !collectPaidMethod)
+            }
             className="flex-1 rounded-md bg-primary py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
           >
             {loading ? '出库中…' : compressing ? '处理图片…' : '核验并出库'}
@@ -648,6 +679,63 @@ const ConfirmDialog: React.FC<{
         <div className="rounded-md border border-orange-100 bg-orange-50/80 px-3 py-2 text-xs text-orange-900">
           防冒领：请当面询问取件人「手机号后 4 位是多少」，再填写下方。勿直接照抄屏幕号码。
         </div>
+        {needCollect && (
+          <div className="space-y-2 rounded-md border border-rose-200 bg-rose-50/80 px-3 py-2">
+            <p className="text-xs font-medium text-rose-800">
+              待收款 ¥{collectDue.toFixed(2)}
+              {Number(item.freightCollectAmount || 0) > 0 && (
+                <span className="ml-1 font-normal text-rose-700/90">
+                  （到付¥{Number(item.freightCollectAmount || 0).toFixed(2)}
+                  {Number(item.codAmount || 0) > 0
+                    ? ` + 货款¥${Number(item.codAmount || 0).toFixed(2)}`
+                    : ''}
+                  ）
+                </span>
+              )}
+              {Number(item.freightCollectAmount || 0) <= 0 && Number(item.codAmount || 0) > 0 && (
+                <span className="ml-1 font-normal text-rose-700/90">
+                  （代收货款¥{Number(item.codAmount || 0).toFixed(2)}）
+                </span>
+              )}
+            </p>
+            <p className="text-[11px] text-rose-700/80">请先向取件人收款，再选择下方收款方式后出库。</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {(
+                [
+                  { v: 'cash', l: '现金' },
+                  { v: 'wechat', l: '微信' },
+                  { v: 'alipay', l: '支付宝' },
+                  { v: 'other', l: '其他' },
+                ] as const
+              ).map((m) => (
+                <button
+                  key={m.v}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => {
+                    setCollectPaidMethod(m.v);
+                    setLocalError('');
+                  }}
+                  className={`rounded-md border px-2 py-2 text-xs ${
+                    collectPaidMethod === m.v
+                      ? 'border-primary bg-primary text-white'
+                      : 'border-rose-200 bg-white text-gray-700 hover:border-primary/50'
+                  }`}
+                >
+                  {m.l}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              value={collectNote}
+              onChange={(e) => setCollectNote(e.target.value.slice(0, 100))}
+              placeholder="收款备注（可选）"
+              disabled={loading}
+              className="w-full rounded-md border border-rose-200 bg-white px-3 py-1.5 text-xs outline-none focus:border-primary disabled:opacity-60"
+            />
+          </div>
+        )}
         <div>
           <label className="mb-1 block text-xs text-gray-500">
             <span className="mr-0.5 text-danger">*</span>手机号后 4 位

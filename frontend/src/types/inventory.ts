@@ -17,6 +17,16 @@ export interface ParcelListItem {
   daysInStock?: number;
   outboundAt: string | null;
   note: string | null;
+  /** 到付运费 */
+  freightCollectAmount?: number;
+  /** 代收货款 */
+  codAmount?: number;
+  /** none / unpaid / paid / waived */
+  collectStatus?: string;
+  collectDueAmount?: number;
+  collectPaidAt?: string | null;
+  collectPaidMethod?: string | null;
+  collectNote?: string | null;
   courier: { id: string; name: string; code: string } | null;
   shelf: {
     id: string;
@@ -67,6 +77,7 @@ export interface InventoryQuery {
   courierCompanyId?: string;
   shelfId?: string;
   status?: ParcelStatus;
+  collectStatus?: 'none' | 'unpaid' | 'paid' | 'waived';
   startDate?: string;
   endDate?: string;
   page?: number;

@@ -104,10 +104,11 @@ export class StatsService {
     const exception = exceptionRes.count || 0;
 
     // 寄件待办 + 财务未对账 + 今日到件通知触达（并行，失败不拖垮工作台）
-    const [shippingTodo, financeTodo, notify] = await Promise.all([
+    const [shippingTodo, financeTodo, notify, collectUnpaid] = await Promise.all([
       this.getShippingTodo(stationId),
       this.getFinanceTodo(stationId),
       this.getNotifyReach(stationId, todayStart, todayEnd),
+      this.getCollectUnpaid(stationId),
     ]);
 
     return {
@@ -130,6 +131,7 @@ export class StatsService {
         shippingPicked: shippingTodo.picked,
         financeUnreconciled: financeTodo.unreconciled,
         financeMonth: financeTodo.month,
+        collectUnpaid,
       },
       notify,
     };
@@ -164,7 +166,29 @@ export class StatsService {
     }
   }
 
+  /** 在库待收款件数（到付/代收货款） */
+  private async getCollectUnpaid(stationId: string): Promise<number> {
+    try {
+      const { count, error } = await this.supabase
+        .getClient()
+        .from('ss_parcels')
+        .select('id', { count: 'exact', head: true })
+        .eq('station_id', stationId)
+        .eq('collect_status', 'unpaid')
+        .in('status', ['in_stock', 'overdue']);
+      if (error) {
+        console.warn('[Stats] 待收款查询失败:', error.message);
+        return 0;
+      }
+      return count || 0;
+    } catch (err) {
+      console.warn('[Stats] 待收款异常:', err);
+      return 0;
+    }
+  }
+
   /** 寄件运营待办：待处理 / 已取件待发出 */
+
   private async getShippingTodo(stationId: string) {
     const empty = { pending: 0, picked: 0 };
     try {

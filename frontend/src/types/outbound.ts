@@ -29,6 +29,10 @@ export interface OutboundSearchItem {
   status?: string;
   inboundAt: string;
   courierName: string | null;
+  freightCollectAmount?: number;
+  codAmount?: number;
+  collectStatus?: string;
+  collectDueAmount?: number;
 }
 
 /** 出库前查询结果 */
