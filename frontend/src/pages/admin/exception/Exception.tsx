@@ -20,6 +20,8 @@ import Pagination from '@/components/ui/Pagination';
 import PageHeader from '@/components/ui/PageHeader';
 import NotifyReachBar from '@/components/NotifyReachBar';
 import Modal from '@/components/ui/Modal';
+import OutboundBindNudge from '@/components/OutboundBindNudge';
+import { printPickupSlip } from '@/utils/printPickupSlip';
 import SearchSelect, { type SearchSelectOption } from '@/components/ui/SearchSelect';
 
 const TYPE_LABEL: Record<ExceptionType, string> = {
@@ -59,7 +61,9 @@ const EMPTY_CREATE_FORM = {
 };
 
 const ExceptionPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const writable = canWrite(user?.role);
@@ -388,6 +392,26 @@ const ExceptionPage: React.FC = () => {
                           }}
                         >
                           复制当面话术
+                        </button>
+                      )}
+                      {item.parcel?.pickupCode && (
+                        <button
+                          type="button"
+                          className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
+                          onClick={() => {
+                            const ok = printPickupSlip({
+                              stationName,
+                              pickupCode: item.parcel!.pickupCode,
+                              trackingNumber: item.parcel!.trackingNumber,
+                              recipientName: item.parcel!.recipientName,
+                              recipientPhone: item.parcel!.recipientPhone,
+                              inboundAt: item.parcel!.inboundAt,
+                            });
+                            if (ok) notifySuccess('已打开打印预览');
+                            else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+                          }}
+                        >
+                          打印小票
                         </button>
                       )}
                       {writable &&

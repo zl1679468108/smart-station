@@ -1353,3 +1353,9 @@
 | M118.1 | P0 | printShippingReceipt | print util | done | 手机号脱敏 |
 | M118.2 | P0 | 寄件列表打印回执 | shipping | done | |
 
+## M119 异常件绑定引导与小票打印（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M119.1 | P1 | 未完结异常接入 OutboundBindNudge | exception | done | |
+| M119.2 | P1 | 异常卡可打印取件码小票 | exception | done | |
+
