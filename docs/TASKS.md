@@ -856,3 +856,12 @@
 | M57.2 | P1 | 一键补发未私信 | inbound batch | done | 未绑定/失败可重试 |
 | M57.3 | P2 | 批量默认尺寸记忆 + 成功提示音 | inbound batch | done | 与扫码一致 |
 
+---
+
+## M58 通知触达筛选 + 工作台深链（通知运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M58.1 | P1 | 通知记录 reach 筛选 | admin notify API | done | unbound/pushed/push_failed + customerReach 中文 |
+| M58.2 | P1 | NotifyTab 触达 chips + 本页一键补发 | NotifyTab | done | 默认今日到件；未私信/私信失败可补发 |
+| M58.3 | P1 | 工作台「今日到件触达」标签深链 | Dashboard | done | stopPropagation 到对应 filter |

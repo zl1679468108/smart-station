@@ -191,6 +191,7 @@ export class AdminController {
     @Query('status') status?: string,
     @Query('templateCode') templateCode?: string,
     @Query('todayOnly') todayOnly?: string,
+    @Query('reach') reach?: string,
   ) {
     return this.adminService.listNotifyLogs(stationId, {
       limit: limit ? Number(limit) : 50,
@@ -198,6 +199,7 @@ export class AdminController {
       status,
       templateCode,
       todayOnly: todayOnly === '1' || todayOnly === 'true',
+      reach,
     });
   }
 

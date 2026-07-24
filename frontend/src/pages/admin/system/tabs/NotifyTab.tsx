@@ -1,14 +1,40 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import * as adminService from '@/services/admin';
 import type { NotifyBindingItem, NotifyLogItem } from '@/types/admin';
 import { formatBeijingTimestamp } from '@/utils/date';
 import EmptyState from '@/components/ui/EmptyState';
 
+type LogFilter =
+  | ''
+  | 'today'
+  | 'failed'
+  | 'inbound'
+  | 'overdue'
+  | 'unbound'
+  | 'pushed'
+  | 'push_failed';
+
+const REACH_FILTERS: LogFilter[] = ['unbound', 'pushed', 'push_failed'];
+
+function isLogFilter(v: string): v is LogFilter {
+  return (
+    v === '' ||
+    v === 'today' ||
+    v === 'failed' ||
+    v === 'inbound' ||
+    v === 'overdue' ||
+    v === 'unbound' ||
+    v === 'pushed' ||
+    v === 'push_failed'
+  );
+}
+
 /**
  * 通知可观测：客户绑定 + 最近发送记录
- * - 通道/状态中文展示
+ * - 通道/状态/触达中文展示
  * - 支持手机号/尾号查询
+ * - 触达筛选：未私信 / 已私信 / 私信失败
  */
 const NotifyTab: React.FC = () => {
   const [bindings, setBindings] = useState<NotifyBindingItem[]>([]);
@@ -21,18 +47,12 @@ const NotifyTab: React.FC = () => {
   const [phoneInput, setPhoneInput] = useState('');
   const [phoneQuery, setPhoneQuery] = useState('');
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [batchResending, setBatchResending] = useState(false);
   const [resendTip, setResendTip] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
   const initialFilter = searchParams.get('filter') || '';
-  const [logFilter, setLogFilter] = useState<
-    '' | 'today' | 'failed' | 'inbound' | 'overdue'
-  >(
-    initialFilter === 'today' ||
-      initialFilter === 'failed' ||
-      initialFilter === 'inbound' ||
-      initialFilter === 'overdue'
-      ? initialFilter
-      : '',
+  const [logFilter, setLogFilter] = useState<LogFilter>(
+    isLogFilter(initialFilter) ? initialFilter : '',
   );
 
   const load = useCallback(async () => {
@@ -44,14 +64,25 @@ const NotifyTab: React.FC = () => {
         limit: 80,
         phone,
       };
+
       if (logFilter === 'today') logOpts.todayOnly = true;
       if (logFilter === 'failed') logOpts.status = 'failed';
       if (logFilter === 'inbound') logOpts.templateCode = 'inbound_notice';
       if (logFilter === 'overdue') logOpts.templateCode = 'overdue_remind';
-      // 今日失败：组合
+
+      // 触达筛选：默认「今日 + 到件」，便于从工作台深链复盘
+      if (REACH_FILTERS.includes(logFilter)) {
+        logOpts.reach = logFilter;
+        logOpts.todayOnly = true;
+        logOpts.templateCode = 'inbound_notice';
+        logOpts.limit = 200;
+      }
+
+      // 发送失败可叠加今日
       if (logFilter === 'failed' && searchParams.get('today') === '1') {
         logOpts.todayOnly = true;
       }
+
       const [b, l] = await Promise.all([
         adminService.listNotifyBindings({ limit: 80, phone }),
         adminService.listNotifyLogs(logOpts),
@@ -75,14 +106,23 @@ const NotifyTab: React.FC = () => {
     if (logFilter) setSub('logs');
   }, [logFilter]);
 
-  const applyLogFilter = (f: '' | 'today' | 'failed' | 'inbound' | 'overdue') => {
+  // URL filter 变化时同步（工作台深链）
+  useEffect(() => {
+    const f = searchParams.get('filter') || '';
+    if (isLogFilter(f) && f !== logFilter) {
+      setLogFilter(f);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const applyLogFilter = (f: LogFilter) => {
     setLogFilter(f);
     const next = new URLSearchParams(searchParams);
     if (f) next.set('filter', f);
     else next.delete('filter');
+    if (f !== 'failed') next.delete('today');
     setSearchParams(next, { replace: true });
   };
-
 
   const onSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +135,7 @@ const NotifyTab: React.FC = () => {
   };
 
   const onResend = async (log: NotifyLogItem) => {
-    if (!log.canResend || resendingId) return;
+    if (!log.canResend || resendingId || batchResending) return;
     const ok = window.confirm(
       `确认向 ${log.phoneMasked} 重新发送「${log.templateLabel}」？\n\n若客户已绑定微信，将再次私信取件码；未绑定则仅通知群/管理员旁路。`,
     );
@@ -112,6 +152,53 @@ const NotifyTab: React.FC = () => {
       setResendingId(null);
     }
   };
+
+  const resendableOnPage = useMemo(
+    () =>
+      logs.filter(
+        (l) =>
+          l.canResend &&
+          (l.customerReach === 'unbound' || l.customerReach === 'push_failed'),
+      ),
+    [logs],
+  );
+
+  const onBatchResend = async () => {
+    if (batchResending || resendingId || resendableOnPage.length === 0) return;
+    const ok = window.confirm(
+      `确认对本页 ${resendableOnPage.length} 条「未私信/私信失败」记录重新发送？\n\n已绑定的会再推取件码；仍未绑定的只会走群/管理员旁路。`,
+    );
+    if (!ok) return;
+    setBatchResending(true);
+    setResendTip('');
+    let pushed = 0;
+    let failed = 0;
+    for (const log of resendableOnPage) {
+      try {
+        const r = await adminService.resendNotifyLog(log.id);
+        if (r.customerPushed) pushed += 1;
+        else failed += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    setResendTip(
+      `一键补发完成：成功私信 ${pushed} 条，仍未私信/失败 ${failed} 条（共 ${resendableOnPage.length} 条）`,
+    );
+    setBatchResending(false);
+    await load();
+  };
+
+  const filterChips: { key: LogFilter; label: string }[] = [
+    { key: '', label: '全部' },
+    { key: 'today', label: '今日' },
+    { key: 'failed', label: '发送失败' },
+    { key: 'inbound', label: '到件' },
+    { key: 'overdue', label: '滞留' },
+    { key: 'unbound', label: '未私信' },
+    { key: 'pushed', label: '已私信' },
+    { key: 'push_failed', label: '私信失败' },
+  ];
 
   return (
     <div className="space-y-4">
@@ -135,7 +222,7 @@ const NotifyTab: React.FC = () => {
           value={phoneInput}
           onChange={(e) => setPhoneInput(e.target.value.replace(/\D/g, '').slice(0, 11))}
           placeholder="输入手机号或尾号查询"
-          className="min-h-[40px] w-full max-w-xs rounded-md border border-gray-300 px-3 text-sm outline-none focus:border-primary sm:w-56"
+          className="min-h-[40px] w-full max-w-xs rounded-md border border-gray-300 px-3 text-sm outline-none focus:border-primary"
         />
         <button
           type="submit"
@@ -157,19 +244,10 @@ const NotifyTab: React.FC = () => {
         )}
       </form>
 
-
       {/* 发送记录快捷筛选（运营复盘） */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-gray-500">记录筛选：</span>
-        {(
-          [
-            { key: '' as const, label: '全部' },
-            { key: 'today' as const, label: '今日' },
-            { key: 'failed' as const, label: '失败' },
-            { key: 'inbound' as const, label: '到件' },
-            { key: 'overdue' as const, label: '滞留' },
-          ] as const
-        ).map((f) => (
+        {filterChips.map((f) => (
           <button
             key={f.key || 'all'}
             type="button"
@@ -184,6 +262,15 @@ const NotifyTab: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {REACH_FILTERS.includes(logFilter) && (
+        <p className="text-[11px] text-gray-500">
+          当前为「今日到件」触达筛选：
+          {logFilter === 'unbound' && '未绑定微信的客户，取件码未私信。'}
+          {logFilter === 'pushed' && '客户微信私信已成功。'}
+          {logFilter === 'push_failed' && '客户已绑定但私信失败，可重试。'}
+        </p>
+      )}
 
       {resendTip && (
         <div className="rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-xs text-sky-800">
@@ -210,6 +297,22 @@ const NotifyTab: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {sub === 'logs' && resendableOnPage.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-orange-100 bg-orange-50/70 px-3 py-2">
+          <p className="text-xs text-orange-900">
+            本页有 {resendableOnPage.length} 条可补发（未私信/私信失败）
+          </p>
+          <button
+            type="button"
+            onClick={() => void onBatchResend()}
+            disabled={batchResending || Boolean(resendingId)}
+            className="min-h-[36px] rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primaryHover disabled:opacity-60"
+          >
+            {batchResending ? '补发中…' : '一键补发未私信'}
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="py-10 text-center text-sm text-gray-500">加载中...</div>
@@ -273,7 +376,9 @@ const NotifyTab: React.FC = () => {
               description={
                 phoneQuery
                   ? '换个手机号或尾号试试'
-                  : '入库/滞留/验证码通知会写到这里'
+                  : REACH_FILTERS.includes(logFilter)
+                    ? '当前筛选下没有记录，可切换「全部/今日」再看'
+                    : '入库/滞留/验证码通知会写到这里'
               }
             />
           ) : (
@@ -283,9 +388,13 @@ const NotifyTab: React.FC = () => {
                 className={`rounded-lg border bg-white p-3 ${
                   log.status === 'failed'
                     ? 'border-red-100'
-                    : log.status === 'sent'
-                      ? 'border-gray-200'
-                      : 'border-amber-100'
+                    : log.customerReach === 'push_failed'
+                      ? 'border-amber-100'
+                      : log.customerReach === 'unbound'
+                        ? 'border-orange-100'
+                        : log.status === 'sent'
+                          ? 'border-gray-200'
+                          : 'border-amber-100'
                 }`}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -308,6 +417,24 @@ const NotifyTab: React.FC = () => {
                             ? '失败'
                             : log.status)}
                     </span>
+                    {log.customerReach && (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] ${
+                          log.customerReach === 'pushed'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : log.customerReach === 'push_failed'
+                              ? 'bg-amber-50 text-amber-800'
+                              : 'bg-orange-50 text-orange-800'
+                        }`}
+                      >
+                        {log.customerReachLabel ||
+                          (log.customerReach === 'pushed'
+                            ? '已私信'
+                            : log.customerReach === 'push_failed'
+                              ? '私信失败'
+                              : '未私信')}
+                      </span>
+                    )}
                   </div>
                   <span className="text-[11px] text-gray-400">
                     {formatBeijingTimestamp(log.createdAt)}
@@ -342,7 +469,7 @@ const NotifyTab: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => void onResend(log)}
-                      disabled={resendingId === log.id}
+                      disabled={resendingId === log.id || batchResending}
                       className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-700 hover:border-primary hover:text-primary disabled:opacity-60"
                     >
                       {resendingId === log.id ? '重发中…' : '重新发送'}

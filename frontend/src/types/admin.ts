@@ -173,6 +173,9 @@ export interface NotifyLogItem {
   errorMessage?: string | null;
   channels?: NotifyChannelResultItem[];
   channelSummary: string;
+  /** 客户触达：未私信 / 已私信 / 私信失败 */
+  customerReach?: 'unbound' | 'pushed' | 'push_failed';
+  customerReachLabel?: string;
   /** 到件/滞留可重发 */
   canResend?: boolean;
   parcelId?: string | null;

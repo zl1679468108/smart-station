@@ -212,18 +212,25 @@ const Dashboard: React.FC = () => {
         })}
       </div>
 
-      {/* 今日到件触达 */}
+      {/* 今日到件触达：整卡看今日，标签深链到触达筛选 */}
       {data.notify && (
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => navigate('/admin/system?tab=notify&filter=today')}
-          className="w-full rounded-lg border border-orange-100 bg-orange-50/80 px-4 py-3 text-left transition hover:bg-orange-50"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              navigate('/admin/system?tab=notify&filter=today');
+            }
+          }}
+          className="w-full cursor-pointer rounded-lg border border-orange-100 bg-orange-50/80 px-4 py-3 text-left transition hover:bg-orange-50"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="text-sm font-medium text-gray-800">今日到件触达</div>
               <p className="mt-0.5 text-xs text-gray-600">
-                看客户有没有真正收到取件码私信（点此查看通知记录）
+                看客户有没有真正收到取件码私信（点数字可筛选对应记录）
               </p>
             </div>
             <div className="text-xs text-gray-500">
@@ -231,32 +238,67 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <span className="rounded-md bg-white px-2.5 py-1 text-emerald-700">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate('/admin/system?tab=notify&filter=pushed');
+              }}
+              className="rounded-md bg-white px-2.5 py-1 text-emerald-700 ring-1 ring-transparent hover:ring-emerald-200"
+            >
               已私信 {data.notify.customerPushed}
-            </span>
-            <span className="rounded-md bg-white px-2.5 py-1 text-orange-700">
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate('/admin/system?tab=notify&filter=unbound');
+              }}
+              className="rounded-md bg-white px-2.5 py-1 text-orange-700 ring-1 ring-transparent hover:ring-orange-200"
+            >
               未绑定 {data.notify.customerUnbound}
-            </span>
+            </button>
             {data.notify.customerPushFailed > 0 && (
-              <span className="rounded-md bg-white px-2.5 py-1 text-amber-700">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate('/admin/system?tab=notify&filter=push_failed');
+                }}
+                className="rounded-md bg-white px-2.5 py-1 text-amber-700 ring-1 ring-transparent hover:ring-amber-200"
+              >
                 私信失败 {data.notify.customerPushFailed}
-              </span>
+              </button>
             )}
             {data.notify.sendFailed > 0 && (
-              <span className="rounded-md bg-white px-2.5 py-1 text-red-700">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate('/admin/system?tab=notify&filter=failed&today=1');
+                }}
+                className="rounded-md bg-white px-2.5 py-1 text-red-700 ring-1 ring-transparent hover:ring-red-200"
+              >
                 发送失败 {data.notify.sendFailed}
-              </span>
+              </button>
             )}
-            <span className="rounded-md bg-white px-2.5 py-1 text-gray-600">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate('/admin/system?tab=notify&filter=inbound');
+              }}
+              className="rounded-md bg-white px-2.5 py-1 text-gray-600 ring-1 ring-transparent hover:ring-gray-200"
+            >
               到件通知 {data.notify.inboundNotices} 次
-            </span>
+            </button>
           </div>
           {data.notify.customerUnbound > 0 && (
             <p className="mt-2 text-[11px] text-orange-800/80">
               未绑定客户不会收到微信私信，可提醒到店查件或扫码绑定；绑定后可在通知记录重发。
             </p>
           )}
-        </button>
+        </div>
       )}
 
       {/* 今日小时趋势 + 待办 */}

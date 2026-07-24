@@ -794,9 +794,14 @@ export class AdminService {
       status?: string;
       templateCode?: string;
       todayOnly?: boolean;
+      /** 客户触达：unbound / pushed / push_failed（按 params.channelResults 推断） */
+      reach?: string;
     },
   ) {
-    const take = Math.min(Math.max(Number(opts?.limit) || 50, 1), 200);
+    const reach = this.normalizeReach(opts?.reach);
+    // reach 需内存过滤，适当放宽抓取量
+    const baseLimit = Number(opts?.limit) || 50;
+    const take = Math.min(Math.max(reach ? Math.max(baseLimit, 200) : baseLimit, 1), 500);
     const phone = this.normalizePhoneQuery(opts?.phone);
 
     let q = this.supabase
@@ -833,7 +838,7 @@ export class AdminService {
     const { data, error, count } = await q;
     if (error) throw new Error(`查询通知日志失败: ${error.message}`);
 
-    const items = (data || []).map((r: any) => {
+    let items = (data || []).map((r: any) => {
       const params = (r.params && typeof r.params === 'object' ? r.params : {}) as Record<
         string,
         unknown
@@ -844,6 +849,7 @@ export class AdminService {
       const channels = channelResults.map((c) => this.formatChannelResult(c));
       const templateCode = r.template_code as string;
       const canResend = templateCode === 'inbound_notice' || templateCode === 'overdue_remind';
+      const customerReach = this.deriveCustomerReach(channelResults);
       return {
         id: r.id,
         templateCode,
@@ -858,12 +864,20 @@ export class AdminService {
         errorMessage: r.error_message,
         channels,
         channelSummary: channels.map((c) => c.label).join(' · '),
+        customerReach,
+        customerReachLabel: this.customerReachLabel(customerReach),
         canResend,
         parcelId: r.parcel_id || null,
         sentAt: r.sent_at,
         createdAt: r.created_at,
       };
     });
+
+    if (reach) {
+      items = items.filter((it) => it.customerReach === reach);
+      return { items, total: items.length };
+    }
+
     return { items, total: count ?? items.length };
   }
 
@@ -1022,6 +1036,31 @@ export class AdminService {
       skipped_private: '已跳过（隐私）',
     };
     return mode ? map[mode] || mode : '';
+  }
+
+
+  /** 与 stats.getNotifyReach 一致：按 binding:* 通道推断客户触达 */
+  private deriveCustomerReach(
+    channelResults: Array<{ channel?: string; ok?: boolean }>,
+  ): 'unbound' | 'pushed' | 'push_failed' {
+    const customerResults = (channelResults || []).filter((c) =>
+      String(c.channel || '').startsWith('binding:'),
+    );
+    if (customerResults.length === 0) return 'unbound';
+    if (customerResults.some((c) => c.ok)) return 'pushed';
+    return 'push_failed';
+  }
+
+  private customerReachLabel(reach: 'unbound' | 'pushed' | 'push_failed'): string {
+    if (reach === 'pushed') return '已私信';
+    if (reach === 'push_failed') return '私信失败';
+    return '未私信';
+  }
+
+  private normalizeReach(raw?: string): 'unbound' | 'pushed' | 'push_failed' | undefined {
+    const v = String(raw || '').trim().toLowerCase();
+    if (v === 'unbound' || v === 'pushed' || v === 'push_failed') return v;
+    return undefined;
   }
 
   /** 将 channelResults 单项映射为中文展示 */

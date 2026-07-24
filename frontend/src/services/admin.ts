@@ -196,6 +196,8 @@ export function listNotifyLogs(opts?: {
   status?: string;
   templateCode?: string;
   todayOnly?: boolean;
+  /** unbound | pushed | push_failed */
+  reach?: string;
 }): Promise<{
   items: NotifyLogItem[];
   total: number;
@@ -206,6 +208,7 @@ export function listNotifyLogs(opts?: {
   if (opts?.status) params.set('status', opts.status);
   if (opts?.templateCode) params.set('templateCode', opts.templateCode);
   if (opts?.todayOnly) params.set('todayOnly', '1');
+  if (opts?.reach) params.set('reach', opts.reach);
   return get(`/api/admin/notify/logs?${params.toString()}`);
 }
 
