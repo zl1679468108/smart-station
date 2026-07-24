@@ -1388,3 +1388,10 @@
 |------|--------|------|------|------|------|
 | M124.1 | P1 | scripts/smoke-trial.sh | scripts | done | preflight+health+notify-guide |
 
+## M125 店员一键分享查件绑定链接（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M125.1 | P0 | getQueryPortalUrl + VITE_PUBLIC_QUERY_URL | utils/env | done | |
+| M125.2 | P0 | buildBindShareScript 含链接话术 | staffScripts | done | 不含取件码 |
+| M125.3 | P0 | 入库预检/成功/触达条等接入 | NotifyBindHint+全站复制 | done | |
+

@@ -15,7 +15,7 @@ import type {
 import { useAuth } from '@/utils/auth';
 import { canWrite } from '@/utils/permission';
 import { notifyError, notifySuccess } from '@/utils/notification';
-import { buildBindGuideScript, buildShippingFaceScript } from '@/utils/staffScripts';
+import { buildBindShareScript, buildShippingFaceScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 import { printShippingReceipt } from '@/utils/printPickupSlip';
 import PageHeader from '@/components/ui/PageHeader';
@@ -314,7 +314,7 @@ const OrdersTab: React.FC<{
           type="button"
           onClick={() => {
             void (async () => {
-              const ok = await copyText(buildBindGuideScript());
+              const ok = await copyText(buildBindShareScript());
               if (ok) notifySuccess('已复制绑定引导（不含取件码）');
               else notifyError('复制失败');
             })();

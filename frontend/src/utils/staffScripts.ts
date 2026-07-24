@@ -1,17 +1,48 @@
+import { getQueryPortalUrl } from '@/utils/queryPortal';
+
 /**
  * 店员现场白话话术（复制给客户或当面说）
  * 试用期免费通知：未绑定不发取件码私信，靠当面告知 + 引导绑定。
  */
 
-/** 引导客户绑定微信通知（不含取件码，可群发/群里发） */
-export function buildBindGuideScript(opts?: { stationName?: string; queryUrlHint?: string }): string {
+/** 引导客户绑定微信通知（不含取件码；可一对一发客户，勿进企微群） */
+export function buildBindGuideScript(opts?: {
+  stationName?: string;
+  queryUrlHint?: string;
+  /** 若传入或可自动生成，会写进话术方便客户点开 */
+  queryUrl?: string | null;
+}): string {
   const station = opts?.stationName?.trim() || '本驿站';
-  const hint = opts?.queryUrlHint?.trim() || '驿站查件页';
+  const url = (opts?.queryUrl ?? getQueryPortalUrl({ device: 'h5' })).trim();
+  const hint = opts?.queryUrlHint?.trim() || (url ? url : '驿站查件页');
   return [
     `【${station}】您好，包裹到了可微信自动提醒。`,
-    `请打开${hint}，用收件手机号绑定微信通知。`,
+    url ? `请点开链接绑定：${url}` : `请打开${hint}，用收件手机号绑定微信通知。`,
+    url ? '用收件手机号验证后扫一扫即可。' : '',
     '绑定后：已在库的件会补发取件码，以后到件也会微信提醒；未绑定请到店查件或看货架。',
-  ].join('');
+  ]
+    .filter(Boolean)
+    .join('');
+}
+
+/**
+ * 店员一键分享：绑定话术 + 查件链接（换行，适合微信粘贴）
+ * 不含取件码，可一对一发给客户。
+ */
+export function buildBindShareScript(opts?: {
+  stationName?: string;
+  queryUrl?: string | null;
+}): string {
+  const station = opts?.stationName?.trim() || '本驿站';
+  const url = (opts?.queryUrl ?? getQueryPortalUrl({ device: 'h5' })).trim();
+  const lines = [
+    `【${station}】您好，包裹到了可微信自动提醒。`,
+    url ? `请点开绑定：${url}` : '请打开驿站查件页，用收件手机号绑定微信通知。',
+    '用收件手机号验证 → 微信扫一扫即可。',
+    '绑定后：在库件会补发取件码，以后到件也会提醒。',
+    '没绑定也能到店查件/看货架；群里不会公开取件码。',
+  ];
+  return lines.join('\n');
 }
 
 /** 当面告知取件码（仅一对一面告/电话，勿发到企微群） */
@@ -77,7 +108,7 @@ export function buildInboundUnboundComboScript(opts: {
   return [
     buildFacePickupScript(opts),
     '',
-    buildBindGuideScript({ stationName: opts.stationName }),
+    buildBindShareScript({ stationName: opts.stationName }),
   ].join('\n');
 }
 
@@ -186,7 +217,7 @@ export function buildUnboundFollowupScript(
   if (need.length === 0) {
     return [
       `【${station}·跟进清单】当前没有未绑定/私信失败客户。`,
-      buildBindGuideScript({ stationName: station }),
+      buildBindShareScript({ stationName: station }),
     ].join('\n');
   }
   const lines = need.map((i, idx) => {
@@ -204,7 +235,7 @@ export function buildUnboundFollowupScript(
     '跟进方式：当面报码 / 电话告知；并引导客户在查件页绑定微信，下次自动收码。',
     '',
     '通用绑定引导（不含取件码，可一对一发客户）：',
-    buildBindGuideScript({ stationName: station }),
+    buildBindShareScript({ stationName: station }),
   ].join('\n');
 }
 

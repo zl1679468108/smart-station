@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import * as adminService from '@/services/admin';
-import { buildBindGuideScript } from '@/utils/staffScripts';
+import { buildBindGuideScript, buildBindShareScript } from '@/utils/staffScripts';
+import { getQueryPortalUrl } from '@/utils/queryPortal';
 import { copyText } from '@/utils/stationVisit';
 import { notifyError, notifySuccess } from '@/utils/notification';
+import { useAuth } from '@/utils/auth';
 
 type HintState =
   | { kind: 'idle' }
@@ -13,9 +15,12 @@ type HintState =
 
 /**
  * 入库页：手机号填齐后预检是否已绑定微信通知（白话提示）
- * 未绑定时高亮，并提供一键复制绑定话术。
+ * 未绑定时高亮，并提供一键复制绑定话术 / 查件链接。
  */
 const NotifyBindHint: React.FC<{ phone: string }> = ({ phone }) => {
+  const { stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '本驿站';
   const [state, setState] = useState<HintState>({ kind: 'idle' });
 
   useEffect(() => {
@@ -77,22 +82,55 @@ const NotifyBindHint: React.FC<{ phone: string }> = ({ phone }) => {
       <p className="font-semibold">未绑定 · 入库后收不到微信私信</p>
       <ol className="mt-1 list-decimal space-y-0.5 pl-4 leading-relaxed opacity-95">
         <li>入库后请当面报取件码</li>
-        <li>引导客户查件页绑定微信通知</li>
-        <li>绑定后可补发，已在库件也会自动收码</li>
+        <li>把查件绑定链接发给客户（一对一）</li>
+        <li>客户绑定后在库件会自动补发取件码</li>
       </ol>
-      <button
-        type="button"
-        className="mt-2 min-h-[36px] rounded-md border border-orange-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-orange-900 hover:bg-orange-100"
-        onClick={() => {
-          void (async () => {
-            const ok = await copyText(buildBindGuideScript());
-            if (ok) notifySuccess('已复制绑定引导（不含取件码，可发客户）');
-            else notifyError('复制失败');
-          })();
-        }}
-      >
-        复制绑定话术（推荐）
-      </button>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          className="min-h-[36px] rounded-md bg-orange-600 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-orange-700"
+          onClick={() => {
+            void (async () => {
+              const ok = await copyText(buildBindShareScript({ stationName }));
+              if (ok) notifySuccess('已复制绑定话术+查件链接（可发客户，不含取件码）');
+              else notifyError('复制失败');
+            })();
+          }}
+        >
+          复制绑定链接话术
+        </button>
+        <button
+          type="button"
+          className="min-h-[36px] rounded-md border border-orange-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-orange-900 hover:bg-orange-100"
+          onClick={() => {
+            void (async () => {
+              const url = getQueryPortalUrl({ device: 'h5' });
+              if (!url) {
+                notifyError('暂无法生成链接，请配置 VITE_PUBLIC_QUERY_URL 或在浏览器中打开本系统');
+                return;
+              }
+              const ok = await copyText(url);
+              if (ok) notifySuccess('已复制查件绑定链接');
+              else notifyError('复制失败');
+            })();
+          }}
+        >
+          仅复制链接
+        </button>
+        <button
+          type="button"
+          className="min-h-[36px] rounded-md border border-orange-200 bg-white px-2.5 py-1.5 text-[11px] text-orange-900 hover:bg-orange-100"
+          onClick={() => {
+            void (async () => {
+              const ok = await copyText(buildBindGuideScript({ stationName }));
+              if (ok) notifySuccess('已复制短话术（含链接，不含取件码）');
+              else notifyError('复制失败');
+            })();
+          }}
+        >
+          复制短话术
+        </button>
+      </div>
     </div>
   );
 };

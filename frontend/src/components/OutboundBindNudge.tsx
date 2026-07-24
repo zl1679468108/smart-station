@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as adminService from '@/services/admin';
-import { buildBindGuideScript } from '@/utils/staffScripts';
+import { buildBindShareScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 import { notifyError, notifySuccess } from '@/utils/notification';
 
@@ -50,8 +50,8 @@ const OutboundBindNudge: React.FC<{
   }, [phone, onStateChange]);
 
   const onCopyBind = async () => {
-    const ok = await copyText(buildBindGuideScript());
-    if (ok) notifySuccess('已复制绑定引导（不含取件码，可发客户）');
+    const ok = await copyText(buildBindShareScript());
+    if (ok) notifySuccess('已复制绑定链接话术（不含取件码，可发客户）');
     else notifyError('复制失败');
   };
 
@@ -88,7 +88,7 @@ const OutboundBindNudge: React.FC<{
           onClick={() => void onCopyBind()}
           className="mt-3 min-h-[48px] w-full rounded-md bg-white px-3 text-sm font-semibold text-emerald-800 hover:bg-white/90"
         >
-          复制绑定话术（推荐）
+          复制绑定链接话术
         </button>
       </div>
     );

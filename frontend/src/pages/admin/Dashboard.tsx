@@ -9,7 +9,7 @@ import type { DashboardEvent } from '@/types/stats';
 import { useLayoutConfig } from '@/hooks/useSystemAdmin';
 import { useAuth } from '@/utils/auth';
 import PageHeader from '@/components/ui/PageHeader';
-import { buildBindGuideScript } from '@/utils/staffScripts';
+import { buildBindShareScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import * as shiftService from '@/services/shift';
@@ -457,9 +457,7 @@ const Dashboard: React.FC = () => {
                 onClick={(e) => {
                   e.stopPropagation();
                   void (async () => {
-                    const ok = await copyText(
-                      buildBindGuideScript({ stationName }),
-                    );
+                    const ok = await copyText(buildBindShareScript({ stationName }));
                     if (ok) notifySuccess('已复制绑定引导话术（不含取件码）');
                     else notifyError('复制失败');
                   })();

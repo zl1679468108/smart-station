@@ -20,7 +20,7 @@ import { useDashboard } from '@/hooks/useDashboardData';
 import * as adminService from '@/services/admin';
 import PageHeader from '@/components/ui/PageHeader';
 import { notifyError, notifySuccess } from '@/utils/notification';
-import { buildBindGuideScript, buildUnboundFollowupScript } from '@/utils/staffScripts';
+import { buildBindShareScript, buildUnboundFollowupScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 
 const GRANULARITY_TABS: { key: TrendGranularity; label: string; span: number }[] = [
@@ -111,7 +111,7 @@ const StatsPage: React.FC = () => {
         title,
         ...lines,
         '',
-        buildBindGuideScript(),
+        buildBindShareScript(),
       ].join('\n');
       const ok = await copyText(text);
       if (ok) notifySuccess(`已复制未绑定 ${items.length} 人（${days === 1 ? '今日' : '近3日'}）`);
@@ -261,7 +261,7 @@ const StatsPage: React.FC = () => {
                   type="button"
                   onClick={() => {
                     void (async () => {
-                      const ok = await copyText(buildBindGuideScript());
+                      const ok = await copyText(buildBindShareScript());
                       if (ok) notifySuccess('已复制绑定引导（不含取件码）');
                       else notifyError('复制失败');
                     })();

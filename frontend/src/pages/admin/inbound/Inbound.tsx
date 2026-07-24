@@ -5,7 +5,7 @@ import * as adminService from '@/services/admin';
 import { ApiError } from '@/services/api';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import {
-  buildBindGuideScript,
+  buildBindShareScript,
   buildFacePickupScript,
   buildInboundUnboundComboScript,
   buildUnboundFollowupScript,
@@ -464,9 +464,9 @@ const InboundSuccess: React.FC<{
   };
 
   const onCopyBindScript = async () => {
-    const text = buildBindGuideScript();
+    const text = buildBindShareScript();
     const ok = await copyText(text);
-    if (ok) notifySuccess('已复制绑定引导（不含取件码，可发客户）');
+    if (ok) notifySuccess('已复制绑定链接话术（不含取件码，可发客户）');
     else notifyError('复制失败');
   };
 
@@ -617,7 +617,7 @@ const InboundSuccess: React.FC<{
                   onClick={() => void onCopyBindScript()}
                   className="min-h-[36px] rounded-md border border-orange-300 bg-white px-3 py-1.5 text-[11px] font-medium text-orange-900 hover:bg-orange-50"
                 >
-                  复制绑定引导（不含码）
+                  复制绑定链接话术
                 </button>
                 <button
                   type="button"
@@ -1100,8 +1100,8 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                     type="button"
                     onClick={() => {
                       void (async () => {
-                        const ok = await copyText(buildBindGuideScript());
-                        if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                        const ok = await copyText(buildBindShareScript());
+                        if (ok) notifySuccess('已复制绑定链接话术（不含取件码）');
                         else notifyError('复制失败');
                       })();
                     }}
@@ -1128,8 +1128,8 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                           .filter((x) => x.phone);
                         if (items.length === 0) {
                           // fallback: still copy guide
-                          const ok = await copyText(buildBindGuideScript());
-                          if (ok) notifySuccess('已复制绑定引导（本会话暂无手机号明细）');
+                          const ok = await copyText(buildBindShareScript());
+                          if (ok) notifySuccess('已复制绑定链接话术');
                           else notifyError('复制失败');
                           return;
                         }
@@ -1717,8 +1717,8 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                     type="button"
                     onClick={() => {
                       void (async () => {
-                        const ok = await copyText(buildBindGuideScript());
-                        if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                        const ok = await copyText(buildBindShareScript());
+                        if (ok) notifySuccess('已复制绑定链接话术（不含取件码）');
                         else notifyError('复制失败');
                       })();
                     }}
@@ -2157,7 +2157,7 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         `【批量入库·未私信跟进】共 ${list.length} 件（仅店内，勿发群）`,
         ...lines,
         '',
-        buildBindGuideScript(),
+        buildBindShareScript(),
       ].join('\n');
       const ok = await copyText(text);
       if (ok) notifySuccess(`已复制 ${list.length} 件未私信跟进（无完整手机号）`);
@@ -2477,8 +2477,8 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                     className="min-h-[36px] rounded-md bg-orange-600 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-orange-700"
                     onClick={() => {
                       void (async () => {
-                        const ok = await copyText(buildBindGuideScript());
-                        if (ok) notifySuccess('已复制绑定引导（不含取件码，可发客户）');
+                        const ok = await copyText(buildBindShareScript());
+                        if (ok) notifySuccess('已复制绑定链接话术（不含取件码，可发客户）');
                         else notifyError('复制失败');
                       })();
                     }}
@@ -2652,8 +2652,8 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                         className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
                         onClick={() => {
                           void (async () => {
-                            const ok = await copyText(buildBindGuideScript());
-                            if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                            const ok = await copyText(buildBindShareScript());
+                            if (ok) notifySuccess('已复制绑定链接话术（不含取件码）');
                             else notifyError('复制失败');
                           })();
                         }}

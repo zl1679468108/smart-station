@@ -13,7 +13,7 @@ import {
 import { useAuth } from '@/utils/auth';
 import { canWrite } from '@/utils/permission';
 import { notifyError, notifySuccess } from '@/utils/notification';
-import { buildBindGuideScript } from '@/utils/staffScripts';
+import { buildBindShareScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 import { printPickupSlip, printPickupSlips } from '@/utils/printPickupSlip';
 import EmptyState from '@/components/ui/EmptyState';
@@ -601,7 +601,7 @@ const onBatchRemindOverdue = async () => {
                     className="rounded border border-amber-200 bg-white px-2 py-0.5 text-[11px] font-medium text-amber-950 hover:bg-amber-100"
                     onClick={() => {
                       void (async () => {
-                        const ok = await copyText(buildBindGuideScript());
+                        const ok = await copyText(buildBindShareScript());
                         if (ok) notifySuccess('已复制绑定引导（不含取件码）');
                         else notifyError('复制失败');
                       })();

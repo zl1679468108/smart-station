@@ -13,7 +13,7 @@ import { useAuth } from '@/utils/auth';
 import { canWrite } from '@/utils/permission';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import * as inboundService from '@/services/inbound';
-import { buildBindGuideScript, buildFacePickupScript } from '@/utils/staffScripts';
+import { buildBindShareScript, buildFacePickupScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
@@ -236,7 +236,7 @@ const ExceptionPage: React.FC = () => {
           type="button"
           onClick={() => {
             void (async () => {
-              const ok = await copyText(buildBindGuideScript());
+              const ok = await copyText(buildBindShareScript());
               if (ok) notifySuccess('已复制绑定引导（不含取件码）');
               else notifyError('复制失败');
             })();

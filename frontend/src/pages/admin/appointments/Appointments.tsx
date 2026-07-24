@@ -15,7 +15,7 @@ import Modal from '@/components/ui/Modal';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import {
   buildAppointmentFaceScript,
-  buildBindGuideScript,
+  buildBindShareScript,
 } from '@/utils/staffScripts';
 import OutboundBindNudge from '@/components/OutboundBindNudge';
 import { copyText } from '@/utils/stationVisit';
@@ -284,7 +284,7 @@ const AppointmentsPage: React.FC = () => {
                     className="min-h-[36px] rounded-md bg-orange-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-orange-700"
                     onClick={() => {
                       void (async () => {
-                        const ok = await copyText(buildBindGuideScript());
+                        const ok = await copyText(buildBindShareScript());
                         if (ok) notifySuccess('已复制绑定引导（不含取件码）');
                         else notifyError('复制失败');
                       })();
@@ -330,7 +330,7 @@ const AppointmentsPage: React.FC = () => {
                     className="rounded-md border border-violet-200 bg-white px-2 py-1 text-[11px] font-medium text-violet-800 hover:bg-violet-100"
                     onClick={() => {
                       void (async () => {
-                        const ok = await copyText(buildBindGuideScript());
+                        const ok = await copyText(buildBindShareScript());
                         if (ok) notifySuccess('已复制绑定引导（不含取件码）');
                         else notifyError('复制失败');
                       })();

@@ -7,7 +7,7 @@ import type { NotifyBindingItem, NotifyLogItem, NotifyPhoneSummaryItem } from '@
 import { formatBeijingTimestamp } from '@/utils/date';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
-import { buildBindGuideScript, buildUnboundFollowupScript } from '@/utils/staffScripts';
+import { buildBindShareScript, buildUnboundFollowupScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 import { notifyError, notifySuccess } from '@/utils/notification';
 
@@ -739,7 +739,7 @@ const NotifyTab: React.FC = () => {
               type="button"
               onClick={() => {
                 void (async () => {
-                  const ok = await copyText(buildBindGuideScript());
+                  const ok = await copyText(buildBindShareScript());
                   if (ok) notifySuccess('已复制绑定引导（不含取件码）');
                   else notifyError('复制失败');
                 })();
@@ -915,7 +915,7 @@ const NotifyTab: React.FC = () => {
                               className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] text-orange-800 hover:bg-orange-50"
                               onClick={() => {
                                 void (async () => {
-                                  const ok = await copyText(buildBindGuideScript());
+                                  const ok = await copyText(buildBindShareScript());
                                   if (ok) notifySuccess('已复制绑定引导（不含取件码）');
                                   else notifyError('复制失败');
                                 })();

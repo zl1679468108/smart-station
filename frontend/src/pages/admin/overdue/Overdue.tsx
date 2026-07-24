@@ -12,7 +12,7 @@ import NotifyReachBar from '@/components/NotifyReachBar';
 import { copyText } from '@/utils/stationVisit';
 import {
   buildFacePickupScript,
-  buildBindGuideScript,
+  buildBindShareScript,
   buildOverdueRemindScript,
 } from '@/utils/staffScripts';
 import OutboundBindNudge from '@/components/OutboundBindNudge';
@@ -322,7 +322,7 @@ const onBatchRemind = async () => {
                   type="button"
                   onClick={() => {
                     void (async () => {
-                      const ok = await copyText(buildBindGuideScript());
+                      const ok = await copyText(buildBindShareScript());
                       if (ok) notifySuccess('已复制绑定引导（不含取件码，可发客户）');
                       else notifyError('复制失败');
                     })();

@@ -10,7 +10,7 @@ import Modal from '@/components/ui/Modal';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import * as statsService from '@/services/stats';
 import type { DashboardData, DashboardNotify } from '@/types/stats';
-import { buildBindGuideScript } from '@/utils/staffScripts';
+import { buildBindShareScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 import DailyFollowupCard from '@/components/DailyFollowupCard';
 import { buildDailyFollowupSummaryText } from '@/utils/dailyFollowup';
@@ -395,7 +395,7 @@ const ShiftsPage: React.FC = () => {
                       type="button"
                       onClick={() => {
                         void (async () => {
-                          const ok = await copyText(buildBindGuideScript());
+                          const ok = await copyText(buildBindShareScript());
                           if (ok) notifySuccess('已复制绑定引导（不含取件码）');
                           else notifyError('复制失败');
                         })();
@@ -702,7 +702,7 @@ const ShiftsPage: React.FC = () => {
                   className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
                   onClick={() => {
                     void (async () => {
-                      const ok = await copyText(buildBindGuideScript());
+                      const ok = await copyText(buildBindShareScript());
                       if (ok) notifySuccess('已复制绑定引导（不含取件码）');
                       else notifyError('复制失败');
                     })();

@@ -7,7 +7,7 @@ import { notifyError, notifySuccess } from '@/utils/notification';
 import { copyText } from '@/utils/stationVisit';
 import { printPickupSlip } from '@/utils/printPickupSlip';
 import { useAuth } from '@/utils/auth';
-import { buildBindGuideScript, buildFacePickupScript } from '@/utils/staffScripts';
+import { buildBindShareScript, buildFacePickupScript } from '@/utils/staffScripts';
 import OutboundBindNudge from '@/components/OutboundBindNudge';
 import {
   useInvalidateInventoryDetail,
@@ -176,7 +176,7 @@ const ParcelDetailPage: React.FC = () => {
                   type="button"
                   className="rounded-md border border-orange-200 bg-white px-3 py-1.5 text-xs text-orange-800 hover:bg-orange-50"
                   onClick={async () => {
-                    const ok = await copyText(buildBindGuideScript());
+                    const ok = await copyText(buildBindShareScript());
                     if (ok) notifySuccess('已复制绑定引导（不含取件码）');
                     else notifyError('复制失败');
                   }}

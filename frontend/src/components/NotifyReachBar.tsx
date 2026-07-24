@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboard } from '@/hooks/useDashboardData';
-import { buildBindGuideScript } from '@/utils/staffScripts';
+import { buildBindShareScript } from '@/utils/staffScripts';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import { copyText } from '@/utils/stationVisit';
 
@@ -93,7 +93,7 @@ const NotifyReachBar: React.FC<{
             type="button"
             onClick={() => {
               void (async () => {
-                const ok = await copyText(buildBindGuideScript());
+                const ok = await copyText(buildBindShareScript());
                 if (ok) notifySuccess('已复制绑定引导（不含取件码）');
                 else notifyError('复制失败');
               })();

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import * as financeService from '@/services/finance';
 import type { CashDaySummary } from '@/types/finance';
 import { notifyError, notifySuccess } from '@/utils/notification';
-import { buildBindGuideScript } from '@/utils/staffScripts';
+import { buildBindShareScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 import { printCashDaySummary } from '@/utils/printPickupSlip';
 import { useAuth } from '@/utils/auth';
@@ -102,7 +102,7 @@ const CashDayPanel: React.FC = () => {
           type="button"
           onClick={() => {
             void (async () => {
-              const ok = await copyText(buildBindGuideScript());
+              const ok = await copyText(buildBindShareScript());
               if (ok) notifySuccess('已复制绑定引导（不含取件码）');
               else notifyError('复制失败');
             })();
