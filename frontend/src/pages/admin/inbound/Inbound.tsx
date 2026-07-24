@@ -391,6 +391,13 @@ const InboundSuccess: React.FC<{
           >
             {copied ? '已复制' : '复制取件码'}
           </button>
+          <button
+            type="button"
+            onClick={() => navigate(`/admin/inventory/${result.id}`)}
+            className="mb-0.5 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 hover:border-primary hover:text-primary"
+          >
+            看包裹
+          </button>
           <span className="self-center text-xs text-gray-400">
             （第{result.shelfNumber}号货架 · 第{result.shelfLayer}层 · 第{result.shelfPosition}号）
           </span>
@@ -483,6 +490,7 @@ const InboundSuccess: React.FC<{
 
 // ============ 扫码入库 ============
 const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
+  const navigate = useNavigate();
   const invalidateShelves = useInvalidateShelves();
   const invalidateDashboard = useInvalidateDashboard();
   const invalidateInventoryList = useInvalidateInventoryList();
@@ -942,7 +950,14 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
               return (
                 <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
                   <div className="min-w-0">
-                    <div className="font-mono text-sm font-semibold text-primary">{r.pickupCode}</div>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/admin/inventory/${r.id}`)}
+                      className="font-mono text-sm font-semibold text-primary hover:underline"
+                      title="打开库存详情"
+                    >
+                      {r.pickupCode}
+                    </button>
                     <div className="truncate text-gray-500">{r.trackingNumber}</div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
@@ -957,6 +972,13 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                       )}
                     <div className={tipClass}>{tip}</div>
                     <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        className="rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50"
+                        onClick={() => navigate(`/admin/inventory/${r.id}`)}
+                      >
+                        看包裹
+                      </button>
                       <button
                         type="button"
                         className="rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50"
@@ -1055,6 +1077,12 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<InboundResult | null>(null);
+  /** 本会话累计：成功 / 未绑定 / 待收款 */
+  const [sessionStats, setSessionStats] = useState({
+    success: 0,
+    unbound: 0,
+    unpaid: 0,
+  });
 
   // 按当前选择的 size 过滤可选货架（仅显示启用中的货架）
   const filteredShelves = shelves.filter((s) => s.status === 'active' && s.size_type === form.size);
@@ -1109,6 +1137,18 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         inboundMethod: 'manual',
       });
       setResult(res);
+      setSessionStats((prev) => ({
+        success: prev.success + 1,
+        unbound:
+          prev.unbound +
+          (res.notify?.enabled && !res.notify?.customerBound ? 1 : 0),
+        unpaid:
+          prev.unpaid +
+          (Number(res.collectDueAmount || 0) > 0 &&
+          (res.collectStatus === 'unpaid' || !res.collectStatus)
+            ? 1
+            : 0),
+      }));
       saveLastParcelSize(form.size);
       playInboundSuccessBeep();
       invalidateShelves();
@@ -1312,6 +1352,42 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           {submitting ? '入库中...' : dup ? '运单已在库' : '确认入库'}
         </button>
       </form>
+
+      {sessionStats.success > 0 && (
+        <div className="rounded-lg border border-primary/20 bg-orange-50/60 px-3 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-700">
+              <span className="font-medium text-gray-800">本会话入库</span>
+              <span>
+                成功 <strong className="text-primary">{sessionStats.success}</strong> 件
+              </span>
+              {sessionStats.unbound > 0 && (
+                <span className="text-orange-700">
+                  未绑定 <strong>{sessionStats.unbound}</strong>
+                </span>
+              )}
+              {sessionStats.unpaid > 0 && (
+                <span className="text-rose-700">
+                  待收款 <strong>{sessionStats.unpaid}</strong>
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSessionStats({ success: 0, unbound: 0, unpaid: 0 });
+                setResult(null);
+              }}
+              className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+            >
+              清零本会话
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-gray-500">
+            只统计当前页面未刷新期间的入库
+          </p>
+        </div>
+      )}
 
       {result && (
         <InboundSuccess
