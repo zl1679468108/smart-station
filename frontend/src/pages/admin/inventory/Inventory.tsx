@@ -13,6 +13,8 @@ import {
 import { useAuth } from '@/utils/auth';
 import { canWrite } from '@/utils/permission';
 import { notifyError, notifySuccess } from '@/utils/notification';
+import { buildBindGuideScript } from '@/utils/staffScripts';
+import { copyText } from '@/utils/stationVisit';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
@@ -173,6 +175,44 @@ const Inventory: React.FC = () => {
     }
   };
 
+
+  const onBatchResendInboundNotice = async () => {
+    if (!writable || batchReminding || remindingId || resendingNoticeId || !data?.items?.length) return;
+    const targets = data.items
+      .filter((it) => selected.has(it.id) && canResendInboundNotice(it))
+      .slice(0, 30);
+    if (targets.length === 0) {
+      notifyError('所选包裹中没有可补发到件的（需在库或滞留）');
+      return;
+    }
+    const ok = window.confirm(
+      `对已选 ${targets.length} 件批量补发到件通知？\n\n已绑定会私信取件码；未绑定请当面报码或引导绑定后再试。最多 30 件。`,
+    );
+    if (!ok) return;
+    setResendingNoticeId('batch');
+    let pushed = 0;
+    let unbound = 0;
+    let failed = 0;
+    try {
+      for (const item of targets) {
+        try {
+          const r = await inboundService.resendInboundNotice(item.id);
+          if (r.customerPushed) pushed += 1;
+          else if (!r.customerBound) unbound += 1;
+          else failed += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+      const msg = `批量补发完成：已私信 ${pushed}，未绑定 ${unbound}，失败 ${failed}（共 ${targets.length} 件）`;
+      notifySuccess(msg);
+      setLastBatchRemind(msg);
+      setSelected(new Set());
+    } finally {
+      setResendingNoticeId(null);
+    }
+  };
+
 const onBatchRemindOverdue = async () => {
     if (!writable || batchReminding || remindingId || resendingNoticeId || !data?.items?.length) return;
     const ids = data.items
@@ -310,7 +350,44 @@ const onBatchRemindOverdue = async () => {
 
   return (
     <div className="w-full">
-      <PageHeader title="库存查询" className="mb-4" />
+      <PageHeader
+        title="库存查询"
+        className="mb-4"
+        description="在库/滞留可补发到件；滞留或满 3 天可发提醒。未绑定客户需当面报码。"
+      />
+
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-orange-100 bg-orange-50/70 px-3 py-2">
+        <p className="text-[11px] text-orange-900">
+          通知跟进：客户绑定后可补发取件码；今日未绑定可按手机号集中处理。
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate('/admin/system?tab=notify&filter=unbound&view=byPhone')}
+          className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+        >
+          按手机号跟进
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/admin/system?tab=notify&filter=inbound')}
+          className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
+        >
+          到件通知记录
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            void (async () => {
+              const ok = await copyText(buildBindGuideScript());
+              if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+              else notifyError('复制失败');
+            })();
+          }}
+          className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+        >
+          复制绑定话术
+        </button>
+      </div>
 
       {/* 筛选栏 */}
       <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
@@ -420,8 +497,24 @@ const onBatchRemindOverdue = async () => {
           <span className="text-primary">已选 {selected.size} 项</span>
           <button
             type="button"
+            onClick={() => void onBatchResendInboundNotice()}
+            disabled={
+              batchReminding ||
+              Boolean(remindingId) ||
+              Boolean(resendingNoticeId)
+            }
+            className="rounded bg-primary px-3 py-1 text-xs text-white hover:bg-primaryHover disabled:opacity-60"
+          >
+            {resendingNoticeId === 'batch' ? '批量补发中…' : '批量补发到件'}
+          </button>
+          <button
+            type="button"
             onClick={() => void onBatchRemindOverdue()}
-            disabled={batchReminding || Boolean(remindingId)}
+            disabled={
+              batchReminding ||
+              Boolean(remindingId) ||
+              Boolean(resendingNoticeId)
+            }
             className="rounded bg-amber-600 px-3 py-1 text-xs text-white hover:bg-amber-700 disabled:opacity-60"
           >
             {batchReminding ? '批量提醒中…' : '批量发滞留提醒'}
@@ -446,7 +539,44 @@ const onBatchRemindOverdue = async () => {
 
       {lastBatchRemind && (
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          <p>通知回执：{lastBatchRemind}</p>
+          <div className="min-w-0">
+            <p>通知回执：{lastBatchRemind}</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                className="rounded border border-amber-200 bg-white px-2 py-0.5 text-[11px] text-amber-900 hover:bg-amber-100"
+                onClick={() => navigate('/admin/system?tab=notify&filter=today')}
+              >
+                看今日通知
+              </button>
+              {(lastBatchRemind.includes('未绑定') || lastBatchRemind.includes('未私信')) && (
+                <button
+                  type="button"
+                  className="rounded border border-amber-200 bg-white px-2 py-0.5 text-[11px] text-amber-900 hover:bg-amber-100"
+                  onClick={() =>
+                    navigate('/admin/system?tab=notify&filter=unbound&view=byPhone')
+                  }
+                >
+                  按手机号跟进
+                </button>
+              )}
+              {(lastBatchRemind.includes('未绑定') || lastBatchRemind.includes('未私信')) && (
+                <button
+                  type="button"
+                  className="rounded border border-amber-200 bg-white px-2 py-0.5 text-[11px] text-amber-900 hover:bg-amber-100"
+                  onClick={() => {
+                    void (async () => {
+                      const ok = await copyText(buildBindGuideScript());
+                      if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                      else notifyError('复制失败');
+                    })();
+                  }}
+                >
+                  复制绑定话术
+                </button>
+              )}
+            </div>
+          </div>
           <button
             type="button"
             className="underline"
