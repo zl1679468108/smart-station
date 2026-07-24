@@ -16,6 +16,7 @@ import * as shiftService from '@/services/shift';
 import type { ShiftItem } from '@/types/shift';
 import * as financeService from '@/services/finance';
 import type { CashDaySummary } from '@/types/finance';
+import DailyFollowupCard from '@/components/DailyFollowupCard';
 
 const WarehouseScreen = React.lazy(() =>
   import('@/components/warehouse3d').then((m) => ({ default: m.WarehouseScreen })),
@@ -227,6 +228,13 @@ const Dashboard: React.FC = () => {
             </button>
           </>
         }
+      />
+
+      <DailyFollowupCard
+        data={data}
+        currentShift={currentShift}
+        cashToday={cashToday}
+        stationName={stationName}
       />
 
       {/* 概览卡片 */}
