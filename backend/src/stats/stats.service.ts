@@ -372,6 +372,7 @@ export class StatsService {
   /**
    * 大屏实时动态：优先读 ss_parcel_events（按驿站过滤），
    * 无事件时回退到今日入库/出库包裹合成动态。
+   * 入库事件附带客户触达（已私信/未绑定/私信失败），便于运营一眼跟进。
    */
   async getRecentEvents(stationId: string, limit = 20) {
     const safeLimit = Math.min(50, Math.max(1, Number(limit) || 20));
@@ -381,7 +382,7 @@ export class StatsService {
       .getClient()
       .from('ss_parcel_events')
       .select(
-        `id, event_type, description, created_at, metadata,
+        `id, event_type, description, created_at, metadata, parcel_id,
          parcel:ss_parcels!inner(
            id, tracking_number, pickup_code, station_id, status,
            shelf:ss_shelves(number)
@@ -392,6 +393,18 @@ export class StatsService {
       .limit(safeLimit);
 
     if (!eventsRes.error && eventsRes.data && eventsRes.data.length > 0) {
+      const parcelIds = Array.from(
+        new Set(
+          (eventsRes.data as any[])
+            .map((row) => {
+              const parcel = Array.isArray(row.parcel) ? row.parcel[0] : row.parcel;
+              return parcel?.id || row.parcel_id || null;
+            })
+            .filter(Boolean),
+        ),
+      ) as string[];
+      const reachMap = await this.getInboundReachByParcelIds(stationId, parcelIds);
+
       return (eventsRes.data as any[]).map((row) => {
         const parcel = Array.isArray(row.parcel) ? row.parcel[0] : row.parcel;
         const shelf = parcel?.shelf
@@ -399,6 +412,7 @@ export class StatsService {
             ? parcel.shelf[0]
             : parcel.shelf
           : null;
+        const parcelId = parcel?.id || row.parcel_id || null;
         return this.normalizeEvent({
           id: row.id,
           eventType: row.event_type,
@@ -408,6 +422,8 @@ export class StatsService {
           pickupCode: parcel?.pickup_code ?? row.metadata?.pickup_code ?? null,
           shelfNumber: shelf?.number ?? row.metadata?.shelf_number ?? null,
           metadata: row.metadata ?? null,
+          customerReach:
+            row.event_type === 'inbound' && parcelId ? reachMap.get(parcelId) || null : null,
         });
       });
     }
@@ -439,6 +455,9 @@ export class StatsService {
         .limit(safeLimit),
     ]);
 
+    const inboundIds = ((inboundRes.data as any[]) || []).map((r) => r.id).filter(Boolean);
+    const reachMap = await this.getInboundReachByParcelIds(stationId, inboundIds);
+
     const merged: any[] = [];
     for (const row of (inboundRes.data as any[]) || []) {
       const shelf = Array.isArray(row.shelf) ? row.shelf[0] : row.shelf;
@@ -452,6 +471,7 @@ export class StatsService {
           pickupCode: row.pickup_code,
           shelfNumber: shelf?.number ?? null,
           metadata: null,
+          customerReach: reachMap.get(row.id) || null,
         }),
       );
     }
@@ -467,6 +487,7 @@ export class StatsService {
           pickupCode: row.pickup_code,
           shelfNumber: shelf?.number ?? null,
           metadata: null,
+          customerReach: null,
         }),
       );
     }
@@ -475,6 +496,55 @@ export class StatsService {
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
     return merged.slice(0, safeLimit);
+  }
+
+  /**
+   * 按包裹查最近一条到件通知触达：pushed / unbound / push_failed
+   */
+  private async getInboundReachByParcelIds(
+    stationId: string,
+    parcelIds: string[],
+  ): Promise<Map<string, 'pushed' | 'unbound' | 'push_failed'>> {
+    const map = new Map<string, 'pushed' | 'unbound' | 'push_failed'>();
+    const ids = Array.from(new Set((parcelIds || []).filter(Boolean))).slice(0, 50);
+    if (ids.length === 0) return map;
+    try {
+      const { data, error } = await this.supabase
+        .getClient()
+        .from('ss_sms_logs')
+        .select('parcel_id, status, params, created_at')
+        .eq('station_id', stationId)
+        .eq('template_code', 'inbound_notice')
+        .in('parcel_id', ids)
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (error || !data) return map;
+      for (const row of data as any[]) {
+        const pid = row.parcel_id as string | null;
+        if (!pid || map.has(pid)) continue;
+        const params =
+          row.params && typeof row.params === 'object'
+            ? (row.params as Record<string, unknown>)
+            : {};
+        const channelResults = Array.isArray(params.channelResults)
+          ? (params.channelResults as Array<{ channel?: string; ok?: boolean }>)
+          : [];
+        const customerResults = channelResults.filter((c) =>
+          String(c.channel || '').startsWith('binding:'),
+        );
+        if (customerResults.length === 0) {
+          map.set(pid, 'unbound');
+        } else if (customerResults.some((c) => c.ok)) {
+          map.set(pid, 'pushed');
+        } else {
+          map.set(pid, 'push_failed');
+        }
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[Stats] 动态触达 enrichment 失败:', err);
+    }
+    return map;
   }
 
   private normalizeEvent(input: {
@@ -486,11 +556,26 @@ export class StatsService {
     pickupCode: string | null;
     shelfNumber: number | null;
     metadata: any;
+    customerReach?: 'pushed' | 'unbound' | 'push_failed' | null;
   }) {
-    const tone = this.eventTone(input.eventType);
-    const text =
+    let tone = this.eventTone(input.eventType);
+    let text =
       input.description ||
       this.defaultEventText(input.eventType, input.pickupCode, input.shelfNumber);
+    const reach = input.customerReach || null;
+    let customerReachLabel: string | null = null;
+    if (reach === 'pushed') {
+      customerReachLabel = '已私信';
+      text = `${text} · 已私信`;
+    } else if (reach === 'unbound') {
+      customerReachLabel = '未绑定';
+      text = `${text} · 未绑定`;
+      if (input.eventType === 'inbound') tone = 'warn';
+    } else if (reach === 'push_failed') {
+      customerReachLabel = '私信失败';
+      text = `${text} · 私信失败`;
+      if (input.eventType === 'inbound') tone = 'danger';
+    }
     return {
       id: input.id,
       eventType: input.eventType,
@@ -500,6 +585,8 @@ export class StatsService {
       trackingNumber: input.trackingNumber,
       pickupCode: input.pickupCode,
       shelfNumber: input.shelfNumber,
+      customerReach: reach,
+      customerReachLabel,
     };
   }
 

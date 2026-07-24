@@ -60,6 +60,8 @@ export interface DashboardData {
 /** 大屏实时动态事件 */
 export type DashboardEventTone = 'ok' | 'warn' | 'danger' | 'info';
 
+export type DashboardEventCustomerReach = 'pushed' | 'unbound' | 'push_failed';
+
 export interface DashboardEvent {
   id: string;
   eventType: string;
@@ -69,4 +71,7 @@ export interface DashboardEvent {
   trackingNumber?: string | null;
   pickupCode?: string | null;
   shelfNumber?: number | null;
+  /** 入库事件触达：已私信 / 未绑定 / 私信失败 */
+  customerReach?: DashboardEventCustomerReach | null;
+  customerReachLabel?: string | null;
 }

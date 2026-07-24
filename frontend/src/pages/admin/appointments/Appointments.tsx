@@ -8,6 +8,7 @@ import type {
   AppointmentStatus,
 } from '@/types/appointment';
 import PageHeader from '@/components/ui/PageHeader';
+import NotifyReachBar from '@/components/NotifyReachBar';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
@@ -235,6 +236,8 @@ const AppointmentsPage: React.FC = () => {
           </button>
         }
       />
+
+      <NotifyReachBar className="mb-3" context="appointments" />
 
       {lastNotify && (
         <div className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-violet-100 bg-violet-50 px-3 py-2.5">

@@ -18,6 +18,7 @@ import { notifyError, notifySuccess } from '@/utils/notification';
 import { buildBindGuideScript, buildShippingFaceScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 import PageHeader from '@/components/ui/PageHeader';
+import NotifyReachBar from '@/components/NotifyReachBar';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
@@ -101,6 +102,8 @@ const ShippingPage: React.FC = () => {
         title="寄件管理"
         description="寄件下单、上门取件、运费试算与地址簿；可复制进度话术、按手机看通知"
       />
+
+      <NotifyReachBar className="mb-3" context="shipping" />
 
       <div className="flex gap-2 border-b border-gray-200">
         <button

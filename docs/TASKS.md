@@ -1187,3 +1187,17 @@
 | M94.1 | P1 | 查到件结果两步文案 | query Home | done | 先记码再绑定 |
 | M94.2 | P1 | 手机端底部固定「去绑定」 | query Home | done | 下滑不丢入口 |
 | M94.3 | P2 | 未查到也引导绑定 | query Home | done | 有件微信提醒 |
+
+## M95 出库/预约/寄件触达条 + 出库绑引导（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M95.1 | P1 | 出库页今日触达条 | outbound | done | 取件高峰顺带引导 |
+| M95.2 | P1 | 出库成功复制绑定话术 | outbound | done | 下次自动收码 |
+| M95.3 | P2 | 预约/寄件页触达条 | appointments/shipping | done | 场景文案 |
+
+## M96 业务动态入库触达 enrichment（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M96.1 | P1 | 事件 API 附带 customerReach | stats events | done | pushed/unbound/push_failed |
+| M96.2 | P1 | 入库动态文案 · 已私信/未绑定 | stats normalize | done | 未绑定 tone=warn |
+| M96.3 | P2 | 工作台动态徽章与深链 | Dashboard | done | 未绑定跳按手机跟进 |

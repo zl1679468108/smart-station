@@ -536,6 +536,7 @@ const Dashboard: React.FC = () => {
                         {formatEventClock(ev.createdAt)}
                         {ev.trackingNumber ? ` · 运单 ${ev.trackingNumber}` : ''}
                         {ev.pickupCode ? ` · 取件码 ${ev.pickupCode}` : ''}
+                        {ev.customerReachLabel ? ` · ${ev.customerReachLabel}` : ''}
                       </p>
                     </div>
                     <span
@@ -786,6 +787,12 @@ function formatEventClock(iso: string) {
 }
 
 function eventDeepLink(ev: DashboardEvent) {
+  if (ev.customerReach === 'unbound') {
+    return '/admin/system?tab=notify&filter=unbound&view=byPhone';
+  }
+  if (ev.customerReach === 'push_failed') {
+    return '/admin/system?tab=notify&filter=push_failed';
+  }
   if (ev.eventType?.startsWith('exception')) return '/admin/exception';
   if (ev.eventType?.startsWith('overdue')) return '/admin/overdue?from=dashboard';
   if (ev.trackingNumber) {
@@ -798,6 +805,7 @@ function eventDeepLink(ev: DashboardEvent) {
 }
 
 function eventToneLabel(ev: DashboardEvent) {
+  if (ev.customerReachLabel) return ev.customerReachLabel;
   if (ev.eventType === 'inbound') return '入库';
   if (ev.eventType === 'outbound') return '出库';
   if (ev.eventType?.startsWith('overdue')) return '滞留';
