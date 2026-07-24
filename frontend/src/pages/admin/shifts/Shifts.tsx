@@ -6,7 +6,11 @@ import PageHeader from '@/components/ui/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
-import { notifyError } from '@/utils/notification';
+import { notifyError, notifySuccess } from '@/utils/notification';
+import * as statsService from '@/services/stats';
+import type { DashboardNotify } from '@/types/stats';
+import { buildBindGuideScript } from '@/utils/staffScripts';
+import { copyText } from '@/utils/stationVisit';
 
 type Tab = 'duty' | 'history' | 'performance';
 
@@ -28,8 +32,8 @@ function escapeCsv(v: string | number | null | undefined) {
   return `"${String(v ?? '').replace(/"/g, '""')}"`;
 }
 
-function shiftSnapshotCsv(s: ShiftItem) {
-  const rows = [
+function shiftSnapshotCsv(s: ShiftItem, notify?: DashboardNotify | null) {
+  const rows: Array<[string, string | number]> = [
     ['字段', '值'],
     ['班次ID', s.id],
     ['状态', s.status === 'open' ? '进行中' : '已交班'],
@@ -49,6 +53,16 @@ function shiftSnapshotCsv(s: ShiftItem) {
     ['开班备注', s.openingNote || ''],
     ['交班备注', s.closingNote || ''],
   ];
+  if (notify) {
+    rows.push(
+      ['今日到件通知', notify.inboundNotices],
+      ['今日已私信', notify.customerPushed],
+      ['今日未绑定', notify.customerUnbound],
+      ['今日私信失败', notify.customerPushFailed],
+      ['今日发送失败', notify.sendFailed],
+      ['当前已绑定客户', notify.activeBindings],
+    );
+  }
   return rows.map((r) => r.map(escapeCsv).join(',')).join('\n');
 }
 
@@ -78,6 +92,7 @@ const ShiftsPage: React.FC = () => {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('duty');
   const [current, setCurrent] = useState<ShiftItem | null>(null);
+  const [notifyToday, setNotifyToday] = useState<DashboardNotify | null>(null);
   const [loadingCurrent, setLoadingCurrent] = useState(true);
   const [openingNote, setOpeningNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -102,8 +117,12 @@ const ShiftsPage: React.FC = () => {
   const loadCurrent = useCallback(async () => {
     setLoadingCurrent(true);
     try {
-      const s = await shiftService.fetchCurrentShift();
+      const [s, dash] = await Promise.all([
+        shiftService.fetchCurrentShift(),
+        statsService.fetchDashboard().catch(() => null),
+      ]);
       setCurrent(s);
+      setNotifyToday(dash?.notify ?? null);
     } catch (e: any) {
       notifyError(e?.message || '加载当前班次失败');
       setCurrent(null);
@@ -246,7 +265,7 @@ const ShiftsPage: React.FC = () => {
                     onClick={() => {
                       downloadText(
                         `班次快照-${(current.operatorName || '店员').replace(/\s+/g, '')}-${String(current.startedAt || '').slice(0, 10)}.csv`,
-                        shiftSnapshotCsv(current),
+                        shiftSnapshotCsv(current, notifyToday),
                       );
                     }}
                     className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
@@ -296,6 +315,66 @@ const ShiftsPage: React.FC = () => {
                   >
                     去出库收款
                   </button>
+                </div>
+              )}
+              {notifyToday && (
+                <div
+                  className={`mt-3 rounded-md border px-3 py-2 ${
+                    notifyToday.customerUnbound > 0 || notifyToday.customerPushFailed > 0
+                      ? 'border-orange-100 bg-orange-50'
+                      : 'border-emerald-100 bg-emerald-50'
+                  }`}
+                >
+                  <p
+                    className={`text-xs ${
+                      notifyToday.customerUnbound > 0 || notifyToday.customerPushFailed > 0
+                        ? 'text-orange-900'
+                        : 'text-emerald-900'
+                    }`}
+                  >
+                    今日到件触达：已私信 {notifyToday.customerPushed}
+                    {notifyToday.inboundNotices > 0
+                      ? ` / ${notifyToday.inboundNotices}`
+                      : ''}
+                    ，未绑定 {notifyToday.customerUnbound}
+                    {notifyToday.customerPushFailed > 0
+                      ? `，私信失败 ${notifyToday.customerPushFailed}`
+                      : ''}
+                  </p>
+                  <p className="mt-1 text-[11px] text-gray-600">
+                    交班时请告知接班：未绑定客户需当面报码；可复制绑定话术。
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate('/admin/system?tab=notify&filter=unbound&view=byPhone')
+                      }
+                      className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+                    >
+                      按手机号跟进
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void (async () => {
+                          const ok = await copyText(buildBindGuideScript());
+                          if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                          else notifyError('复制失败');
+                        })();
+                      }}
+                      className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+                    >
+                      复制绑定话术
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/admin/system?tab=notify&filter=today')}
+                      className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
+                    >
+                      看通知记录
+                    </button>
+                  </div>
                 </div>
               )}
               <button
@@ -561,6 +640,42 @@ const ShiftsPage: React.FC = () => {
               </button>
             </div>
           )}
+          {notifyToday && (notifyToday.customerUnbound > 0 || notifyToday.customerPushFailed > 0) && (
+            <div className="rounded-md border border-orange-100 bg-orange-50 px-3 py-2 text-xs text-orange-900">
+              <p>
+                今日还有 <strong>{notifyToday.customerUnbound}</strong> 次到件未绑定
+                {notifyToday.customerPushFailed > 0
+                  ? `、${notifyToday.customerPushFailed} 次私信失败`
+                  : ''}
+                。接班后可按手机号跟进，或引导客户绑定后再补发。
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+                  onClick={() => {
+                    setCloseOpen(false);
+                    navigate('/admin/system?tab=notify&filter=unbound&view=byPhone');
+                  }}
+                >
+                  按手机号跟进
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+                  onClick={() => {
+                    void (async () => {
+                      const ok = await copyText(buildBindGuideScript());
+                      if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                      else notifyError('复制失败');
+                    })();
+                  }}
+                >
+                  复制绑定话术
+                </button>
+              </div>
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-xs text-gray-500">在库盘点件数（可选）</label>
             <input
@@ -580,7 +695,7 @@ const ShiftsPage: React.FC = () => {
               type="text"
               value={closingNote}
               onChange={(e) => setClosingNote(e.target.value.slice(0, 500))}
-              placeholder="如：货架已理齐 / 现金已交店长"
+              placeholder="如：货架已理齐 / 现金已交店长 / 未绑定客户已当面报码"
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
             />
           </div>
