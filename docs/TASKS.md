@@ -964,3 +964,13 @@
 | M67.1 | P1 | 收款/免收白话话术 | staffScripts | done | buildCollectReceipt/WaiveScript |
 | M67.2 | P1 | 出库成功展示并可复制话术 | outbound | done | 确认前预览 + 成功横幅 |
 | M67.3 | P2 | 工作台今日收款金额 | dashboard | done | cash-day 汇总进待办卡 |
+
+---
+
+## M68 批量入库结果清单导出（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M68.1 | P1 | 导出失败清单 CSV | inbound batch | done | 行号/运单/原因，便于改 CSV |
+| M68.2 | P2 | 导出成功清单 CSV | inbound batch | done | 运单/取件码/通知状态 |
+| M68.3 | P2 | 失败表展示运单号 | inbound batch | done | 错误列表可读性 |

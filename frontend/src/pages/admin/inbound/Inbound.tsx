@@ -1112,7 +1112,7 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     succeeded: number;
     failed: number;
     total: number;
-    errors: Array<{ index: number; error: string }>;
+    errors: Array<{ index: number; error: string; trackingNumber?: string }>;
     notifySummary?: BatchNotifySummary;
     successes?: Array<{
       id: string;
@@ -1140,7 +1140,7 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const parseCsvItems = (): {
     lines: string[];
     items: BatchItem[];
-    parseErrors: Array<{ index: number; error: string }>;
+    parseErrors: Array<{ index: number; error: string; trackingNumber?: string }>;
   } | null => {
     const lines = csvText.trim().split('\n').filter(Boolean);
     if (lines.length === 0) {
@@ -1148,20 +1148,24 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       return null;
     }
     const items: BatchItem[] = [];
-    const parseErrors: Array<{ index: number; error: string }> = [];
+    const parseErrors: Array<{ index: number; error: string; trackingNumber?: string }> = [];
     lines.forEach((line, i) => {
       const parts = line.split(',').map((s) => s.trim());
       if (parts.length < 3) {
-        parseErrors.push({ index: i, error: '字段不足，需至少 运单号,姓名,手机号' });
+        parseErrors.push({
+          index: i,
+          error: '字段不足，需至少 运单号,姓名,手机号',
+          trackingNumber: parts[0] || undefined,
+        });
         return;
       }
       const [trackingNumber, recipientName, recipientPhone, note] = parts;
       if (!trackingNumber || !recipientName || !recipientPhone) {
-        parseErrors.push({ index: i, error: '字段不能为空' });
+        parseErrors.push({ index: i, error: '字段不能为空', trackingNumber: trackingNumber || undefined });
         return;
       }
       if (!/^1\d{10}$/.test(recipientPhone)) {
-        parseErrors.push({ index: i, error: '手机号格式不正确' });
+        parseErrors.push({ index: i, error: '手机号格式不正确', trackingNumber });
         return;
       }
       items.push({
@@ -1185,14 +1189,16 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const buildReadyFromPrecheck = (
     items: BatchItem[],
     check: CheckTrackingBatchResult,
-    parseErrors: Array<{ index: number; error: string }>,
+    parseErrors: Array<{ index: number; error: string; trackingNumber?: string }>,
   ) => {
     const stockBlocked = new Set(
       (check.items || []).filter((x) => x.exists).map((x) => x.trackingNumber.toUpperCase()),
     );
     const readyFinal: BatchItem[] = [];
     const firstSeen = new Set<string>();
-    const skippedErrors: Array<{ index: number; error: string }> = [...parseErrors];
+    const skippedErrors: Array<{ index: number; error: string; trackingNumber?: string }> = [
+      ...parseErrors,
+    ];
     items.forEach((row, idx) => {
       const tn = row.trackingNumber.trim().toUpperCase();
       if (stockBlocked.has(tn)) {
@@ -1200,11 +1206,16 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         skippedErrors.push({
           index: idx,
           error: hit?.message || '运单已在库，已跳过',
+          trackingNumber: row.trackingNumber,
         });
         return;
       }
       if (firstSeen.has(tn)) {
-        skippedErrors.push({ index: idx, error: '本批 CSV 内运单号重复，已跳过' });
+        skippedErrors.push({
+          index: idx,
+          error: '本批 CSV 内运单号重复，已跳过',
+          trackingNumber: row.trackingNumber,
+        });
         return;
       }
       firstSeen.add(tn);
@@ -1265,6 +1276,35 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     downloadText(`批量预检结果_${stamp}.csv`, csv);
   };
 
+
+  const handleExportResultErrors = () => {
+    if (!result?.errors?.length) return;
+    const header = ['行号', '运单号', '错误原因'];
+    const rows = result.errors.map((e) => [
+      e.index + 1,
+      e.trackingNumber || '',
+      e.error,
+    ]);
+    const csv = [header, ...rows].map((r) => r.map((c) => escapeCsv(c)).join(',')).join('\n');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '');
+    downloadText(`批量入库失败_${stamp}.csv`, csv);
+  };
+
+  const handleExportResultSuccesses = () => {
+    if (!result?.successes?.length) return;
+    const header = ['运单号', '取件码', '通知状态', '是否已私信', '是否已绑定'];
+    const rows = result.successes.map((s) => [
+      s.trackingNumber,
+      s.pickupCode || '',
+      s.staffMessage || '',
+      s.customerPushed ? '是' : '否',
+      s.customerBound ? '是' : '否',
+    ]);
+    const csv = [header, ...rows].map((r) => r.map((c) => escapeCsv(c)).join(',')).join('\n');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '');
+    downloadText(`批量入库成功_${stamp}.csv`, csv);
+  };
+
   const handleSubmit = async () => {
     if (submitting || prechecking) return;
     setError('');
@@ -1319,7 +1359,8 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           ...skippedErrors,
           ...res.errors.map((e) => ({
             index: e.index,
-            error: `${readyFinal[e.index]?.trackingNumber || ''} ${e.error}`.trim(),
+            trackingNumber: readyFinal[e.index]?.trackingNumber,
+            error: e.error,
           })),
         ],
         notifySummary: res.notifySummary,
@@ -1442,10 +1483,32 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       {result && (
         <div className="rounded-lg border border-gray-200 bg-white p-5">
           <h3 className="mb-3 text-sm font-medium text-gray-700">导入结果</h3>
-          <div className="mb-3 flex gap-4 text-sm">
-            <span className="text-gray-600">总计：{result.total}</span>
-            <span className="text-success">成功：{result.succeeded}</span>
-            <span className="text-danger">失败：{result.failed}</span>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-4 text-sm">
+              <span className="text-gray-600">总计：{result.total}</span>
+              <span className="text-success">成功：{result.succeeded}</span>
+              <span className="text-danger">失败：{result.failed}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {result.successes && result.successes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleExportResultSuccesses}
+                  className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  导出成功清单
+                </button>
+              )}
+              {result.errors.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleExportResultErrors}
+                  className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-medium text-rose-800 hover:bg-rose-100"
+                >
+                  导出失败清单
+                </button>
+              )}
+            </div>
           </div>
           {result.notifySummary && result.succeeded > 0 && (
             <div
@@ -1666,6 +1729,7 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                 <thead className="bg-gray-50 text-gray-500">
                   <tr>
                     <th className="px-3 py-2 text-left font-medium">行号</th>
+                    <th className="px-3 py-2 text-left font-medium">运单号</th>
                     <th className="px-3 py-2 text-left font-medium">错误</th>
                   </tr>
                 </thead>
@@ -1673,6 +1737,9 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                   {result.errors.map((e, i) => (
                     <tr key={i}>
                       <td className="px-3 py-1.5 text-gray-600">{e.index + 1}</td>
+                      <td className="px-3 py-1.5 font-mono text-gray-700">
+                        {e.trackingNumber || '-'}
+                      </td>
                       <td className="px-3 py-1.5 text-danger">{e.error}</td>
                     </tr>
                   ))}
