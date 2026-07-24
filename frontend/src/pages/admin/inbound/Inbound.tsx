@@ -688,6 +688,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const [sessionStats, setSessionStats] = useState({
     success: 0,
     unbound: 0,
+    pushFailed: 0,
     unpaid: 0,
   });
   /**
@@ -816,6 +817,11 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         unbound:
           prev.unbound +
           (res.notify?.enabled && !res.notify?.customerBound ? 1 : 0),
+        pushFailed:
+          prev.pushFailed +
+          (res.notify?.enabled && res.notify?.customerBound && !res.notify?.customerPushed
+            ? 1
+            : 0),
         unpaid:
           prev.unpaid +
           (Number(res.collectDueAmount || 0) > 0 &&
@@ -828,6 +834,8 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       maybeAutoPrintInboundResult(res, stationName);
       if (res.notify?.enabled && !res.notify?.customerBound) {
         notifySuccess('入库成功 · 客户未绑定，请当面报取件码');
+      } else if (res.notify?.enabled && res.notify?.customerBound && !res.notify?.customerPushed) {
+        notifySuccess('入库成功 · 私信失败，可点补发或本会话去重试');
       } else if (res.notify?.customerPushed) {
         notifySuccess('入库成功 · 已微信私信取件码');
       } else {
@@ -1087,6 +1095,11 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                   未绑定 <strong>{sessionStats.unbound}</strong>
                 </span>
               )}
+              {sessionStats.pushFailed > 0 && (
+                <span className="text-amber-700">
+                  私信失败 <strong>{sessionStats.pushFailed}</strong>
+                </span>
+              )}
               {sessionStats.unpaid > 0 && (
                 <span className="text-rose-700">
                   待收款 <strong>{sessionStats.unpaid}</strong>
@@ -1154,10 +1167,21 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                   </button>
                 </>
               )}
+              {sessionStats.pushFailed > 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate('/admin/system?tab=notify&filter=push_failed&days=1')
+                  }
+                  className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100"
+                >
+                  去补发私信失败（{sessionStats.pushFailed}）
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
-                  setSessionStats({ success: 0, unbound: 0, unpaid: 0 });
+                  setSessionStats({ success: 0, unbound: 0, pushFailed: 0, unpaid: 0 });
                   setRecent([]);
                   setResult(null);
                 }}
@@ -1169,9 +1193,11 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           </div>
           <p className="mt-1 text-[11px] text-gray-500">
             只统计当前页面未刷新期间的入库，方便连续扫码时心里有数
-            {sessionStats.unbound > 0
-              ? ' · 有未绑定请当面报码，或复制清单逐个跟进'
-              : ''}
+            {sessionStats.pushFailed > 0
+              ? ' · 有私信失败请点「去补发私信失败」一键重试'
+              : sessionStats.unbound > 0
+                ? ' · 有未绑定请当面报码，或复制清单逐个跟进'
+                : ''}
           </p>
         </div>
       )}
@@ -1397,6 +1423,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const [sessionStats, setSessionStats] = useState({
     success: 0,
     unbound: 0,
+    pushFailed: 0,
     unpaid: 0,
   });
 
@@ -1458,6 +1485,11 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         unbound:
           prev.unbound +
           (res.notify?.enabled && !res.notify?.customerBound ? 1 : 0),
+        pushFailed:
+          prev.pushFailed +
+          (res.notify?.enabled && res.notify?.customerBound && !res.notify?.customerPushed
+            ? 1
+            : 0),
         unpaid:
           prev.unpaid +
           (Number(res.collectDueAmount || 0) > 0 &&
@@ -1470,6 +1502,8 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       maybeAutoPrintInboundResult(res, stationName);
       if (res.notify?.enabled && !res.notify?.customerBound) {
         notifySuccess('入库成功 · 客户未绑定，请当面报取件码');
+      } else if (res.notify?.enabled && res.notify?.customerBound && !res.notify?.customerPushed) {
+        notifySuccess('入库成功 · 私信失败，可点补发或本会话去重试');
       } else if (res.notify?.customerPushed) {
         notifySuccess('入库成功 · 已微信私信取件码');
       } else {
@@ -1704,6 +1738,11 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                   未绑定 <strong>{sessionStats.unbound}</strong>
                 </span>
               )}
+              {sessionStats.pushFailed > 0 && (
+                <span className="text-amber-700">
+                  私信失败 <strong>{sessionStats.pushFailed}</strong>
+                </span>
+              )}
               {sessionStats.unpaid > 0 && (
                 <span className="text-rose-700">
                   待收款 <strong>{sessionStats.unpaid}</strong>
@@ -1737,10 +1776,21 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                   </button>
                 </>
               )}
+              {sessionStats.pushFailed > 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate('/admin/system?tab=notify&filter=push_failed&days=1')
+                  }
+                  className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100"
+                >
+                  去补发私信失败（{sessionStats.pushFailed}）
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
-                  setSessionStats({ success: 0, unbound: 0, unpaid: 0 });
+                  setSessionStats({ success: 0, unbound: 0, pushFailed: 0, unpaid: 0 });
                   setResult(null);
                 }}
                 className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
@@ -1751,7 +1801,11 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           </div>
           <p className="mt-1 text-[11px] text-gray-500">
             只统计当前页面未刷新期间的入库
-            {sessionStats.unbound > 0 ? ' · 未绑定请当面报码并引导绑定' : ''}
+            {sessionStats.pushFailed > 0
+              ? ' · 有私信失败请点「去补发私信失败」一键重试'
+              : sessionStats.unbound > 0
+                ? ' · 未绑定请当面报码并引导绑定'
+                : ''}
           </p>
         </div>
       )}

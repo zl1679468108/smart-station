@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 试用冒烟：环境预检 + 后端健康 + 公开查件引导接口
+# 试用冒烟：环境预检 + 后端健康 + 公开查件/通知引导 + 前端可达性
 # 用法：
 #   bash scripts/smoke-trial.sh
 #   API_BASE=http://127.0.0.1:3030 STATION_ID=xxx bash scripts/smoke-trial.sh
@@ -11,7 +11,7 @@ ok() { echo "  ✓ $1"; }
 warn() { echo "  ! $1"; }
 bad() { echo "  ✗ $1"; FAIL=1; }
 
-echo "[smoke] 1/3 环境预检（preflight）"
+echo "[smoke] 1/4 环境预检（preflight）"
 if bash "$ROOT/scripts/preflight.sh"; then
   ok "preflight 通过"
 else
@@ -30,6 +30,18 @@ fi
 API_BASE="${API_BASE:-http://127.0.0.1:3030}"
 API_BASE="${API_BASE%/}"
 
+FE_BASE="${FE_BASE:-}"
+if [ -z "$FE_BASE" ]; then
+  for f in "$ROOT/frontend/.env.development" "$ROOT/frontend/.env.production" "$ROOT/frontend/.env"; do
+    if [ -f "$f" ] && grep -E '^VITE_DEV_SERVER_URL=' "$f" >/dev/null 2>&1; then
+      FE_BASE="$(grep -E '^VITE_DEV_SERVER_URL=' "$f" | head -1 | cut -d= -f2- | tr -d '\r' | sed 's/^["'\'']//;s/["'\'']$//')"
+      break
+    fi
+  done
+fi
+FE_BASE="${FE_BASE:-http://127.0.0.1:3031}"
+FE_BASE="${FE_BASE%/}"
+
 STATION_ID="${STATION_ID:-}"
 if [ -z "$STATION_ID" ]; then
   for f in "$ROOT/frontend/.env.development" "$ROOT/frontend/.env.production" "$ROOT/frontend/.env"; do
@@ -41,7 +53,7 @@ if [ -z "$STATION_ID" ]; then
 fi
 
 echo
-echo "[smoke] 2/3 后端健康检查  $API_BASE/api/health"
+echo "[smoke] 2/4 后端健康检查  $API_BASE/api/health"
 if ! command -v curl >/dev/null 2>&1; then
   bad "未安装 curl，无法探测 HTTP"
 else
@@ -62,7 +74,7 @@ else
 fi
 
 echo
-echo "[smoke] 3/3 查件公开引导  /api/kiosk/notify-guide"
+echo "[smoke] 3/4 查件公开引导  /api/kiosk/notify-guide"
 QS=""
 if [ -n "$STATION_ID" ]; then
   QS="?stationId=$(python3 -c 'import urllib.parse,os; print(urllib.parse.quote(os.environ["S"]))' S="$STATION_ID" 2>/dev/null || echo "$STATION_ID")"
@@ -81,8 +93,59 @@ if command -v curl >/dev/null 2>&1; then
     echo "    $BODY"
   elif echo "$BODY" | grep -E 'bindEnabled|title|content|wxpusher|success' >/dev/null 2>&1; then
     ok "notify-guide 可访问（绑定公示接口正常）"
+    # 字段级抽检（不强制全有，缺字段 warn）
+    for key in bindEnabled title content; do
+      if echo "$BODY" | grep -E "\"$key\"" >/dev/null 2>&1; then
+        ok "notify-guide 含字段 $key"
+      else
+        warn "notify-guide 未直接看到字段 $key（可能被包装层改名，人工再看一次）"
+      fi
+    done
+    if echo "$BODY" | grep -E 'wxpusher|pushplus|扫' >/dev/null 2>&1; then
+      ok "notify-guide 含客户绑定通道信息"
+    else
+      warn "notify-guide 未见通道关键字（确认驿站已打开到件通知/绑定）"
+    fi
   else
     bad "notify-guide 响应异常：$BODY"
+  fi
+
+  # 公开限流接口是否挂载（不提交验证码，只看 4xx/包装错误是否可达）
+  echo
+  echo "  · 附加：查件验证码入口可达性 /api/kiosk/send-code"
+  set +e
+  CODE_BODY="$(curl -sS -m 8 -X POST "$API_BASE/api/kiosk/send-code" \
+    -H 'Content-Type: application/json' \
+    -d '{}' 2>&1)"
+  CODE_RC=$?
+  set -e
+  if [ "$CODE_RC" -ne 0 ]; then
+    warn "send-code 不可达（可忽略若后端未起）"
+  elif echo "$CODE_BODY" | grep -E 'success|message|phone|手机|校验|Bad|400|401|429' >/dev/null 2>&1; then
+    ok "send-code 路由可达（空 body 被校验拦截属正常）"
+  else
+    warn "send-code 响应未识别：$CODE_BODY"
+  fi
+fi
+
+echo
+echo "[smoke] 4/4 前端可达性  $FE_BASE"
+if command -v curl >/dev/null 2>&1; then
+  set +e
+  FE_BODY="$(curl -sS -m 8 -o /tmp/ss-smoke-fe.html -w '%{http_code}' "$FE_BASE/" 2>&1)"
+  FE_RC=$?
+  set -e
+  if [ "$FE_RC" -ne 0 ]; then
+    warn "前端 $FE_BASE 未访问到（本地可先 npm run dev；不阻断后端冒烟）"
+  elif echo "$FE_BODY" | grep -E '200|304' >/dev/null 2>&1; then
+    ok "前端 HTTP $FE_BODY"
+    if grep -E 'smart|root|vite|快递|驿站' /tmp/ss-smoke-fe.html >/dev/null 2>&1; then
+      ok "前端 HTML 内容可读"
+    else
+      warn "前端返回了页面，但未匹配到预期关键字"
+    fi
+  else
+    warn "前端 HTTP 状态异常：$FE_BODY"
   fi
 fi
 
@@ -91,5 +154,5 @@ if [ "$FAIL" -ne 0 ]; then
   echo "[smoke] 未通过。请对照 docs/TRIAL-CHECKLIST.md 检查环境与服务。"
   exit 1
 fi
-echo "[smoke] 通过。建议继续人工点验：入库 → 查件绑定 → 出库 → 交班。"
+echo "[smoke] 通过。建议继续人工点验：入库 → 私信失败一键补发 → 查件绑定 → 出库 → 交班。"
 echo "        清单：docs/TRIAL-CHECKLIST.md"

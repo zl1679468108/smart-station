@@ -140,15 +140,22 @@ const NotifyTab: React.FC = () => {
         logOpts.templateCode = 'inbound_notice';
       } else if (logFilter === 'today') {
         logOpts.days = 1;
-      } else if (logFilter === 'inbound' || logFilter === 'overdue' || logFilter === 'failed') {
+      } else if (logFilter === 'inbound' || logFilter === 'overdue') {
         // 其它筛选默认带时间窗，避免扫全表
+        if (!phone) logOpts.days = rangeDays;
+      } else if (logFilter === 'failed') {
+        // 发送失败默认只看今日（运营补发场景）；?days= 或本地 rangeDays 可放宽
         if (!phone) logOpts.days = rangeDays;
       } else if (!phone) {
         logOpts.days = rangeDays;
       }
 
-      // 发送失败可叠加今日（兼容旧 deep link）
+      // 兼容旧 deep link：filter=failed&today=1 强制今日
       if (logFilter === 'failed' && searchParams.get('today') === '1') {
+        logOpts.days = 1;
+      }
+      // 私信失败深链默认今日窗（未显式带 days 时）
+      if (logFilter === 'push_failed' && !searchParams.get('days')) {
         logOpts.days = 1;
       }
 
@@ -166,6 +173,9 @@ const NotifyTab: React.FC = () => {
         summaryOpts.templateCode = 'inbound_notice';
       }
       if (logFilter === 'failed' && searchParams.get('today') === '1') {
+        summaryOpts.days = 1;
+      }
+      if (logFilter === 'push_failed' && !searchParams.get('days')) {
         summaryOpts.days = 1;
       }
 
@@ -234,6 +244,12 @@ const NotifyTab: React.FC = () => {
     if (f) next.set('filter', f);
     else next.delete('filter');
     if (f !== 'failed') next.delete('today');
+    // 私信失败/发送失败：默认压到今日，方便当场补发
+    if (f === 'push_failed' || f === 'failed') {
+      setRangeDays(1);
+      next.set('days', '1');
+      if (f === 'failed') next.set('today', '1');
+    }
     setSearchParams(next, { replace: true });
   };
 
@@ -306,7 +322,9 @@ const NotifyTab: React.FC = () => {
   const onBatchResend = async () => {
     if (batchResending || resendingId || resendableOnPage.length === 0) return;
     const ok = window.confirm(
-      `确认对本页 ${resendableOnPage.length} 条「未私信/私信失败」记录重新发送？\n\n已绑定的会再推取件码；仍未绑定的只会走群/管理员旁路。`,
+      logFilter === 'push_failed'
+        ? `确认对本页 ${resendableOnPage.length} 条「私信失败」记录重新发送？\n\n会再次走自动短重试；成功后客户微信会收到取件码。`
+        : `确认对本页 ${resendableOnPage.length} 条「未私信/私信失败」记录重新发送？\n\n已绑定的会再推取件码；仍未绑定的只会走群/管理员旁路。`,
     );
     if (!ok) return;
     setBatchResending(true);
@@ -690,7 +708,8 @@ const NotifyTab: React.FC = () => {
           当前为「今日到件」触达筛选：
           {logFilter === 'unbound' && '未绑定微信的客户，取件码未私信。'}
           {logFilter === 'pushed' && '客户微信私信已成功。'}
-          {logFilter === 'push_failed' && '客户已绑定但私信失败，可重试。'}
+          {logFilter === 'push_failed' &&
+            '客户已绑定但私信失败：优先一键补发；仍失败请核对绑定或当面报码。'}
         </p>
       )}
 
@@ -731,7 +750,11 @@ const NotifyTab: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-orange-100 bg-orange-50/70 px-3 py-2">
           <p className="text-xs text-orange-900">
             {resendableOnPage.length > 0
-              ? `本页有 ${resendableOnPage.length} 条可补发（未私信/私信失败）`
+              ? logFilter === 'push_failed'
+                ? `今日/本页有 ${resendableOnPage.length} 条私信失败，可一键重试（自动短重试后再发）`
+                : logFilter === 'failed'
+                  ? `本页有 ${resendableOnPage.length} 条发送失败，可一键重发`
+                  : `本页有 ${resendableOnPage.length} 条可补发（未私信/私信失败）`
               : '未私信客户请当面报码，或复制绑定引导话术'}
           </p>
           <div className="flex flex-wrap gap-2">
@@ -764,7 +787,13 @@ const NotifyTab: React.FC = () => {
                 disabled={batchResending || Boolean(resendingId)}
                 className="min-h-[36px] rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primaryHover disabled:opacity-60"
               >
-                {batchResending ? '补发中…' : '一键补发未私信'}
+                {batchResending
+                  ? '补发中…'
+                  : logFilter === 'push_failed'
+                    ? '一键补发私信失败'
+                    : logFilter === 'failed'
+                      ? '一键重发失败记录'
+                      : '一键补发未私信'}
               </button>
             )}
           </div>

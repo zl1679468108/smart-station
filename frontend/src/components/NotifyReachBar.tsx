@@ -146,7 +146,9 @@ const NotifyReachBar: React.FC<{
         {notify.customerPushFailed > 0 && (
           <button
             type="button"
-            onClick={() => navigate('/admin/system?tab=notify&filter=push_failed')}
+            onClick={() =>
+              navigate('/admin/system?tab=notify&filter=push_failed&days=1')
+            }
             className="rounded-full bg-white px-2.5 py-1 font-medium text-amber-800 ring-1 ring-amber-100 hover:bg-amber-50"
           >
             私信失败 {notify.customerPushFailed}
@@ -176,11 +178,37 @@ const NotifyReachBar: React.FC<{
         </span>
       </div>
       {needFollow && (
-        <p className="mt-2 text-[11px] text-orange-900/90">
-          {notify.customerUnbound > 0
-            ? '有未绑定：当面报码，或复制绑定话术让客户查件绑定后再补发。'
-            : '有私信/发送失败：到通知记录点补发，或当面告知取件码。'}
-        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <p className="text-[11px] text-orange-900/90">
+            {notify.customerPushFailed > 0
+              ? '有私信失败：客户已绑定但没收到码，优先一键补发。'
+              : notify.customerUnbound > 0
+                ? '有未绑定：当面报码，或复制绑定话术让客户查件绑定后再补发。'
+                : '有发送失败：到通知记录点补发，或当面告知取件码。'}
+          </p>
+          {notify.customerPushFailed > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                navigate('/admin/system?tab=notify&filter=push_failed&days=1')
+              }
+              className="rounded-md bg-amber-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-amber-700"
+            >
+              去补发失败私信
+            </button>
+          )}
+          {notify.sendFailed > 0 && notify.customerPushFailed <= 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                navigate('/admin/system?tab=notify&filter=failed&today=1&days=1')
+              }
+              className="rounded-md bg-red-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-red-700"
+            >
+              去重发失败通知
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

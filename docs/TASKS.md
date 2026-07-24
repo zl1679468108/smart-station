@@ -1402,3 +1402,11 @@
 | M126.2 | P0 | 店员回执/通道中文标注重试 | notify+admin | done | 重试后成功 / 试了N次 |
 | M126.3 | P1 | 试用清单补充重试说明 | TRIAL-CHECKLIST | done | |
 
+## M127 私信失败运营闭环强化（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M127.1 | P0 | 触达条「去补发失败私信」深链今日 | NotifyReachBar | done | days=1 |
+| M127.2 | P0 | 通知页私信失败一键补发文案/默认今日 | NotifyTab | done | |
+| M127.3 | P0 | 入库本会话统计私信失败+跳转补发 | inbound | done | scan/manual |
+| M127.4 | P1 | smoke-trial 扩展 notify-guide/send-code/前端 | scripts | done | |
+
