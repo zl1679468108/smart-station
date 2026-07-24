@@ -506,10 +506,52 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
    */
   const [keepRecipient, setKeepRecipient] = useState(true);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const nameRef = React.useRef<HTMLInputElement>(null);
+  const phoneRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  /** 扫码枪回车 / 键盘 Enter：有收件人则直接入库，否则跳到缺项 */
+  const focusNextAfterTracking = () => {
+    if (!recipientName.trim()) {
+      nameRef.current?.focus();
+      nameRef.current?.select();
+      return;
+    }
+    if (!recipientPhone.trim()) {
+      phoneRef.current?.focus();
+      phoneRef.current?.select();
+      return;
+    }
+    // 已齐：保持在运单框，提示可点确认；连续同收件人场景由 Enter 提交
+  };
+
+  const onTrackingKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const tn = trackingNumber.trim();
+    if (!tn) return;
+    // 扫码枪常带尾部空白，统一 trim
+    if (tn !== trackingNumber) setTrackingNumber(tn);
+    if (dup || checkingDup) return;
+    if (
+      keepRecipient &&
+      recipientName.trim() &&
+      recipientPhone.trim() &&
+      !submitting
+    ) {
+      // 连续同收件人：扫完运单直接入库
+      const form = e.currentTarget.form;
+      if (form) {
+        if (typeof form.requestSubmit === 'function') form.requestSubmit();
+        else form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+      }
+      return;
+    }
+    focusNextAfterTracking();
+  };
 
   // 面单 OCR 识别回填：仅覆盖识别到的字段，未识别的保留用户已填内容
   const handleOcrResult = (res: WaybillOcrResult) => {
@@ -517,6 +559,26 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     if (res.trackingNumber) setTrackingNumber(res.trackingNumber);
     if (res.recipientName) setRecipientName(res.recipientName);
     if (res.recipientPhone) setRecipientPhone(res.recipientPhone);
+    // 识别后光标落到第一个缺项，方便补全
+    setTimeout(() => {
+      const tn = res.trackingNumber || trackingNumber;
+      const name = res.recipientName || recipientName;
+      const phone = res.recipientPhone || recipientPhone;
+      if (!tn) {
+        inputRef.current?.focus();
+        return;
+      }
+      if (!name) {
+        nameRef.current?.focus();
+        return;
+      }
+      if (!phone) {
+        phoneRef.current?.focus();
+        return;
+      }
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 50);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -600,12 +662,19 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             type="text"
             value={trackingNumber}
             onChange={(e) => setTrackingNumber(e.target.value)}
-            placeholder="扫描或输入运单号"
+            onKeyDown={onTrackingKeyDown}
+            placeholder="扫描或输入运单号，回车继续"
+            autoComplete="off"
             className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-primary ${
               dup ? 'border-amber-400 bg-amber-50/40' : 'border-gray-300'
             }`}
             disabled={submitting}
           />
+          {keepRecipient && recipientName && recipientPhone && (
+            <p className="mt-1 text-[11px] text-emerald-700">
+              连续入库：扫完运单按回车即可直接入库（{recipientName} · {maskPhone(recipientPhone)}）
+            </p>
+          )}
           {checkingDup && (
             <p className="mt-1 text-[11px] text-gray-400">正在检查是否已入库…</p>
           )}
@@ -619,22 +688,46 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           <div>
             <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>收件人姓名</label>
             <input
+              ref={nameRef}
               type="text"
               value={recipientName}
               onChange={(e) => setRecipientName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  phoneRef.current?.focus();
+                }
+              }}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
               disabled={submitting}
+              autoComplete="off"
             />
           </div>
           <div>
             <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>收件人手机号</label>
             <input
+              ref={phoneRef}
               type="tel"
               value={recipientPhone}
               onChange={(e) => setRecipientPhone(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (trackingNumber.trim() && recipientName.trim() && recipientPhone.trim()) {
+                    const form = e.currentTarget.form;
+                    if (form) {
+                      if (typeof form.requestSubmit === 'function') form.requestSubmit();
+                      else form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+                    }
+                  } else {
+                    inputRef.current?.focus();
+                  }
+                }
+              }}
               placeholder="11 位手机号"
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
               disabled={submitting}
+              autoComplete="off"
             />
             <NotifyBindHint phone={recipientPhone} />
           </div>
@@ -761,7 +854,15 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         <div className="rounded-lg border border-gray-200 bg-white p-4">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-medium text-gray-700">本会话最近入库</h3>
-            <span className="text-[11px] text-gray-400">最多显示 5 条</span>
+            <span className="text-[11px] text-gray-400">
+              最多 5 条
+              {recent.filter((r) => r.notify?.enabled && !r.notify?.customerPushed).length > 0 && (
+                <span className="ml-1 text-orange-600">
+                  · 未私信{' '}
+                  {recent.filter((r) => r.notify?.enabled && !r.notify?.customerPushed).length}
+                </span>
+              )}
+            </span>
           </div>
           <ul className="divide-y divide-gray-100">
             {recent.map((r) => {

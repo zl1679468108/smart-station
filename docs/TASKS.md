@@ -1005,3 +1005,14 @@
 | M71.2 | P1 | 识别结果缺字段提示补全 | WaybillOcrUploader | done | 已回填/还缺字段 |
 | M71.3 | P2 | 后端 OCR 错误白话 | backend/ocr | done | 超时/鉴权/图片 |
 | M71.4 | P2 | 工作台今日私信率 | dashboard | done | pushed/inboundNotices |
+
+---
+
+## M72 通知触达漏斗 + 扫码连续入库回车（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M72.1 | P1 | 通知记录页今日触达漏斗 | NotifyTab | done | 与工作台同源，可点选筛选 |
+| M72.2 | P1 | 扫码入库回车连续作业 | inbound scan | done | 同收件人扫完回车即入库 |
+| M72.3 | P2 | OCR 后光标落到缺项 | inbound scan | done | 补全姓名/手机 |
+| M72.4 | P2 | 本会话未私信计数 | inbound recent | done | 最近入库提示 |

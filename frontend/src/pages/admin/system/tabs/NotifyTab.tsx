@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import * as adminService from '@/services/admin';
+import * as statsService from '@/services/stats';
+import type { DashboardNotify } from '@/types/stats';
 import type { NotifyBindingItem, NotifyLogItem, NotifyPhoneSummaryItem } from '@/types/admin';
 import { formatBeijingTimestamp } from '@/utils/date';
 import EmptyState from '@/components/ui/EmptyState';
@@ -56,6 +58,7 @@ const NotifyTab: React.FC = () => {
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [batchResending, setBatchResending] = useState(false);
   const [resendTip, setResendTip] = useState('');
+  const [reachToday, setReachToday] = useState<DashboardNotify | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const initialFilter = searchParams.get('filter') || '';
   const [logFilter, setLogFilter] = useState<LogFilter>(
@@ -113,11 +116,13 @@ const NotifyTab: React.FC = () => {
         summaryOpts.todayOnly = true;
       }
 
-      const [b, l, s] = await Promise.all([
+      const [b, l, s, dash] = await Promise.all([
         adminService.listNotifyBindings({ limit: 80, phone }),
         adminService.listNotifyLogs(logOpts),
         adminService.listNotifyLogPhoneSummary(summaryOpts),
+        statsService.fetchDashboard().catch(() => null),
       ]);
+      setReachToday(dash?.notify ?? null);
       setBindings(b.items || []);
       setBindingTotal(b.total ?? b.items?.length ?? 0);
       setLogs(l.items || []);
@@ -343,6 +348,107 @@ const NotifyTab: React.FC = () => {
           </button>
         </div>
       </div>
+
+
+      {/* 今日触达漏斗（与工作台同源，便于运营复盘） */}
+      {reachToday && (
+        <div className="rounded-lg border border-orange-100 bg-orange-50/70 px-3 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium text-gray-800">今日到件触达漏斗</p>
+              <p className="mt-0.5 text-[11px] text-gray-500">
+                到件通知 → 微信私信是否成功（点卡片可筛选记录）
+              </p>
+            </div>
+            <div className="text-right text-xs text-gray-600">
+              <div>已绑定 {reachToday.activeBindings} 人</div>
+              {reachToday.inboundNotices > 0 && (
+                <div className="mt-0.5 font-medium text-gray-800">
+                  私信率{' '}
+                  {Math.round(
+                    (reachToday.customerPushed / reachToday.inboundNotices) * 100,
+                  )}
+                  %
+                </div>
+              )}
+            </div>
+          </div>
+          {reachToday.inboundNotices > 0 && (
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/80">
+              <div
+                className="h-full rounded-full bg-emerald-500"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    Math.round(
+                      (reachToday.customerPushed / reachToday.inboundNotices) * 100,
+                    ),
+                  )}%`,
+                }}
+              />
+            </div>
+          )}
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <button
+              type="button"
+              onClick={() => {
+                setSub('logs');
+                applyLogFilter('inbound');
+              }}
+              className="rounded-md bg-white px-2.5 py-2 text-left hover:bg-orange-50/80"
+            >
+              <div className="text-[11px] text-gray-500">到件通知</div>
+              <div className="text-base font-semibold text-gray-800">
+                {reachToday.inboundNotices}
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSub('logs');
+                applyLogFilter('pushed');
+              }}
+              className="rounded-md bg-white px-2.5 py-2 text-left hover:bg-emerald-50/80"
+            >
+              <div className="text-[11px] text-emerald-700">已私信</div>
+              <div className="text-base font-semibold text-emerald-800">
+                {reachToday.customerPushed}
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSub('logs');
+                applyLogFilter('unbound');
+              }}
+              className="rounded-md bg-white px-2.5 py-2 text-left hover:bg-orange-50/80"
+            >
+              <div className="text-[11px] text-orange-700">未绑定</div>
+              <div className="text-base font-semibold text-orange-800">
+                {reachToday.customerUnbound}
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSub('logs');
+                applyLogFilter('push_failed');
+              }}
+              className="rounded-md bg-white px-2.5 py-2 text-left hover:bg-amber-50/80"
+            >
+              <div className="text-[11px] text-amber-700">私信失败</div>
+              <div className="text-base font-semibold text-amber-800">
+                {reachToday.customerPushFailed}
+              </div>
+            </button>
+          </div>
+          {(reachToday.customerUnbound > 0 || reachToday.customerPushFailed > 0) && (
+            <p className="mt-2 text-[11px] text-orange-900/80">
+              未私信：当面报码或复制绑定话术；客户绑定后可在下方记录一键补发。
+            </p>
+          )}
+        </div>
+      )}
 
       {/* 手机号查询 */}
       <form onSubmit={onSearch} className="flex flex-wrap items-center gap-2">
