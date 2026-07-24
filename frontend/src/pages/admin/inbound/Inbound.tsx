@@ -150,6 +150,36 @@ function maskPhone(phone: string): string {
   return phone || '';
 }
 
+/** 入库表单：到付/货款合计预览（>0 时醒目） */
+function CollectDueHint({ freight, cod }: { freight: string; cod: string }) {
+  const f = freight.trim() === '' ? 0 : Number(freight);
+  const c = cod.trim() === '' ? 0 : Number(cod);
+  const invalid =
+    (freight.trim() !== '' && (!Number.isFinite(f) || f < 0)) ||
+    (cod.trim() !== '' && (!Number.isFinite(c) || c < 0));
+  if (invalid) {
+    return (
+      <p className="text-[11px] text-danger">金额请填 ≥0 的数字，普通件可留空。</p>
+    );
+  }
+  const due = Math.round(((Number.isFinite(f) ? f : 0) + (Number.isFinite(c) ? c : 0)) * 100) / 100;
+  if (due <= 0) {
+    return (
+      <p className="text-[11px] text-gray-400">有金额时，取件出库须先确认收款；普通件可不填。</p>
+    );
+  }
+  return (
+    <div className="rounded-md border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-900">
+      <span className="font-semibold">预计待收款 ¥{due.toFixed(2)}</span>
+      <span className="ml-1 text-[11px] text-rose-800/90">
+        （入库后标记待收，客户取件时当面收妥）
+      </span>
+    </div>
+  );
+}
+
+
+
 // 入库管理页：扫码入库（主）/ 手动录入 / 批量导入（入口）
 const Inbound: React.FC = () => {
   const navigate = useNavigate();
@@ -506,6 +536,15 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       setError(dupMessage || '该运单已在库，不可重复入库');
       return;
     }
+    const freightNum = freightCollectAmount.trim() ? Number(freightCollectAmount) : undefined;
+    const codNum = codAmount.trim() ? Number(codAmount) : undefined;
+    if (
+      (freightNum !== undefined && (!Number.isFinite(freightNum) || freightNum < 0)) ||
+      (codNum !== undefined && (!Number.isFinite(codNum) || codNum < 0))
+    ) {
+      setError('到付/货款请填写 ≥0 的有效金额');
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await inboundService.inbound({
@@ -514,10 +553,8 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         recipientPhone: recipientPhone.trim(),
         size,
         note: note.trim() || undefined,
-        freightCollectAmount: freightCollectAmount.trim()
-          ? Number(freightCollectAmount)
-          : undefined,
-        codAmount: codAmount.trim() ? Number(codAmount) : undefined,
+        freightCollectAmount: freightNum,
+        codAmount: codNum,
         inboundMethod: 'scan',
       });
       setResult(res);
@@ -686,7 +723,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             />
           </div>
         </div>
-        <p className="text-[11px] text-gray-400">有金额时，取件出库须先确认收款；普通件可不填。</p>
+        <CollectDueHint freight={freightCollectAmount} cod={codAmount} />
         <div>
           <label className="mb-1 block text-sm text-gray-600">备注（可选）</label>
           <input
@@ -890,6 +927,17 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       setError(dupMessage || '该运单已在库，不可重复入库');
       return;
     }
+    const freightNum = form.freightCollectAmount.trim()
+      ? Number(form.freightCollectAmount)
+      : undefined;
+    const codNum = form.codAmount.trim() ? Number(form.codAmount) : undefined;
+    if (
+      (freightNum !== undefined && (!Number.isFinite(freightNum) || freightNum < 0)) ||
+      (codNum !== undefined && (!Number.isFinite(codNum) || codNum < 0))
+    ) {
+      setError('到付/货款请填写 ≥0 的有效金额');
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await inboundService.inbound({
@@ -900,10 +948,8 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         size: form.size,
         shelfId: form.shelfId || undefined,
         note: form.note.trim() || undefined,
-        freightCollectAmount: form.freightCollectAmount.trim()
-          ? Number(form.freightCollectAmount)
-          : undefined,
-        codAmount: form.codAmount.trim() ? Number(form.codAmount) : undefined,
+        freightCollectAmount: freightNum,
+        codAmount: codNum,
         inboundMethod: 'manual',
       });
       setResult(res);
@@ -1087,7 +1133,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
               />
             </div>
           </div>
-          <p className="text-[11px] text-gray-400">有金额时，取件出库须先确认收款；普通件可不填。</p>
+          <CollectDueHint freight={form.freightCollectAmount} cod={form.codAmount} />
           <div>
             <label className="mb-1 block text-sm text-gray-600">备注</label>
             <input

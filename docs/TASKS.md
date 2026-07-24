@@ -985,3 +985,12 @@
 | M69.2 | P1 | 绑定卡片按钮与步骤去技术词 | NotifyBindCard | done | 扫一扫收码 |
 | M69.3 | P1 | 入库成功待收款醒目 + 出库深链 | inbound | done | 金额条 + 去出库收款 |
 | M69.4 | P2 | 当面话术可带待收金额 | staffScripts | done | face script collectDue |
+
+---
+
+## M70 入库待收款金额预览与校验（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M70.1 | P1 | 到付/货款实时合计预览 | inbound form | done | CollectDueHint |
+| M70.2 | P2 | 金额非法拦截 | inbound form | done | ≥0 数字校验 |
