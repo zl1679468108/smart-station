@@ -46,6 +46,12 @@ export interface DashboardNotify {
   customerPushFailed: number;
   sendFailed: number;
   activeBindings: number;
+  /** 今日新增绑定人数 */
+  todayNewBindings?: number;
+  /** 今日到件涉及去重手机号数 */
+  uniqueRecipients?: number;
+  /** 今日至少成功私信过一次的去重手机号数 */
+  uniquePushedRecipients?: number;
 }
 
 export interface DashboardData {

@@ -328,10 +328,16 @@ const Dashboard: React.FC = () => {
               </p>
             </div>
             <div className="text-right text-xs text-gray-500">
-              <div>已绑定客户 {data.notify.activeBindings} 人</div>
+              <div>
+                已绑定 {data.notify.activeBindings} 人
+                {typeof data.notify.todayNewBindings === 'number' &&
+                data.notify.todayNewBindings > 0
+                  ? ` · 今日新绑 ${data.notify.todayNewBindings}`
+                  : ''}
+              </div>
               {data.notify.inboundNotices > 0 && (
                 <div className="mt-0.5 font-medium text-gray-700">
-                  私信率{' '}
+                  件次私信率{' '}
                   {Math.round(
                     (data.notify.customerPushed / data.notify.inboundNotices) * 100,
                   )}
@@ -341,6 +347,22 @@ const Dashboard: React.FC = () => {
                   </span>
                 </div>
               )}
+              {typeof data.notify.uniqueRecipients === 'number' &&
+                data.notify.uniqueRecipients > 0 && (
+                  <div className="mt-0.5 text-gray-600">
+                    人数覆盖{' '}
+                    {Math.round(
+                      ((data.notify.uniquePushedRecipients || 0) /
+                        data.notify.uniqueRecipients) *
+                        100,
+                    )}
+                    %
+                    <span className="ml-1 text-gray-500">
+                      （{data.notify.uniquePushedRecipients || 0}/
+                      {data.notify.uniqueRecipients} 人）
+                    </span>
+                  </div>
+                )}
             </div>
           </div>
           {data.notify.inboundNotices > 0 && (

@@ -1236,3 +1236,11 @@
 | M101.1 | P1 | 绑定补发跳过近 6h 已私信 | kiosk catchup | done | 防重复刷屏 |
 | M101.2 | P1 | 店员/客户文案强调绑定即补发 | notify+scripts+query | done | |
 | M101.3 | P2 | 绑定成功醒目补发提示 | NotifyBindCard | done | |
+
+## M102 触达人数覆盖与今日新绑可观测（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M102.1 | P1 | getNotifyReach 扩展人数/新绑 | stats | done | uniqueRecipients/uniquePushed/todayNewBindings |
+| M102.2 | P1 | 工作台/触达条展示 | dashboard | done | 件次私信率 + 人数覆盖 + 今日新绑 |
+| M102.3 | P2 | 统计页今日触达同源 | stats UI | done | |
+

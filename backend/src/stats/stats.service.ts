@@ -286,14 +286,17 @@ export class StatsService {
       customerPushFailed: 0,
       sendFailed: 0,
       activeBindings: 0,
+      todayNewBindings: 0,
+      uniqueRecipients: 0,
+      uniquePushedRecipients: 0,
     };
 
     try {
-      const [logsRes, bindRes] = await Promise.all([
+      const [logsRes, bindRes, todayBindRes] = await Promise.all([
         this.supabase
           .getClient()
           .from('ss_sms_logs')
-          .select('status, params')
+          .select('status, params, recipient_phone')
           .eq('station_id', stationId)
           .eq('template_code', 'inbound_notice')
           .gte('created_at', todayStart)
@@ -305,6 +308,14 @@ export class StatsService {
           .select('id', { count: 'exact', head: true })
           .eq('station_id', stationId)
           .eq('status', 'active'),
+        this.supabase
+          .getClient()
+          .from('ss_notify_bindings')
+          .select('id', { count: 'exact', head: true })
+          .eq('station_id', stationId)
+          .eq('status', 'active')
+          .gte('created_at', todayStart)
+          .lt('created_at', todayEnd),
       ]);
 
       // 表未迁移时不阻断工作台
@@ -323,12 +334,20 @@ export class StatsService {
       let customerUnbound = 0;
       let customerPushFailed = 0;
       let sendFailed = 0;
-      const rows = (logsRes.data || []) as Array<{ status?: string; params?: unknown }>;
+      const uniquePhones = new Set<string>();
+      const uniquePushedPhones = new Set<string>();
+      const rows = (logsRes.data || []) as Array<{
+        status?: string;
+        params?: unknown;
+        recipient_phone?: string | null;
+      }>;
 
       for (const row of rows) {
         if (row.status === 'failed') {
           sendFailed += 1;
         }
+        const phone = String(row.recipient_phone || '').trim();
+        if (phone) uniquePhones.add(phone);
         const params =
           row.params && typeof row.params === 'object'
             ? (row.params as Record<string, unknown>)
@@ -343,6 +362,7 @@ export class StatsService {
           customerUnbound += 1;
         } else if (customerResults.some((c) => c.ok)) {
           customerPushed += 1;
+          if (phone) uniquePushedPhones.add(phone);
         } else {
           customerPushFailed += 1;
         }
@@ -352,6 +372,10 @@ export class StatsService {
       if (!bindRes.error) {
         activeBindings = bindRes.count || 0;
       }
+      let todayNewBindings = 0;
+      if (!todayBindRes.error) {
+        todayNewBindings = todayBindRes.count || 0;
+      }
 
       return {
         inboundNotices: rows.length,
@@ -360,6 +384,9 @@ export class StatsService {
         customerPushFailed,
         sendFailed,
         activeBindings,
+        todayNewBindings,
+        uniqueRecipients: uniquePhones.size,
+        uniquePushedRecipients: uniquePushedPhones.size,
       };
     } catch (err) {
       // eslint-disable-next-line no-console

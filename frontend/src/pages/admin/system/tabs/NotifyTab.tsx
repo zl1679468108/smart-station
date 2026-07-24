@@ -444,16 +444,35 @@ const NotifyTab: React.FC = () => {
               </p>
             </div>
             <div className="text-right text-xs text-gray-600">
-              <div>已绑定 {reachToday.activeBindings} 人</div>
+              <div>
+                已绑定 {reachToday.activeBindings} 人
+                {typeof reachToday.todayNewBindings === 'number' &&
+                reachToday.todayNewBindings > 0
+                  ? ` · 今日新绑 ${reachToday.todayNewBindings}`
+                  : ''}
+              </div>
               {reachToday.inboundNotices > 0 && (
                 <div className="mt-0.5 font-medium text-gray-800">
-                  私信率{' '}
+                  件次私信率{' '}
                   {Math.round(
                     (reachToday.customerPushed / reachToday.inboundNotices) * 100,
                   )}
                   %
                 </div>
               )}
+              {typeof reachToday.uniqueRecipients === 'number' &&
+                reachToday.uniqueRecipients > 0 && (
+                  <div className="mt-0.5 text-gray-600">
+                    人数覆盖{' '}
+                    {Math.round(
+                      ((reachToday.uniquePushedRecipients || 0) /
+                        reachToday.uniqueRecipients) *
+                        100,
+                    )}
+                    %（{reachToday.uniquePushedRecipients || 0}/
+                    {reachToday.uniqueRecipients} 人）
+                  </div>
+                )}
             </div>
           </div>
           {reachToday.inboundNotices > 0 && (

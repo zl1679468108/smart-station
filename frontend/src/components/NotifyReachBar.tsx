@@ -71,9 +71,19 @@ const NotifyReachBar: React.FC<{
             <p className="text-sm font-medium text-gray-800">今日到件触达</p>
             {rate != null && (
               <span className="text-[11px] text-gray-600">
-                私信率 {rate}%（{notify.customerPushed}/{notify.inboundNotices}）
+                件次私信率 {rate}%（{notify.customerPushed}/{notify.inboundNotices}）
               </span>
             )}
+            {typeof notify.uniqueRecipients === 'number' &&
+              notify.uniqueRecipients > 0 && (
+                <span className="text-[11px] text-gray-600">
+                  人数覆盖{' '}
+                  {Math.round(
+                    ((notify.uniquePushedRecipients || 0) / notify.uniqueRecipients) * 100,
+                  )}
+                  %（{notify.uniquePushedRecipients || 0}/{notify.uniqueRecipients} 人）
+                </span>
+              )}
             {isFetching && <span className="text-[10px] text-gray-400">刷新中</span>}
           </div>
           <p className="mt-0.5 text-[11px] text-gray-500">{subtitle}</p>
@@ -159,7 +169,10 @@ const NotifyReachBar: React.FC<{
           到件通知 {notify.inboundNotices}
         </button>
         <span className="self-center text-[11px] text-gray-500">
-          已绑定客户 {notify.activeBindings} 人
+          已绑定 {notify.activeBindings} 人
+          {typeof notify.todayNewBindings === 'number' && notify.todayNewBindings > 0
+            ? ` · 今日新绑 ${notify.todayNewBindings}`
+            : ''}
         </span>
       </div>
       {needFollow && (

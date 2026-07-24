@@ -64,6 +64,14 @@ const StatsPage: React.FC = () => {
     notifyToday && notifyToday.inboundNotices > 0
       ? Math.round((notifyToday.customerPushed / notifyToday.inboundNotices) * 100)
       : null;
+  const uniqueCoverRate =
+    notifyToday &&
+    typeof notifyToday.uniqueRecipients === 'number' &&
+    notifyToday.uniqueRecipients > 0
+      ? Math.round(
+          ((notifyToday.uniquePushedRecipients || 0) / notifyToday.uniqueRecipients) * 100,
+        )
+      : null;
   const [exportingUnbound, setExportingUnbound] = useState(false);
 
   const loadTodayUnboundPhones = async () => {
@@ -160,11 +168,24 @@ const StatsPage: React.FC = () => {
           </div>
           {notifyToday && (
             <div className="text-right text-xs text-gray-600">
-              <div>已绑定 {notifyToday.activeBindings} 人</div>
+              <div>
+                已绑定 {notifyToday.activeBindings} 人
+                {typeof notifyToday.todayNewBindings === 'number' &&
+                notifyToday.todayNewBindings > 0
+                  ? ` · 今日新绑 ${notifyToday.todayNewBindings}`
+                  : ''}
+              </div>
               {pushRate != null && (
                 <div className="mt-0.5 font-medium text-gray-800">
-                  私信率 {pushRate}%（{notifyToday.customerPushed}/
+                  件次私信率 {pushRate}%（{notifyToday.customerPushed}/
                   {notifyToday.inboundNotices}）
+                </div>
+              )}
+              {uniqueCoverRate != null && (
+                <div className="mt-0.5 text-gray-600">
+                  人数覆盖 {uniqueCoverRate}%（
+                  {notifyToday.uniquePushedRecipients || 0}/
+                  {notifyToday.uniqueRecipients} 人）
                 </div>
               )}
             </div>
