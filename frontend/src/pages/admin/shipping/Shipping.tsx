@@ -308,7 +308,7 @@ const OrdersTab: React.FC<{
       )}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-orange-100 bg-orange-50/70 px-3 py-2">
         <p className="text-[11px] text-orange-900">
-          寄件进度请一对一告知客户；可复制话术，或按发件手机号查看通知记录。
+          寄件进度请一对一告知客户；可复制话术。若客户说没收到通知，可去补发失败私信。
         </p>
         <button
           type="button"
@@ -322,6 +322,13 @@ const OrdersTab: React.FC<{
           className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
         >
           复制绑定话术
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/admin/system?tab=notify&filter=push_failed&days=1')}
+          className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100"
+        >
+          补发失败私信
         </button>
       </div>
       <div className="flex flex-wrap items-center gap-2">

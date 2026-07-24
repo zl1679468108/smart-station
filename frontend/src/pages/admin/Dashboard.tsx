@@ -120,7 +120,7 @@ const Dashboard: React.FC = () => {
               return;
             }
             if (type === 'notify_failed') {
-              navigate('/admin/system?tab=notify&filter=push_failed');
+              navigate('/admin/system?tab=notify&filter=push_failed&days=1');
               return;
             }
             if (type === 'notify_pushed') {
@@ -417,7 +417,7 @@ const Dashboard: React.FC = () => {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigate('/admin/system?tab=notify&filter=push_failed');
+                  navigate('/admin/system?tab=notify&filter=push_failed&days=1');
                 }}
                 className="rounded-md bg-white px-2.5 py-1 text-amber-700 ring-1 ring-transparent hover:ring-amber-200"
               >
@@ -429,7 +429,7 @@ const Dashboard: React.FC = () => {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigate('/admin/system?tab=notify&filter=failed&today=1');
+                  navigate('/admin/system?tab=notify&filter=failed&today=1&days=1');
                 }}
                 className="rounded-md bg-white px-2.5 py-1 text-red-700 ring-1 ring-transparent hover:ring-red-200"
               >
@@ -613,21 +613,27 @@ const Dashboard: React.FC = () => {
                         : ''}
                     </p>
                     <p className="mt-0.5 text-[11px] text-gray-400">
-                      当面报码或引导绑定后，可在通知记录补发
+                      {(data.notify.customerPushFailed || 0) > 0
+                        ? '私信失败优先一键补发；未绑定请当面报码或发绑定链接'
+                        : '当面报码或引导绑定后，可在通知记录补发'}
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() =>
                       navigate(
-                        data.notify!.customerUnbound > 0
-                          ? '/admin/system?tab=notify&filter=unbound&view=byPhone'
-                          : '/admin/system?tab=notify&filter=push_failed',
+                        (data.notify!.customerPushFailed || 0) > 0
+                          ? '/admin/system?tab=notify&filter=push_failed&days=1'
+                          : '/admin/system?tab=notify&filter=unbound&view=byPhone',
                       )
                     }
-                    className="shrink-0 rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+                    className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-medium ${
+                      (data.notify!.customerPushFailed || 0) > 0
+                        ? 'bg-amber-600 text-white hover:bg-amber-700'
+                        : 'border border-orange-200 bg-white text-orange-800 hover:bg-orange-50'
+                    }`}
                   >
-                    去处理
+                    {(data.notify!.customerPushFailed || 0) > 0 ? '去补发失败' : '去处理'}
                   </button>
                 </li>
               )}

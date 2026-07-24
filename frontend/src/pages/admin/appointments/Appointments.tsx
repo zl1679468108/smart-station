@@ -248,26 +248,69 @@ const AppointmentsPage: React.FC = () => {
       {lastNotify && (
         <div
           className={`flex flex-wrap items-start justify-between gap-2 rounded-lg border px-3 py-2.5 ${
-            lastNotify.includes('未绑定')
-              ? 'border-orange-200 bg-orange-50'
-              : 'border-violet-100 bg-violet-50'
+            lastNotify.includes('发送失败') || lastNotify.includes('暂不可用')
+              ? 'border-amber-200 bg-amber-50'
+              : lastNotify.includes('未绑定')
+                ? 'border-orange-200 bg-orange-50'
+                : 'border-violet-100 bg-violet-50'
           }`}
         >
           <div className="min-w-0 flex-1">
             <p
               className={`text-sm font-medium ${
-                lastNotify.includes('未绑定') ? 'text-orange-950' : 'text-violet-900'
+                lastNotify.includes('发送失败') || lastNotify.includes('暂不可用')
+                  ? 'text-amber-950'
+                  : lastNotify.includes('未绑定')
+                    ? 'text-orange-950'
+                    : 'text-violet-900'
               }`}
             >
               预约通知回执
             </p>
             <p
               className={`mt-0.5 text-xs ${
-                lastNotify.includes('未绑定') ? 'text-orange-900/90' : 'text-violet-900/90'
+                lastNotify.includes('发送失败') || lastNotify.includes('暂不可用')
+                  ? 'text-amber-900/90'
+                  : lastNotify.includes('未绑定')
+                    ? 'text-orange-900/90'
+                    : 'text-violet-900/90'
               }`}
             >
               {lastNotify}
             </p>
+            {(lastNotify.includes('发送失败') || lastNotify.includes('暂不可用')) && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <p className="w-full text-[11px] font-semibold text-amber-950">
+                  客户可能已绑定但提醒没发出，可到通知记录补发/核对绑定
+                </p>
+                <button
+                  type="button"
+                  className="min-h-[36px] rounded-md bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-700"
+                  onClick={() =>
+                    navigate(
+                      lastNotifyPhone
+                        ? `/admin/system?tab=notify&phone=${encodeURIComponent(lastNotifyPhone)}&filter=push_failed&days=1`
+                        : '/admin/system?tab=notify&filter=push_failed&days=1',
+                    )
+                  }
+                >
+                  去补发失败私信
+                </button>
+                {lastNotifyPhone && (
+                  <button
+                    type="button"
+                    className="min-h-[36px] rounded-md border border-amber-200 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-50"
+                    onClick={() =>
+                      navigate(
+                        `/admin/system?tab=notify&phone=${encodeURIComponent(lastNotifyPhone)}`,
+                      )
+                    }
+                  >
+                    看该手机通知
+                  </button>
+                )}
+              </div>
+            )}
             {lastNotify.includes('未绑定') ? (
               <div className="mt-2 space-y-2">
                 <p className="text-[11px] font-semibold text-orange-950">

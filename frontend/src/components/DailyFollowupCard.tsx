@@ -48,7 +48,7 @@ const DailyFollowupCard: React.FC<DailyFollowupCardProps> = ({
   cashToday,
   stationName,
   title = '今日跟进',
-  description = '按紧急程度排好，点一项就去处理；可复制摘要发给交班同事',
+  description = '失败优先、按紧急程度排好；点一项就去处理，可复制摘要交班',
   includeShiftSnapshot = false,
 }) => {
   const navigate = useNavigate();
@@ -92,6 +92,29 @@ const DailyFollowupCard: React.FC<DailyFollowupCardProps> = ({
           >
             {includeShiftSnapshot ? '复制交班摘要' : '复制跟进摘要'}
           </button>
+          {(data.notify?.customerPushFailed || 0) > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                navigate('/admin/system?tab=notify&filter=push_failed&days=1')
+              }
+              className="rounded-md bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-700"
+            >
+              补发私信失败（{data.notify!.customerPushFailed}）
+            </button>
+          )}
+          {(data.notify?.sendFailed || 0) > 0 &&
+            (data.notify?.customerPushFailed || 0) <= 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  navigate('/admin/system?tab=notify&filter=failed&today=1&days=1')
+                }
+                className="rounded-md bg-red-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-red-700"
+              >
+                重发失败通知（{data.notify!.sendFailed}）
+              </button>
+            )}
           <button
             type="button"
             onClick={() =>
