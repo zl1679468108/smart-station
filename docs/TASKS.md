@@ -1038,3 +1038,13 @@
 | M74.2 | P1 | 预约页 URL 筛选同步 | appointments | done | status + date=today |
 | M74.3 | P1 | 确认预约返回通知回执 | backend+frontend | done | notifyHint on confirm |
 | M74.4 | P2 | 代客预约/确认触达面板 | appointments UI | done | lastNotify 白话 |
+
+---
+
+## M75 查件预约触达强化 + 库存快捷滞留提醒（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M75.1 | P1 | 查件预约成功触达面板 | query appointment | done | 未绑定引导绑定 |
+| M75.2 | P1 | 库存列表快捷发提醒 | inventory list | done | overdue/在库≥3天 |
+| M75.3 | P1 | 库存详情发滞留提醒+回执 | inventory detail | done | remindOverdue |

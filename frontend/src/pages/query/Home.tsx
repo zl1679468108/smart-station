@@ -195,7 +195,10 @@ const Home: React.FC = () => {
 
             {/* 预约到店（B6） */}
             <div className="mt-4">
-              <PickupAppointmentCard defaultPhone={lastQueryPhone} />
+              <PickupAppointmentCard
+                defaultPhone={lastQueryPhone}
+                onBindClick={openBindPanel}
+              />
             </div>
 
             {/* 查询结果 */}

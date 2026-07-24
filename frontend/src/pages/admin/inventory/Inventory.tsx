@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as inventoryService from '@/services/inventory';
+import * as overdueService from '@/services/overdue';
 import { useCouriers, useShelves } from '@/hooks/useDictionary';
 import { useInvalidateDashboard } from '@/hooks/useDashboardData';
 import {
@@ -10,7 +11,7 @@ import {
 } from '@/hooks/useInventoryData';
 import { useAuth } from '@/utils/auth';
 import { canWrite } from '@/utils/permission';
-import { notifyError } from '@/utils/notification';
+import { notifyError, notifySuccess } from '@/utils/notification';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
@@ -114,6 +115,25 @@ const Inventory: React.FC = () => {
   const invalidateInventoryList = useInvalidateInventoryList();
   // 只读角色（viewer）不显示选择框 / 批量操作栏 / 批量标记异常弹窗
   const writable = canWrite(user.role);
+  const [remindingId, setRemindingId] = useState<string | null>(null);
+
+  const onRemindOverdue = async (item: ParcelListItem) => {
+    if (!writable || remindingId) return;
+    const ok = window.confirm(
+      `向客户补发滞留提醒？\n运单 ${item.trackingNumber}\n\n已绑定微信会私信取件码；未绑定仅旁路通知（不含取件码）。`,
+    );
+    if (!ok) return;
+    setRemindingId(item.id);
+    try {
+      const r = await overdueService.remindOverdue(item.id);
+      notifySuccess(r.staffMessage || '提醒已发送');
+    } catch (e: any) {
+      notifyError(e?.message || '发送失败');
+    } finally {
+      setRemindingId(null);
+    }
+  };
+
   // URL 为筛选条件真相源（支持 Dashboard 深链 ?status=overdue 等）
   // 依赖 query string 文本，避免 searchParams 对象引用变化导致分页被反复重置
   const searchKey = searchParams.toString();
@@ -442,6 +462,18 @@ const Inventory: React.FC = () => {
                             className="text-xs font-medium text-rose-700 hover:underline"
                           >
                             收款出库
+                          </button>
+                        )}
+                      {writable &&
+                        (item.status === 'overdue' ||
+                          (item.status === 'in_stock' && (item.daysInStock ?? 0) >= 3)) && (
+                          <button
+                            type="button"
+                            disabled={remindingId === item.id}
+                            onClick={() => void onRemindOverdue(item)}
+                            className="text-xs font-medium text-amber-700 hover:underline disabled:opacity-60"
+                          >
+                            {remindingId === item.id ? '提醒中…' : '发提醒'}
                           </button>
                         )}
                       <button

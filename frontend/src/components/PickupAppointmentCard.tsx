@@ -10,12 +10,14 @@ import type {
 type Props = {
   /** 查件成功后的手机号，预填 */
   defaultPhone?: string | null;
+  /** 引导去绑定微信通知（查件页顶部） */
+  onBindClick?: () => void;
 };
 
 /**
  * 轻量预约到店：选日期 → 选时段 → 留手机号
  */
-const PickupAppointmentCard: React.FC<Props> = ({ defaultPhone }) => {
+const PickupAppointmentCard: React.FC<Props> = ({ defaultPhone, onBindClick }) => {
   const [open, setOpen] = useState(false);
   const [slotsData, setSlotsData] = useState<AppointmentSlotsResult | null>(null);
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -100,6 +102,7 @@ const PickupAppointmentCard: React.FC<Props> = ({ defaultPhone }) => {
       });
       setSuccess(item);
       setSelected(null);
+      setOpen(true);
       await loadSlots();
       void loadMine();
     } catch (e: any) {
@@ -138,13 +141,47 @@ const PickupAppointmentCard: React.FC<Props> = ({ defaultPhone }) => {
       {open && (
         <div className="space-y-3 border-t border-gray-100 px-4 py-3">
           {success && (
-            <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              预约成功：{success.slotDate} {success.slotLabel}（{success.statusLabel}）
-              <br />
-              <span className="text-xs text-emerald-700">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900">
+              <p className="font-semibold">
+                预约成功：{success.slotDate} {success.slotLabel}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-emerald-800">
                 {success.notifyHint ||
-                  '请带手机号到店；取件码仍以查件/货架为准。'}
-              </span>
+                  '请按预约时段到店；取件码仍以查件结果 / 货架标签为准。'}
+              </p>
+              <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[11px] text-emerald-800/90">
+                <li>到店报手机号或取件码即可</li>
+                <li>群里不会公开你的取件码</li>
+              </ul>
+              {(success.notifyHint || '').includes('未绑定') ||
+              (success.notifyHint || '').includes('绑定微信') ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {onBindClick && (
+                    <button
+                      type="button"
+                      onClick={onBindClick}
+                      className="min-h-[40px] rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primaryHover"
+                    >
+                      去绑定微信收提醒
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setSuccess(null)}
+                    className="min-h-[40px] rounded-md border border-emerald-200 bg-white px-3 text-xs text-emerald-900 hover:bg-emerald-100/50"
+                  >
+                    继续预约
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSuccess(null)}
+                  className="mt-2 text-[11px] text-emerald-800 underline"
+                >
+                  再约一个时段
+                </button>
+              )}
             </div>
           )}
 

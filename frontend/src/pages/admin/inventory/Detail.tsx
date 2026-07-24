@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import * as inventoryService from '@/services/inventory';
+import * as overdueService from '@/services/overdue';
 import * as inboundService from '@/services/inbound';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import { copyText } from '@/utils/stationVisit';
@@ -60,6 +61,8 @@ const ParcelDetailPage: React.FC = () => {
   const [savingCollect, setSavingCollect] = useState(false);
   const [collectError, setCollectError] = useState('');
   const [resendingNotice, setResendingNotice] = useState(false);
+  const [remindingOverdue, setRemindingOverdue] = useState(false);
+  const [lastRemindHint, setLastRemindHint] = useState<string | null>(null);
 
   useEffect(() => {
     if (!detail) return;
@@ -167,6 +170,48 @@ const ParcelDetailPage: React.FC = () => {
                   }}
                 >
                   {resendingNotice ? '补发中…' : '补发到件通知'}
+                </button>
+                {(detail.status === 'overdue' ||
+                  (detail.status === 'in_stock' && Number(detail.daysInStock || 0) >= 3)) && (
+                  <button
+                    type="button"
+                    disabled={remindingOverdue}
+                    className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800 hover:bg-amber-100 disabled:opacity-60"
+                    onClick={async () => {
+                      if (remindingOverdue || !id) return;
+                      const ok = window.confirm(
+                        '向客户补发滞留提醒？\n\n已绑定微信会私信取件码；未绑定仅旁路通知（不含取件码）。',
+                      );
+                      if (!ok) return;
+                      setRemindingOverdue(true);
+                      try {
+                        const r = await overdueService.remindOverdue(id);
+                        setLastRemindHint(r.staffMessage || '提醒已发送');
+                        notifySuccess(r.staffMessage || '提醒已发送');
+                        invalidateDetail();
+                        invalidateList();
+                        invalidateDashboard();
+                      } catch (e: any) {
+                        notifyError(e?.message || '发送失败');
+                      } finally {
+                        setRemindingOverdue(false);
+                      }
+                    }}
+                  >
+                    {remindingOverdue ? '提醒中…' : '发滞留提醒'}
+                  </button>
+                )}
+              </div>
+            )}
+            {lastRemindHint && (
+              <div className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                滞留提醒回执：{lastRemindHint}
+                <button
+                  type="button"
+                  className="ml-2 underline"
+                  onClick={() => setLastRemindHint(null)}
+                >
+                  关闭
                 </button>
               </div>
             )}
