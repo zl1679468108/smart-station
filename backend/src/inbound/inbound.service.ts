@@ -124,15 +124,52 @@ export class InboundService {
 
     // 6. 触发通知（若驿站开启 sms_enabled；免费通道见 NotifyService）
     const station = await this.getStation(stationId);
+    let notify: {
+      enabled: boolean;
+      attempted: boolean;
+      customerBound: boolean;
+      customerPushed: boolean;
+      customerChannels: string[];
+      staffMessage: string;
+    };
     if (station.sms_enabled) {
-      await this.notifyService.sendInboundNotice({
-        stationName: station.name,
-        phone: dto.recipientPhone,
-        recipientName: dto.recipientName,
-        pickupCode,
-        parcelId: parcel.id,
-        stationId,
-      });
+      try {
+        const r = await this.notifyService.sendInboundNotice({
+          stationName: station.name,
+          phone: dto.recipientPhone,
+          recipientName: dto.recipientName,
+          pickupCode,
+          parcelId: parcel.id,
+          stationId,
+        });
+        notify = {
+          enabled: true,
+          attempted: r.attempted,
+          customerBound: r.customerBound,
+          customerPushed: r.customerPushed,
+          customerChannels: r.customerChannels,
+          staffMessage: r.staffMessage,
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        notify = {
+          enabled: true,
+          attempted: true,
+          customerBound: false,
+          customerPushed: false,
+          customerChannels: [],
+          staffMessage: `通知发送异常：${msg}（入库已成功，不影响取件）`,
+        };
+      }
+    } else {
+      notify = {
+        enabled: false,
+        attempted: false,
+        customerBound: false,
+        customerPushed: false,
+        customerChannels: [],
+        staffMessage: '到件通知已关闭（系统管理可开启）',
+      };
     }
 
     return {
@@ -145,6 +182,8 @@ export class InboundService {
       inboundAt: parcel.inbound_at,
       courierCompanyCode,
       courierCompanyName,
+      recipientPhone: dto.recipientPhone,
+      notify,
     };
   }
 

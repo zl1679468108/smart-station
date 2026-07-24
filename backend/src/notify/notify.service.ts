@@ -32,6 +32,24 @@ export type NotifyPayload = {
   params?: Record<string, unknown>;
 };
 
+export type NotifyChannelResult = {
+  channel: string;
+  ok: boolean;
+  error?: string;
+  mode?: string;
+};
+
+/** 入库/通知扇出回执（给店员看的运营反馈） */
+export type NotifyDispatchResult = {
+  attempted: boolean;
+  customerBound: boolean;
+  customerChannels: string[];
+  customerPushed: boolean;
+  channelResults: NotifyChannelResult[];
+  /** 面向店员的中文摘要 */
+  staffMessage: string;
+};
+
 @Injectable()
 export class NotifyService {
   constructor(@Inject(SupabaseService) private readonly supabase: SupabaseService) {}
@@ -92,12 +110,12 @@ export class NotifyService {
     pickupCode: string;
     parcelId?: string;
     stationId?: string;
-  }): Promise<void> {
+  }): Promise<NotifyDispatchResult> {
     const content = `【${opts.stationName}】您有包裹已到，取件码 ${opts.pickupCode}，请凭码到对应货架取件。`;
     const publicContent = `【${opts.stationName}·到件公告】收件人 ${this.maskPhone(
       opts.phone,
     )} 有新包裹到站。取件码仅向本人推送或现场查询，本群不公示。`;
-    await this.dispatch({
+    return this.dispatch({
       phone: opts.phone,
       recipientName: opts.recipientName,
       title: `入库通知 · ${opts.stationName}`,
@@ -168,8 +186,8 @@ export class NotifyService {
    * 3) ops serverchan env → 完整（管理员个人）
    * 4) 客户绑定 → 完整（一对一）
    */
-  private async dispatch(payload: NotifyPayload): Promise<void> {
-    const results: Array<{ channel: string; ok: boolean; error?: string; mode?: string }> = [];
+  private async dispatch(payload: NotifyPayload): Promise<NotifyDispatchResult> {
+    const results: NotifyChannelResult[] = [];
     const ops = this.getOpsChannels();
     const publicText = this.buildPublicContent(payload);
 
@@ -269,6 +287,56 @@ export class NotifyService {
         privacy: 'wecom_public_only',
       },
     });
+
+    const customerResults = results.filter((r) => String(r.channel).startsWith('binding:'));
+    const customerBound = customerResults.length > 0;
+    const customerPushed = customerResults.some((r) => r.ok);
+    const customerChannels = [
+      ...new Set(
+        customerResults.map((r) => {
+          const ch = String(r.channel);
+          if (ch.includes('wxpusher')) return 'wxpusher';
+          if (ch.includes('pushplus')) return 'pushplus';
+          if (ch.includes('serverchan')) return 'serverchan';
+          return ch;
+        }),
+      ),
+    ];
+    return {
+      attempted: true,
+      customerBound,
+      customerChannels,
+      customerPushed,
+      channelResults: results,
+      staffMessage: this.buildStaffMessage({
+        customerBound,
+        customerPushed,
+        customerChannels,
+        results,
+      }),
+    };
+  }
+
+  private buildStaffMessage(opts: {
+    customerBound: boolean;
+    customerPushed: boolean;
+    customerChannels: string[];
+    results: NotifyChannelResult[];
+  }): string {
+    const parts: string[] = [];
+    const wecom = opts.results.find((r) => r.channel === 'wecom');
+    if (wecom?.ok && wecom.mode === 'public') parts.push('通知群已发脱敏公告');
+    if (wecom?.ok && wecom.mode === 'skipped_private') parts.push('验证码未进群');
+    if (wecom && !wecom.ok) parts.push('通知群发送失败');
+
+    if (!opts.customerBound) {
+      parts.push('客户未绑定微信，取件码未私信（请提醒到店查件或绑定通知）');
+    } else if (opts.customerPushed) {
+      parts.push('取件码已私信到客户微信');
+    } else {
+      parts.push('客户已绑定但私信发送失败，请核对绑定或让客户现场查码');
+    }
+    return parts.join('；');
   }
 
   private async listActiveBindings(

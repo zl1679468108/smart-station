@@ -26,6 +26,7 @@ const StationTab: React.FC = () => {
     overdueWarnDays: 3,
     overdueRemindDays: 7,
     overdueReturnDays: 15,
+    smsEnabled: true,
     notifyTitle: '',
     notifyContent: '',
     wecomQrUrl: '',
@@ -51,6 +52,7 @@ const StationTab: React.FC = () => {
       overdueWarnDays: station.overdue_warn_days,
       overdueRemindDays: station.overdue_remind_days,
       overdueReturnDays: station.overdue_return_days,
+      smsEnabled: station.sms_enabled !== false,
       notifyTitle: nc.title || '',
       notifyContent: nc.content || '',
       wecomQrUrl: nc.wecomQrUrl || '',
@@ -78,6 +80,7 @@ const StationTab: React.FC = () => {
         overdueWarnDays: form.overdueWarnDays,
         overdueRemindDays: form.overdueRemindDays,
         overdueReturnDays: form.overdueReturnDays,
+        smsEnabled: form.smsEnabled,
         notifyConfig: {
           title: form.notifyTitle,
           content: form.notifyContent,
@@ -217,6 +220,24 @@ const StationTab: React.FC = () => {
         </div>
       </section>
 
+
+      {/* 到件通知总开关 */}
+      <section className="mb-4 rounded-lg border border-gray-200 bg-white p-5">
+        <h2 className="mb-1 text-sm font-medium text-gray-700">到件通知</h2>
+        <p className="mb-3 text-xs text-gray-400">
+          关闭后入库不再推送到件提醒（含通知群与客户微信）。默认开启。
+        </p>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={form.smsEnabled}
+            onChange={(e) => setForm({ ...form, smsEnabled: e.target.checked })}
+            disabled={inputDisabled}
+            className="h-4 w-4 rounded border-gray-300 text-primary"
+          />
+          入库成功后发送到件通知
+        </label>
+      </section>
 
       {/* 通知公示（客户绑定引导） */}
       <section className="rounded-lg border border-gray-200 bg-white p-5">

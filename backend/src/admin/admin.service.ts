@@ -67,6 +67,7 @@ export class AdminService {
     if (dto.overdueWarnDays !== undefined) patch.overdue_warn_days = Number(dto.overdueWarnDays);
     if (dto.overdueRemindDays !== undefined) patch.overdue_remind_days = Number(dto.overdueRemindDays);
     if (dto.overdueReturnDays !== undefined) patch.overdue_return_days = Number(dto.overdueReturnDays);
+    if (dto.smsEnabled !== undefined) patch.sms_enabled = Boolean(dto.smsEnabled);
     if (dto.notifyConfig !== undefined) {
       // 浅合并，避免覆盖未传字段
       const { data: prevRow } = await this.supabase

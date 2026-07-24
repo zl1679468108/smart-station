@@ -96,35 +96,60 @@ const SizeSelector: React.FC<{
 };
 
 // ============ 入库成功结果展示 ============
-const InboundSuccess: React.FC<{ result: InboundResult }> = ({ result }) => (
-  <div className="rounded-lg border border-success/40 bg-success/5 p-5">
-    <h3 className="mb-3 flex items-center gap-1.5 text-base font-medium text-success">
-      <Icon name="check" size={18} />
-      入库成功
-    </h3>
-    <div className="space-y-2 text-sm">
-      <div className="flex gap-3">
-        <span className="w-24 text-gray-500">运单号</span>
-        <span className="font-medium text-gray-800">{result.trackingNumber}</span>
-      </div>
-      <div className="flex gap-3">
-        <span className="w-24 text-gray-500">取件码</span>
-        <span className="font-mono text-2xl font-bold tracking-widest text-primary">
-          {result.pickupCode}
-        </span>
-        <span className="self-center text-xs text-gray-400">
-          （第{result.shelfNumber}号货架 · 第{result.shelfLayer}层 · 第{result.shelfPosition}号）
-        </span>
-      </div>
-      {result.courierCompanyName && (
+const InboundSuccess: React.FC<{ result: InboundResult }> = ({ result }) => {
+  const n = result.notify;
+  const notifyTone = !n
+    ? 'border-gray-200 bg-gray-50 text-gray-600'
+    : !n.enabled
+      ? 'border-gray-200 bg-gray-50 text-gray-600'
+      : n.customerPushed
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : n.customerBound
+          ? 'border-amber-200 bg-amber-50 text-amber-800'
+          : 'border-orange-200 bg-orange-50 text-orange-800';
+
+  return (
+    <div className="rounded-lg border border-success/40 bg-success/5 p-5">
+      <h3 className="mb-3 flex items-center gap-1.5 text-base font-medium text-success">
+        <Icon name="check" size={18} />
+        入库成功
+      </h3>
+      <div className="space-y-2 text-sm">
         <div className="flex gap-3">
-          <span className="w-24 text-gray-500">快递公司</span>
-          <span className="text-gray-800">{result.courierCompanyName}</span>
+          <span className="w-24 shrink-0 text-gray-500">运单号</span>
+          <span className="font-medium text-gray-800">{result.trackingNumber}</span>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <span className="w-24 shrink-0 text-gray-500">取件码</span>
+          <span className="font-mono text-2xl font-bold tracking-widest text-primary">
+            {result.pickupCode}
+          </span>
+          <span className="self-center text-xs text-gray-400">
+            （第{result.shelfNumber}号货架 · 第{result.shelfLayer}层 · 第{result.shelfPosition}号）
+          </span>
+        </div>
+        {result.courierCompanyName && (
+          <div className="flex gap-3">
+            <span className="w-24 shrink-0 text-gray-500">快递公司</span>
+            <span className="text-gray-800">{result.courierCompanyName}</span>
+          </div>
+        )}
+      </div>
+
+      {n && (
+        <div className={`mt-4 rounded-md border px-3 py-2.5 text-xs leading-relaxed ${notifyTone}`}>
+          <p className="font-medium">通知状态</p>
+          <p className="mt-1">{n.staffMessage}</p>
+          {!n.customerBound && n.enabled && (
+            <p className="mt-1 text-[11px] opacity-90">
+              可提醒客户打开查件页绑定微信通知，下次到件自动收码。
+            </p>
+          )}
         </div>
       )}
     </div>
-  </div>
-);
+  );
+};
 
 // ============ 扫码入库 ============
 const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {

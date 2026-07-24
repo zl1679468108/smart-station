@@ -13,6 +13,15 @@ export interface InboundPayload {
   inboundMethod?: 'scan' | 'manual' | 'batch';
 }
 
+export interface InboundNotifyFeedback {
+  enabled: boolean;
+  attempted: boolean;
+  customerBound: boolean;
+  customerPushed: boolean;
+  customerChannels: string[];
+  staffMessage: string;
+}
+
 export interface InboundResult {
   id: string;
   trackingNumber: string;
@@ -23,6 +32,8 @@ export interface InboundResult {
   inboundAt: string;
   courierCompanyCode: string | null;
   courierCompanyName: string | null;
+  recipientPhone?: string;
+  notify?: InboundNotifyFeedback;
 }
 
 export interface BatchInboundResult {

@@ -105,6 +105,11 @@ export class UpdateStationDto {
   @Min(1, { message: '退回天数必须大于 0' })
   overdueReturnDays?: number;
 
+  /** 是否发送到件通知（历史字段 sms_enabled） */
+  @IsOptional()
+  @IsBoolean()
+  smsEnabled?: boolean;
+
   /** 通知公示配置（写入 ss_stations.notify_config） */
   @IsOptional()
   @IsObject()
