@@ -1112,24 +1112,26 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const [bulkResending, setBulkResending] = useState(false);
   const [rowResendingId, setRowResendingId] = useState<string | null>(null);
 
-  const handleSubmit = async () => {
-    if (submitting) return;
-    setError('');
-    setResult(null);
+  type BatchItem = {
+    trackingNumber: string;
+    recipientName: string;
+    recipientPhone: string;
+    size: ParcelSize;
+    note?: string;
+    inboundMethod: 'batch';
+  };
+
+  const parseCsvItems = (): {
+    lines: string[];
+    items: BatchItem[];
+    parseErrors: Array<{ index: number; error: string }>;
+  } | null => {
     const lines = csvText.trim().split('\n').filter(Boolean);
     if (lines.length === 0) {
       setError('请粘贴至少一行数据');
-      return;
+      return null;
     }
-    // 解析格式：运单号,收件人姓名,手机号[,备注]
-    const items: Array<{
-      trackingNumber: string;
-      recipientName: string;
-      recipientPhone: string;
-      size: ParcelSize;
-      note?: string;
-      inboundMethod: 'batch';
-    }> = [];
+    const items: BatchItem[] = [];
     const parseErrors: Array<{ index: number; error: string }> = [];
     lines.forEach((line, i) => {
       const parts = line.split(',').map((s) => s.trim());
@@ -1155,17 +1157,89 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         inboundMethod: 'batch',
       });
     });
-
     if (items.length === 0) {
       setError(`无有效数据，${parseErrors.length} 行解析失败`);
       setResult({ total: lines.length, succeeded: 0, failed: parseErrors.length, errors: parseErrors });
       setPrecheck(null);
-      return;
+      return null;
     }
+    return { lines, items, parseErrors };
+  };
+
+  const buildReadyFromPrecheck = (
+    items: BatchItem[],
+    check: CheckTrackingBatchResult,
+    parseErrors: Array<{ index: number; error: string }>,
+  ) => {
+    const stockBlocked = new Set(
+      (check.items || []).filter((x) => x.exists).map((x) => x.trackingNumber.toUpperCase()),
+    );
+    const readyFinal: BatchItem[] = [];
+    const firstSeen = new Set<string>();
+    const skippedErrors: Array<{ index: number; error: string }> = [...parseErrors];
+    items.forEach((row, idx) => {
+      const tn = row.trackingNumber.trim().toUpperCase();
+      if (stockBlocked.has(tn)) {
+        const hit = (check.items || []).find((c) => c.trackingNumber === tn && c.exists);
+        skippedErrors.push({
+          index: idx,
+          error: hit?.message || '运单已在库，已跳过',
+        });
+        return;
+      }
+      if (firstSeen.has(tn)) {
+        skippedErrors.push({ index: idx, error: '本批 CSV 内运单号重复，已跳过' });
+        return;
+      }
+      firstSeen.add(tn);
+      readyFinal.push(row);
+    });
+    return { readyFinal, skippedErrors };
+  };
+
+  /** 仅预检，不导入 */
+  const handlePrecheckOnly = async () => {
+    if (submitting || prechecking) return;
+    setError('');
+    setResult(null);
+    const parsed = parseCsvItems();
+    if (!parsed) return;
+    setPrechecking(true);
+    setPrecheck(null);
+    try {
+      const check = await inboundService.checkTrackingBatch(
+        parsed.items.map((x) => x.trackingNumber),
+      );
+      setPrecheck(check);
+      const { readyFinal, skippedErrors } = buildReadyFromPrecheck(
+        parsed.items,
+        check,
+        parsed.parseErrors,
+      );
+      if (check.blocked > 0 || skippedErrors.length > 0) {
+        notifySuccess(
+          `${check.staffMessage}；可入库 ${readyFinal.length} 条。确认无误后点「预检并导入」。`,
+        );
+      } else {
+        notifySuccess(check.staffMessage || `预检完成：${readyFinal.length} 条均可入库`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '预检失败');
+    } finally {
+      setPrechecking(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (submitting || prechecking) return;
+    setError('');
+    setResult(null);
+    const parsed = parseCsvItems();
+    if (!parsed) return;
+    const { lines, items, parseErrors } = parsed;
 
     // 先预检：库内重复 + CSV 内重复
     setPrechecking(true);
-    setError('');
     setPrecheck(null);
     let check: CheckTrackingBatchResult | null = null;
     try {
@@ -1178,29 +1252,7 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     }
     setPrechecking(false);
 
-    const stockBlocked = new Set(
-      (check?.items || []).filter((x) => x.exists).map((x) => x.trackingNumber.toUpperCase()),
-    );
-    const readyFinal: typeof items = [];
-    const firstSeen = new Set<string>();
-    const skippedErrors: Array<{ index: number; error: string }> = [...parseErrors];
-    items.forEach((it, idx) => {
-      const tn = it.trackingNumber.trim().toUpperCase();
-      if (stockBlocked.has(tn)) {
-        const hit = (check?.items || []).find((c) => c.trackingNumber === tn && c.exists);
-        skippedErrors.push({
-          index: idx,
-          error: hit?.message || '运单已在库，已跳过',
-        });
-        return;
-      }
-      if (firstSeen.has(tn)) {
-        skippedErrors.push({ index: idx, error: '本批 CSV 内运单号重复，已跳过' });
-        return;
-      }
-      firstSeen.add(tn);
-      readyFinal.push(it);
-    });
+    const { readyFinal, skippedErrors } = buildReadyFromPrecheck(items, check, parseErrors);
 
     if (readyFinal.length === 0) {
       setError(check?.staffMessage || '没有可入库的运单（均为重复）');
@@ -1294,38 +1346,53 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           disabled={submitting}
         />
         {error && <div className="mt-3 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
-        {precheck && precheck.blocked > 0 && (
+        {precheck && (
           <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
             <p className="font-medium">{precheck.staffMessage}</p>
             <p className="mt-1 text-[11px] opacity-90">
-              导入时会自动跳过库内已存在与 CSV 内重复运单；下方失败列表会写明原因。
+              {precheck.blocked > 0
+                ? '导入时会自动跳过库内已存在与 CSV 内重复运单；也可先改 CSV 再预检。'
+                : '未发现重复，可直接点「预检并导入」。'}
             </p>
-            <div className="mt-2 max-h-36 overflow-auto rounded border border-amber-100 bg-white/70">
-              <ul className="divide-y divide-amber-50">
-                {precheck.items
-                  .filter((x) => x.blocked)
-                  .slice(0, 30)
-                  .map((x) => (
-                    <li key={`${x.index}-${x.trackingNumber}`} className="px-2 py-1.5 font-mono text-[11px]">
-                      <span className="text-gray-800">{x.trackingNumber}</span>
-                      <span className="ml-2 text-amber-800">
-                        {x.exists
-                          ? `已在库${x.parcel?.pickupCode ? ` · 取件码 ${x.parcel.pickupCode}` : ''}`
-                          : x.message}
-                      </span>
-                    </li>
-                  ))}
-              </ul>
-            </div>
+            {precheck.blocked > 0 && (
+              <div className="mt-2 max-h-36 overflow-auto rounded border border-amber-100 bg-white/70">
+                <ul className="divide-y divide-amber-50">
+                  {precheck.items
+                    .filter((x) => x.blocked)
+                    .slice(0, 30)
+                    .map((x) => (
+                      <li key={`${x.index}-${x.trackingNumber}`} className="px-2 py-1.5 font-mono text-[11px]">
+                        <span className="text-gray-800">{x.trackingNumber}</span>
+                        <span className="ml-2 text-amber-800">
+                          {x.exists
+                            ? `已在库${x.parcel?.pickupCode ? ` · 取件码 ${x.parcel.pickupCode}` : ''}`
+                            : x.message}
+                        </span>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
-        <button
-          onClick={() => void handleSubmit()}
-          disabled={submitting || prechecking || !csvText.trim()}
-          className="mt-3 rounded-md bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
-        >
-          {prechecking ? '预检中...' : submitting ? '导入中...' : '预检并导入'}
-        </button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void handlePrecheckOnly()}
+            disabled={submitting || prechecking || !csvText.trim()}
+            className="rounded-md border border-gray-300 bg-white px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          >
+            {prechecking ? '预检中...' : '仅预检'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={submitting || prechecking || !csvText.trim()}
+            className="rounded-md bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
+          >
+            {submitting ? '导入中...' : prechecking ? '预检中...' : '预检并导入'}
+          </button>
+        </div>
       </div>
 
       {result && (

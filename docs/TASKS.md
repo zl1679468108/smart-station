@@ -922,3 +922,14 @@
 | M63.1 | P1 | 批量运单预检 API | inbound | done | POST /api/inbound/check-tracking-batch |
 | M63.2 | P1 | 批量导入跳过重复 + 预检面板 | inbound batch | done | 库内/CSV 内重复 |
 | M63.3 | P1 | 出库待收款勾选「已当面收妥」 | outbound | done | 金额醒目；按钮收款出库 |
+
+
+---
+
+## M64 批量仅预检 + 出库待收款筛选（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M64.1 | P1 | 批量入库「仅预检」按钮 | inbound batch | done | 不导入，先看重复 |
+| M64.2 | P1 | 出库加载在库待收款 | outbound | done | 库存 unpaid 映射出库列表 |
+| M64.3 | P2 | 出库结果 全部/待收款筛选 | outbound | done | 客户端筛选 chips |

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as outboundService from '@/services/outbound';
+import * as inventoryService from '@/services/inventory';
 import { useInvalidateShelves } from '@/hooks/useDictionary';
 import { useInvalidateDashboard } from '@/hooks/useDashboardData';
 import { useInvalidateInventoryDetail, useInvalidateInventoryList } from '@/hooks/useInventoryData';
@@ -93,17 +94,75 @@ const ManualOutbound: React.FC = () => {
   const invalidateOutboundRecords = useInvalidateOutboundRecords();
   const [queryTab, setQueryTab] = useState<QueryTab>('phone');
   const [items, setItems] = useState<OutboundSearchItem[] | null>(null);
+  const [resultFilter, setResultFilter] = useState<'all' | 'unpaid'>('all');
+  const [loadingUnpaid, setLoadingUnpaid] = useState(false);
   const [confirming, setConfirming] = useState<OutboundSearchItem | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
   const handleResult = (res: { items?: OutboundSearchItem[] }) => {
     setItems(res.items || []);
+    setResultFilter('all');
   };
 
   const switchQueryTab = (t: QueryTab) => {
     setQueryTab(t);
     setItems(null);
+    setResultFilter('all');
   };
+
+  const loadUnpaidParcels = async () => {
+    if (loadingUnpaid) return;
+    setLoadingUnpaid(true);
+    try {
+      const res = await inventoryService.fetchInventory({
+        collectStatus: 'unpaid',
+        page: 1,
+        pageSize: 100,
+      });
+      const pickable = (res.items || []).filter(
+        (p) => p.status === 'in_stock' || p.status === 'overdue',
+      );
+      const mapped: OutboundSearchItem[] = pickable.map((p) => ({
+        id: p.id,
+        trackingNumber: p.trackingNumber,
+        recipientName: p.recipientName,
+        recipientPhone: p.recipientPhone,
+        pickupCode: p.pickupCode,
+        status: p.status,
+        inboundAt: p.inboundAt,
+        courierName: p.courier?.name || null,
+        freightCollectAmount: Number(p.freightCollectAmount || 0),
+        codAmount: Number(p.codAmount || 0),
+        collectStatus: p.collectStatus || 'unpaid',
+        collectDueAmount: Number(
+          p.collectDueAmount ??
+            Number(p.freightCollectAmount || 0) + Number(p.codAmount || 0),
+        ),
+      }));
+      setItems(mapped);
+      setResultFilter('unpaid');
+      if (mapped.length === 0) {
+        notifyError('当前没有在库/滞留的待收款包裹');
+      }
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : '加载待收款失败');
+    } finally {
+      setLoadingUnpaid(false);
+    }
+  };
+
+  const displayItems = (items || []).filter((it) => {
+    if (resultFilter !== 'unpaid') return true;
+    return (
+      Number(it.collectDueAmount || 0) > 0 &&
+      (it.collectStatus === 'unpaid' || !it.collectStatus)
+    );
+  });
+  const unpaidCount = (items || []).filter(
+    (it) =>
+      Number(it.collectDueAmount || 0) > 0 &&
+      (it.collectStatus === 'unpaid' || !it.collectStatus),
+  ).length;
 
   // 确认出库（防连点 + 手机后4位身份核验）
   const handleConfirmOutbound = async (
@@ -154,6 +213,17 @@ const ManualOutbound: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-gray-500">按手机号/运单号/取件码查询，或一键加载待收款件。</p>
+        <button
+          type="button"
+          onClick={() => void loadUnpaidParcels()}
+          disabled={loadingUnpaid}
+          className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-800 hover:bg-rose-100 disabled:opacity-60"
+        >
+          {loadingUnpaid ? '加载中…' : '加载在库待收款'}
+        </button>
+      </div>
       {/* 查询方式 Tab */}
       <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
         {([
@@ -182,10 +252,44 @@ const ManualOutbound: React.FC = () => {
 
       {/* 查询结果 */}
       {items !== null && (
-        <SearchResultList
-          items={items}
-          onOutbound={(item) => setConfirming(item)}
-        />
+        <div className="space-y-2">
+          {(items.length > 0 || unpaidCount > 0) && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-gray-500">结果筛选：</span>
+              <button
+                type="button"
+                onClick={() => setResultFilter('all')}
+                className={`rounded-full px-3 py-1 text-xs ${
+                  resultFilter === 'all'
+                    ? 'bg-primary text-white'
+                    : 'bg-white text-gray-600 ring-1 ring-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                全部 {items.length}
+              </button>
+              <button
+                type="button"
+                onClick={() => setResultFilter('unpaid')}
+                className={`rounded-full px-3 py-1 text-xs ${
+                  resultFilter === 'unpaid'
+                    ? 'bg-rose-600 text-white'
+                    : 'bg-white text-rose-700 ring-1 ring-rose-200 hover:bg-rose-50'
+                }`}
+              >
+                待收款 {unpaidCount}
+              </button>
+            </div>
+          )}
+          <SearchResultList
+            items={displayItems}
+            onOutbound={(item) => setConfirming(item)}
+            emptyHint={
+              resultFilter === 'unpaid'
+                ? '当前结果中没有待收款包裹'
+                : undefined
+            }
+          />
+        </div>
       )}
 
       {/* 二次确认弹窗 */}
@@ -359,12 +463,13 @@ const CodeSearchView: React.FC<{
 const SearchResultList: React.FC<{
   items: OutboundSearchItem[];
   onOutbound: (item: OutboundSearchItem) => void;
-}> = ({ items, onOutbound }) => {
+  emptyHint?: string;
+}> = ({ items, onOutbound, emptyHint }) => {
   if (items.length === 0) {
     return (
       <EmptyState
-        title="未查询到可取件包裹"
-        description="可能已出库、尚未到达，或不在本驿站"
+        title={emptyHint ? '没有符合筛选的包裹' : '未查询到可取件包裹'}
+        description={emptyHint || '可能已出库、尚未到达，或不在本驿站'}
       />
     );
   }
