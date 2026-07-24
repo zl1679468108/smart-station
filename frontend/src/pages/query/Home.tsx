@@ -257,10 +257,12 @@ const Home: React.FC = () => {
             <div className="mx-auto flex max-w-2xl items-center gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-gray-900">
-                  {items.length > 0 ? '先记下取件码，再绑定收下次' : '还没查到？先绑定有件提醒'}
+                  {items.length > 0 ? '先记下取件码，再绑定收码' : '还没查到？先绑定有件提醒'}
                 </p>
                 <p className="mt-0.5 text-[11px] leading-snug text-gray-500">
-                  绑定后微信私信取件码；群里不会公开你的码。没绑定就到店查/看货架。
+                  {items.length > 0
+                    ? '绑定后在库件会马上微信补发取件码；群里不会公开你的码。'
+                    : '绑定后有件微信提醒；群里不会公开你的码。没绑定就到店查/看货架。'}
                 </p>
               </div>
               <button
@@ -706,11 +708,11 @@ const ResultView: React.FC<{
             <li>
               <strong className="font-semibold text-gray-900">再花约 1 分钟绑定微信</strong>
               {lastQueryPhone ? `（${phoneHint}）` : ''}
-              ：下次包裹到了，微信直接告诉你取件码。
+              ：下方在库件会马上微信补发取件码，以后到件也会提醒。
             </li>
           </ol>
           <p className="mt-2 text-[11px] text-gray-500">
-            没绑定就到店查件或看货架；通知群里<strong className="font-medium text-gray-600">不会公开你的取件码</strong>。
+            没绑定也能取：到店查件或看货架；通知群里<strong className="font-medium text-gray-600">不会公开你的取件码</strong>。
           </p>
           {showBindCta && (
             <button
@@ -718,7 +720,7 @@ const ResultView: React.FC<{
               onClick={onBindClick}
               className="mt-3 min-h-[48px] w-full rounded-md bg-primary px-3 text-sm font-semibold text-white hover:bg-primaryHover sm:w-auto sm:min-w-[200px] sm:px-5"
             >
-              现在绑定，下次自动收码
+              现在绑定，在库件马上收码
             </button>
           )}
         </div>

@@ -128,11 +128,17 @@ const NotifyBindCard: React.FC<{
         const res = await kioskService.pollWxPusherBind({ qrCode });
         if (res.status === 'done') {
           setMsg({ type: 'ok', text: res.message || '绑定成功' });
-          setPollHint('');
+          if (res.catchupPushed && res.catchupPushed > 0) {
+            setPollHint(`已为你补发 ${res.catchupPushed} 件在库取件码，请打开微信查看`);
+          } else if (res.catchupInStock && res.catchupInStock > 0) {
+            setPollHint('有在库包裹，请到店凭取件码取件或再查一次');
+          } else {
+            setPollHint('');
+          }
           setSession(null);
           setCode('');
           clearPoll();
-          onBound?.('wxpusher');
+          onBound?.(res.channel || 'wxpusher');
           return;
         }
         if (res.status === 'expired') {
@@ -205,6 +211,11 @@ const NotifyBindCard: React.FC<{
         token: token.trim(),
       });
       setMsg({ type: 'ok', text: res.message });
+      if (res.catchupPushed && res.catchupPushed > 0) {
+        setPollHint(`已为你补发 ${res.catchupPushed} 件在库取件码，请打开微信查看`);
+      } else {
+        setPollHint('');
+      }
       setToken('');
       setCode('');
       onBound?.(res.channel || 'pushplus');

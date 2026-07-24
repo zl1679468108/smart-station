@@ -397,7 +397,7 @@ export class NotifyService {
       parts.push(
         isAppt
           ? '客户未绑定微信，预约提醒未私信（客户可在查件页自查预约）'
-          : '客户未绑定微信，取件码未私信（请提醒到店查件或绑定通知）',
+          : '客户未绑定微信，取件码未私信（请当面报码；客户在查件页绑定后会自动补发）',
       );
     } else if (opts.customerPushed) {
       parts.push(isAppt ? '预约提醒已私信到客户微信' : '取件码已私信到客户微信');

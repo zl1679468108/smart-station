@@ -311,9 +311,48 @@ export class KioskService {
         return { inStock: 0, pushed: 0 };
       }
 
+      // 近 6 小时内已成功私信过的包裹跳过，避免重复刷屏
+      const alreadyPushed = new Set<string>();
+      try {
+        const since = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
+        const ids = parcels.map((p) => p.id).filter(Boolean);
+        if (ids.length > 0) {
+          const { data: logs } = await this.supabase
+            .getClient()
+            .from('ss_sms_logs')
+            .select('parcel_id, params, status')
+            .eq('station_id', opts.stationId)
+            .eq('template_code', 'inbound_notice')
+            .in('parcel_id', ids)
+            .gte('created_at', since)
+            .limit(100);
+          for (const row of logs || []) {
+            const pid = row.parcel_id as string | null;
+            if (!pid || alreadyPushed.has(pid)) continue;
+            const params =
+              row.params && typeof row.params === 'object'
+                ? (row.params as Record<string, unknown>)
+                : {};
+            const channelResults = Array.isArray(params.channelResults)
+              ? (params.channelResults as Array<{ channel?: string; ok?: boolean }>)
+              : [];
+            const customerOk = channelResults.some(
+              (c) => String(c.channel || '').startsWith('binding:') && c.ok,
+            );
+            if (customerOk) alreadyPushed.add(pid);
+          }
+        }
+      } catch {
+        // 跳过查重失败时仍尝试补发
+      }
+
       let pushed = 0;
       for (const p of parcels) {
         if (!p.pickup_code) continue;
+        if (alreadyPushed.has(p.id)) {
+          pushed += 1; // 近 6 小时已私信过，视为已送达
+          continue;
+        }
         try {
           const r = await this.notify.sendInboundNotice({
             stationName: station.name,

@@ -10,7 +10,7 @@ export function buildBindGuideScript(opts?: { stationName?: string; queryUrlHint
   return [
     `【${station}】您好，包裹到了可微信自动提醒。`,
     `请打开${hint}，用收件手机号绑定微信通知。`,
-    '绑定后下次到件会直接私信取件码；未绑定请到店查件或看货架。',
+    '绑定后：已在库的件会补发取件码，以后到件也会微信提醒；未绑定请到店查件或看货架。',
   ].join('');
 }
 
@@ -32,13 +32,15 @@ export function buildFacePickupScript(opts: {
   if (due > 0) {
     parts.push(`取件时请当面付到付/货款 ¥${due.toFixed(2)}。`);
   }
-  parts.push('请凭码到店取件。若要微信自动收码，可在查件页绑定微信通知。');
+  parts.push(
+    '请凭码到店取件。若要微信自动收码，可在查件页绑定微信通知；绑定后已在库件也会补发取件码。',
+  );
   return parts.join('');
 }
 
 /** 未绑定客户短提示（UI 展示用） */
 export const UNBOUND_FACE_HINT =
-  '客户还没绑定微信：请当面报取件码，或复制话术告知；引导扫码绑定后可再点补发。';
+  '客户还没绑定微信：请当面报取件码；也可引导查件页绑定——绑定后系统会自动补发取件码。';
 
 const METHOD_LABEL: Record<string, string> = {
   cash: '现金',
