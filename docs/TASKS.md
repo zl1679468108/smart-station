@@ -590,6 +590,17 @@
 
 ---
 
+## 1.7.3 业务功能：财务待办 + 批量入库取件码回看（2026-07-24）
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M43.1 | P1 | 工作台财务未对账 | stats + dashboard | done | 上月 unreconciled+discrepancy 计数；跳转财务账期 |
+| M43.2 | P1 | 财务页 month/status 深链 | frontend/finance | done | `?month=&status=` 与筛选同步 |
+| M43.3 | P1 | 批量入库成功列表 | frontend/inbound | done | 展示运单号/取件码/通知摘要 |
+| M43.4 | P2 | 文档 | docs | done | TASKS 同步 |
+
+---
+
 ## v1.0+ 后续版本规划
 
 > 5 个未实现模块的必要性判断（PRD §4.7-4.11 已有完整定义）：

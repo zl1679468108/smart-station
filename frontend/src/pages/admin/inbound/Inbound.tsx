@@ -532,6 +532,12 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     total: number;
     errors: Array<{ index: number; error: string }>;
     notifySummary?: BatchNotifySummary;
+    successes?: Array<{
+      trackingNumber: string;
+      pickupCode: string;
+      recipientPhone?: string;
+      staffMessage?: string;
+    }>;
   } | null>(null);
 
   const handleSubmit = async () => {
@@ -593,6 +599,12 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         failed: res.failed + parseErrors.length,
         errors: [...parseErrors, ...res.errors.map((e) => ({ index: e.index, error: e.error }))],
         notifySummary: res.notifySummary,
+        successes: (res.results || []).map((row) => ({
+          trackingNumber: row.result?.trackingNumber || '',
+          pickupCode: row.result?.pickupCode || '',
+          recipientPhone: row.result?.recipientPhone,
+          staffMessage: row.result?.notify?.staffMessage,
+        })),
       });
       if (res.succeeded > 0) {
         setCsvText('');
@@ -687,6 +699,32 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                   未收到私信的客户可到店查件；绑定微信后可在「系统管理 → 通知记录」里重发。
                 </p>
               )}
+            </div>
+          )}
+          {result.successes && result.successes.length > 0 && (
+            <div className="mb-3 max-h-60 overflow-auto rounded-md border border-gray-200">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-500">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">运单号</th>
+                    <th className="px-3 py-2 text-left font-medium">取件码</th>
+                    <th className="px-3 py-2 text-left font-medium">通知</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {result.successes.map((s, i) => (
+                    <tr key={`${s.trackingNumber}-${i}`}>
+                      <td className="px-3 py-1.5 font-mono text-gray-700">{s.trackingNumber}</td>
+                      <td className="px-3 py-1.5 font-mono font-semibold text-primary">
+                        {s.pickupCode || '-'}
+                      </td>
+                      <td className="px-3 py-1.5 text-gray-500">
+                        {s.staffMessage || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
           {result.errors.length > 0 && (

@@ -335,6 +335,31 @@ const Dashboard: React.FC = () => {
                 <span className="mt-1 text-xs text-indigo-700/80">已取件，待交快递发出</span>
               )}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                const m = todo.financeMonth || '';
+                const q = new URLSearchParams();
+                if (m) q.set('month', m);
+                // 不锁死 status，便于同时看到「未对账」与「有差异」
+                navigate(`/admin/finance?${q.toString()}`);
+              }}
+              className="flex w-full flex-col rounded-md bg-emerald-50 px-3 py-3 text-left hover:bg-emerald-100/80"
+            >
+              <div className="flex w-full items-center justify-between">
+                <span className="text-sm text-gray-600">
+                  财务未对账{todo.financeMonth ? `（${todo.financeMonth}）` : ''}
+                </span>
+                <span className="text-lg font-bold text-emerald-700">
+                  {todo.financeUnreconciled ?? 0}
+                </span>
+              </div>
+              {(todo.financeUnreconciled ?? 0) === 0 ? (
+                <span className="mt-1 text-xs text-gray-400">上月账单已对清或尚未生成</span>
+              ) : (
+                <span className="mt-1 text-xs text-emerald-700/80">含未对账/有差异，点击去对账</span>
+              )}
+            </button>
           </div>
         </div>
       </div>

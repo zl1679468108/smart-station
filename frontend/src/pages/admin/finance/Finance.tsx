@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import * as financeService from '@/services/finance';
 import { fetchCouriers } from '@/services/inventory';
 import type { CourierCompany } from '@/types/admin';
@@ -59,13 +60,23 @@ const EMPTY_RATE: UpsertRateBody = {
 const FinancePage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = canManageSystem(user?.role);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const queryMonth = searchParams.get('month') || '';
+  const queryStatus = searchParams.get('status') as BillStatus | '' | null;
+  const initialMonth =
+    queryMonth && /^\d{4}-\d{2}$/.test(queryMonth) ? queryMonth : defaultMonth();
+  const initialStatus: BillStatus | '' =
+    queryStatus && ['unreconciled', 'reconciled', 'discrepancy'].includes(queryStatus)
+      ? queryStatus
+      : '';
 
   const [tab, setTab] = useState<Tab>('bills');
   const [couriers, setCouriers] = useState<CourierCompany[]>([]);
 
   // ===== 账单 =====
-  const [month, setMonth] = useState(defaultMonth());
-  const [status, setStatus] = useState<BillStatus | ''>('');
+  const [month, setMonth] = useState(initialMonth);
+  const [status, setStatus] = useState<BillStatus | ''>(initialStatus);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [bills, setBills] = useState<FinanceBill[]>([]);
@@ -95,6 +106,32 @@ const FinancePage: React.FC = () => {
       .then((list) => setCouriers(list.filter((c) => c.status === 'active')))
       .catch(() => setCouriers([]));
   }, []);
+
+  // 工作台深链 ?month=YYYY-MM&status=unreconciled
+  useEffect(() => {
+    if (queryMonth && /^\d{4}-\d{2}$/.test(queryMonth) && queryMonth !== month) {
+      setMonth(queryMonth);
+      setPage(1);
+    }
+    if (
+      queryStatus &&
+      ['unreconciled', 'reconciled', 'discrepancy'].includes(queryStatus) &&
+      queryStatus !== status
+    ) {
+      setStatus(queryStatus);
+      setPage(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryMonth, queryStatus]);
+
+  const syncBillQuery = (nextMonth: string, nextStatus: BillStatus | '') => {
+    const sp = new URLSearchParams(searchParams);
+    if (nextMonth) sp.set('month', nextMonth);
+    else sp.delete('month');
+    if (nextStatus) sp.set('status', nextStatus);
+    else sp.delete('status');
+    setSearchParams(sp, { replace: true });
+  };
 
   const loadBills = useCallback(async () => {
     setLoading(true);
@@ -272,16 +309,20 @@ const FinancePage: React.FC = () => {
               type="month"
               value={month}
               onChange={(e) => {
-                setMonth(e.target.value);
+                const v = e.target.value;
+                setMonth(v);
                 setPage(1);
+                syncBillQuery(v, status);
               }}
               className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm"
             />
             <select
               value={status}
               onChange={(e) => {
-                setStatus(e.target.value as BillStatus | '');
+                const v = e.target.value as BillStatus | '';
+                setStatus(v);
                 setPage(1);
+                syncBillQuery(month, v);
               }}
               className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm"
             >

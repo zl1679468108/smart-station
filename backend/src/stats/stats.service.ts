@@ -103,9 +103,10 @@ export class StatsService {
     const overdue = overdueRes.count || 0;
     const exception = exceptionRes.count || 0;
 
-    // 寄件待办 + 今日到件通知触达（并行，失败不拖垮工作台）
-    const [shippingTodo, notify] = await Promise.all([
+    // 寄件待办 + 财务未对账 + 今日到件通知触达（并行，失败不拖垮工作台）
+    const [shippingTodo, financeTodo, notify] = await Promise.all([
       this.getShippingTodo(stationId),
+      this.getFinanceTodo(stationId),
       this.getNotifyReach(stationId, todayStart, todayEnd),
     ]);
 
@@ -127,9 +128,40 @@ export class StatsService {
         exceptionUnresolved: exception,
         shippingPending: shippingTodo.pending,
         shippingPicked: shippingTodo.picked,
+        financeUnreconciled: financeTodo.unreconciled,
+        financeMonth: financeTodo.month,
       },
       notify,
     };
+  }
+
+  /** 财务待办：最近账期未对账/有差异账单数（默认上月） */
+  private async getFinanceTodo(stationId: string) {
+    const now = new Date(Date.now() + 8 * 3600 * 1000);
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    const month = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    const empty = { unreconciled: 0, month };
+    try {
+      const { count, error } = await this.supabase
+        .getClient()
+        .from('ss_finance_bills')
+        .select('id', { count: 'exact', head: true })
+        .eq('station_id', stationId)
+        .eq('bill_month', month)
+        .in('status', ['unreconciled', 'discrepancy']);
+      if (error) {
+        const msg = String(error.message || '');
+        if (msg.includes('ss_finance_bills') || msg.includes('does not exist')) return empty;
+        // eslint-disable-next-line no-console
+        console.warn('[Stats] 财务待办查询失败:', msg);
+        return empty;
+      }
+      return { unreconciled: count || 0, month };
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[Stats] 财务待办异常:', err);
+      return empty;
+    }
   }
 
   /** 寄件运营待办：待处理 / 已取件待发出 */

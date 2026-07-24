@@ -26,6 +26,10 @@ export interface DashboardTodo {
   shippingPending?: number;
   /** 已取件待发出 */
   shippingPicked?: number;
+  /** 上月未对账/有差异账单数 */
+  financeUnreconciled?: number;
+  /** 财务待办对应账期 YYYY-MM */
+  financeMonth?: string;
 }
 
 /** 今日到件通知触达（工作台运营卡片） */
