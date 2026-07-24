@@ -673,6 +673,8 @@ smart-station
 - 驿站公示配置：`ss_stations.notify_config`（企微群二维码 URL、WxPusher 绑定步骤文案），在 `/query`（含 `device=h5`）与系统管理「驿站信息」维护
 - 查件验证码：不进企微群；非 production 可返回 `devCode`
 - 驿站开关仍用 `ss_stations.sms_enabled`（语义为「是否发送到件通知」），系统管理可开关
+- 批量入库返回 `notifySummary`（已私信/未绑定/私信失败/通知已关），导入结果页展示
+- 管理端「通知记录」支持到件/滞留 **重新发送**（失败补发，或客户绑定后补推取件码）；验证码不支持重发
 - 入库成功响应含 `notify` 回执（是否绑定/是否私信/店员中文摘要 `staffMessage`），入库页展示运营反馈
 - 滞留扫描结果含 `customerNotified` / `customerUnbound` 便于运营评估触达
 

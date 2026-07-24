@@ -11,6 +11,7 @@ import type {
   LayoutArea,
   NotifyBindingItem,
   NotifyLogItem,
+  NotifyResendResult,
 } from '@/types/admin';
 
 // ===== 驿站 =====
@@ -200,4 +201,10 @@ export function listNotifyLogs(opts?: {
   const params = new URLSearchParams({ limit: String(limit) });
   if (opts?.phone) params.set('phone', opts.phone);
   return get(`/api/admin/notify/logs?${params.toString()}`);
+}
+
+export function resendNotifyLog(id: string): Promise<NotifyResendResult> {
+  return post(`/api/admin/notify/logs/${encodeURIComponent(id)}/resend`, undefined, {
+    successMessage: '已重新发送通知',
+  });
 }

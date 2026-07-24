@@ -8,6 +8,7 @@ import {
 import * as bcrypt from 'bcryptjs';
 import { SupabaseService } from '../supabase/supabase.service';
 import { TokenService } from '../auth/token.service';
+import { NotifyService } from '../notify/notify.service';
 import { UpdateStationDto } from './dto/update-station.dto';
 import { CreateStaffDto, UpdateStaffDto, ResetStaffPasswordDto } from './dto/staff.dto';
 import {
@@ -31,6 +32,7 @@ export class AdminService {
   constructor(
     @Inject(SupabaseService) private readonly supabase: SupabaseService,
     @Inject(TokenService) private readonly tokenService: TokenService,
+    @Inject(NotifyService) private readonly notifyService: NotifyService,
   ) {}
 
   /** 生成 8 位随机密码（含字母+数字，剔除易混淆字符 O/0/I/1/l） */
@@ -792,7 +794,7 @@ export class AdminService {
       .getClient()
       .from('ss_sms_logs')
       .select(
-        'id, template_code, recipient_phone, recipient_name, content, status, error_message, params, sent_at, created_at',
+        'id, template_code, recipient_phone, recipient_name, content, status, error_message, params, parcel_id, sent_at, created_at',
         { count: 'exact' },
       )
       .eq('station_id', stationId)
@@ -816,10 +818,12 @@ export class AdminService {
         ? (params.channelResults as Array<{ channel?: string; ok?: boolean; mode?: string; error?: string }>)
         : [];
       const channels = channelResults.map((c) => this.formatChannelResult(c));
+      const templateCode = r.template_code as string;
+      const canResend = templateCode === 'inbound_notice' || templateCode === 'overdue_remind';
       return {
         id: r.id,
-        templateCode: r.template_code,
-        templateLabel: this.templateLabel(r.template_code),
+        templateCode,
+        templateLabel: this.templateLabel(templateCode),
         phone: r.recipient_phone,
         phoneMasked: this.maskPhone(r.recipient_phone),
         recipientName: r.recipient_name,
@@ -830,11 +834,118 @@ export class AdminService {
         errorMessage: r.error_message,
         channels,
         channelSummary: channels.map((c) => c.label).join(' · '),
+        canResend,
+        parcelId: r.parcel_id || null,
         sentAt: r.sent_at,
         createdAt: r.created_at,
       };
     });
     return { items, total: count ?? items.length };
+  }
+
+  /**
+   * 重新发送通知（到件/滞留）。
+   * 适用：发送失败补发，或客户后来绑定了微信需要再推一次取件码。
+   * 验证码类不支持重发（时效短且有独立限流）。
+   */
+  async resendNotifyLog(stationId: string, logId: string) {
+    if (!logId) throw new BadRequestException('缺少通知记录 ID');
+
+    const { data: log, error } = await this.supabase
+      .getClient()
+      .from('ss_sms_logs')
+      .select(
+        'id, template_code, recipient_phone, recipient_name, content, params, parcel_id, station_id, status',
+      )
+      .eq('id', logId)
+      .maybeSingle();
+    if (error) throw new Error(`查询通知记录失败: ${error.message}`);
+    if (!log || log.station_id !== stationId) {
+      throw new NotFoundException('通知记录不存在');
+    }
+
+    const templateCode = String(log.template_code || '');
+    if (templateCode !== 'inbound_notice' && templateCode !== 'overdue_remind') {
+      throw new BadRequestException('该类型通知不支持重发（仅支持到件通知、滞留提醒）');
+    }
+
+    const phone = String(log.recipient_phone || '').trim();
+    if (!/^1\d{10}$/.test(phone)) {
+      throw new BadRequestException('通知记录手机号无效，无法重发');
+    }
+
+    const station = await this.getStation(stationId);
+    const stationName = station?.name || '智能快递驿站';
+    const params =
+      log.params && typeof log.params === 'object' ? (log.params as Record<string, unknown>) : {};
+
+    let pickupCode =
+      typeof params.pickupCode === 'string' && params.pickupCode
+        ? String(params.pickupCode)
+        : '';
+    let days =
+      typeof params.days === 'number'
+        ? Number(params.days)
+        : Number(params.days) || 0;
+
+    // 缺参时从包裹补全
+    if (log.parcel_id && (!pickupCode || (templateCode === 'overdue_remind' && !days))) {
+      const { data: parcel } = await this.supabase
+        .getClient()
+        .from('ss_parcels')
+        .select('id, pickup_code, inbound_at, station_id')
+        .eq('id', log.parcel_id)
+        .maybeSingle();
+      if (parcel && parcel.station_id === stationId) {
+        if (!pickupCode && parcel.pickup_code) pickupCode = String(parcel.pickup_code);
+        if (templateCode === 'overdue_remind' && !days && parcel.inbound_at) {
+          const inboundMs = new Date(parcel.inbound_at).getTime();
+          if (!Number.isNaN(inboundMs)) {
+            days = Math.max(0, Math.floor((Date.now() - inboundMs) / 86400000));
+          }
+        }
+      }
+    }
+
+    if (templateCode === 'inbound_notice' && !pickupCode) {
+      throw new BadRequestException('无法重发：缺少取件码（原始记录参数不完整）');
+    }
+
+    let dispatch;
+    if (templateCode === 'inbound_notice') {
+      dispatch = await this.notifyService.sendInboundNotice({
+        stationName,
+        phone,
+        recipientName: log.recipient_name,
+        pickupCode,
+        parcelId: log.parcel_id || undefined,
+        stationId,
+      });
+    } else {
+      if (!days || days < 1) days = 7;
+      dispatch = await this.notifyService.sendOverdueRemind({
+        stationName,
+        phone,
+        recipientName: log.recipient_name,
+        days,
+        pickupCode: pickupCode || undefined,
+        parcelId: log.parcel_id || undefined,
+        stationId,
+      });
+    }
+
+    return {
+      logId,
+      templateCode,
+      templateLabel: this.templateLabel(templateCode),
+      phoneMasked: this.maskPhone(phone),
+      attempted: dispatch.attempted,
+      customerBound: dispatch.customerBound,
+      customerPushed: dispatch.customerPushed,
+      customerChannels: dispatch.customerChannels,
+      staffMessage: dispatch.staffMessage,
+      channelResults: (dispatch.channelResults || []).map((c) => this.formatChannelResult(c)),
+    };
   }
 
   private normalizePhoneQuery(raw?: string | null): string {

@@ -19,6 +19,8 @@ const NotifyTab: React.FC = () => {
   const [sub, setSub] = useState<'bindings' | 'logs'>('bindings');
   const [phoneInput, setPhoneInput] = useState('');
   const [phoneQuery, setPhoneQuery] = useState('');
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [resendTip, setResendTip] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,6 +54,25 @@ const NotifyTab: React.FC = () => {
   const onClearSearch = () => {
     setPhoneInput('');
     setPhoneQuery('');
+  };
+
+  const onResend = async (log: NotifyLogItem) => {
+    if (!log.canResend || resendingId) return;
+    const ok = window.confirm(
+      `确认向 ${log.phoneMasked} 重新发送「${log.templateLabel}」？\n\n若客户已绑定微信，将再次私信取件码；未绑定则仅通知群/管理员旁路。`,
+    );
+    if (!ok) return;
+    setResendingId(log.id);
+    setResendTip('');
+    try {
+      const r = await adminService.resendNotifyLog(log.id);
+      setResendTip(`${log.phoneMasked}：${r.staffMessage}`);
+      await load();
+    } catch (err) {
+      setResendTip(err instanceof Error ? err.message : '重发失败');
+    } finally {
+      setResendingId(null);
+    }
   };
 
   return (
@@ -97,6 +118,12 @@ const NotifyTab: React.FC = () => {
           <span className="text-xs text-gray-400">当前筛选：{phoneQuery}</span>
         )}
       </form>
+
+      {resendTip && (
+        <div className="rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+          重发结果：{resendTip}
+        </div>
+      )}
 
       <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
         {(
@@ -243,6 +270,18 @@ const NotifyTab: React.FC = () => {
                 )}
                 {log.errorMessage && (
                   <p className="mt-1 text-[11px] text-red-600">错误：{log.errorMessage}</p>
+                )}
+                {log.canResend && (
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => void onResend(log)}
+                      disabled={resendingId === log.id}
+                      className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-700 hover:border-primary hover:text-primary disabled:opacity-60"
+                    >
+                      {resendingId === log.id ? '重发中…' : '重新发送'}
+                    </button>
+                  </div>
                 )}
               </div>
             ))

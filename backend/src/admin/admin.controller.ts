@@ -195,6 +195,13 @@ export class AdminController {
     });
   }
 
+  /** 重新发送到件/滞留通知（失败补发或客户绑定后再推） */
+  @Post('notify/logs/:id/resend')
+  @HttpCode(200)
+  async resendNotifyLog(@StationId() stationId: string, @Param('id') id: string) {
+    return this.adminService.resendNotifyLog(stationId, id);
+  }
+
   // 当前用户在当前驿站的员工关系（供前端判断权限）
   @Get('me')
   async me(@CurrentUser() user: UserPayload) {

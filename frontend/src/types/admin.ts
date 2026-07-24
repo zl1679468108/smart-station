@@ -173,6 +173,22 @@ export interface NotifyLogItem {
   errorMessage?: string | null;
   channels?: NotifyChannelResultItem[];
   channelSummary: string;
+  /** 到件/滞留可重发 */
+  canResend?: boolean;
+  parcelId?: string | null;
   sentAt?: string | null;
   createdAt: string;
+}
+
+export interface NotifyResendResult {
+  logId: string;
+  templateCode: string;
+  templateLabel: string;
+  phoneMasked: string;
+  attempted: boolean;
+  customerBound: boolean;
+  customerPushed: boolean;
+  customerChannels: string[];
+  staffMessage: string;
+  channelResults: NotifyChannelResultItem[];
 }

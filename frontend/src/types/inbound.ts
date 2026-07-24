@@ -36,12 +36,23 @@ export interface InboundResult {
   notify?: InboundNotifyFeedback;
 }
 
+export interface BatchNotifySummary {
+  notifyEnabled: number;
+  notifyDisabled: number;
+  customerBound: number;
+  customerPushed: number;
+  customerUnbound: number;
+  customerPushFailed: number;
+  staffMessage: string;
+}
+
 export interface BatchInboundResult {
   total: number;
   succeeded: number;
   failed: number;
   results: Array<{ index: number; result: InboundResult }>;
   errors: Array<{ index: number; error: string; item: InboundPayload }>;
+  notifySummary?: BatchNotifySummary;
 }
 
 // 面单 OCR 识别结果（P1 智能入库）

@@ -211,12 +211,55 @@ export class InboundService {
         });
       }
     }
+    // 汇总通知触达，方便店员一眼看清「多少人收到私信 / 多少人未绑定」
+    let notifyEnabled = 0;
+    let notifyDisabled = 0;
+    let customerBound = 0;
+    let customerPushed = 0;
+    let customerUnbound = 0;
+    let customerPushFailed = 0;
+    for (const row of succeeded) {
+      const n = row?.result?.notify;
+      if (!n) continue;
+      if (!n.enabled) {
+        notifyDisabled += 1;
+        continue;
+      }
+      notifyEnabled += 1;
+      if (n.customerPushed) customerPushed += 1;
+      else if (n.customerBound) customerPushFailed += 1;
+      else customerUnbound += 1;
+      if (n.customerBound) customerBound += 1;
+    }
+
+    const summaryParts: string[] = [];
+    if (succeeded.length === 0) {
+      summaryParts.push('无成功入库，未发送通知');
+    } else if (notifyDisabled > 0 && notifyEnabled === 0) {
+      summaryParts.push(`到件通知已关闭（${notifyDisabled} 件）`);
+    } else {
+      if (customerPushed > 0) summaryParts.push(`已私信 ${customerPushed}`);
+      if (customerUnbound > 0) summaryParts.push(`未绑定 ${customerUnbound}`);
+      if (customerPushFailed > 0) summaryParts.push(`私信失败 ${customerPushFailed}`);
+      if (notifyDisabled > 0) summaryParts.push(`通知已关 ${notifyDisabled}`);
+      if (summaryParts.length === 0) summaryParts.push('通知已处理');
+    }
+
     return {
       total: items.length,
       succeeded: succeeded.length,
       failed: failed.length,
       results: succeeded,
       errors: failed,
+      notifySummary: {
+        notifyEnabled,
+        notifyDisabled,
+        customerBound,
+        customerPushed,
+        customerUnbound,
+        customerPushFailed,
+        staffMessage: summaryParts.join('；'),
+      },
     };
   }
 

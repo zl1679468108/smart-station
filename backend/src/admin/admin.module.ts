@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { NotifyModule } from '../notify/notify.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
@@ -10,7 +11,7 @@ import { AdminService } from './admin.service';
  * 导入 AuthModule 以复用 TokenService（重置密码时销毁用户会话）
  */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, NotifyModule],
   controllers: [AdminController],
   providers: [AdminService],
 })

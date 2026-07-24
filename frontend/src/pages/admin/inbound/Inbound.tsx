@@ -3,7 +3,7 @@ import * as inboundService from '@/services/inbound';
 import { useCouriers, useInvalidateShelves, useShelves } from '@/hooks/useDictionary';
 import { useInvalidateDashboard } from '@/hooks/useDashboardData';
 import { useInvalidateInventoryList } from '@/hooks/useInventoryData';
-import type { InboundResult, ParcelSize, WaybillOcrResult } from '@/types/inbound';
+import type { BatchNotifySummary, InboundResult, ParcelSize, WaybillOcrResult } from '@/types/inbound';
 import type { Shelf } from '@/types/admin';
 import Icon from '@/components/ui/Icon';
 import PageHeader from '@/components/ui/PageHeader';
@@ -477,7 +477,13 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const [defaultSize, setDefaultSize] = useState<ParcelSize>('small');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ succeeded: number; failed: number; total: number; errors: Array<{ index: number; error: string }> } | null>(null);
+  const [result, setResult] = useState<{
+    succeeded: number;
+    failed: number;
+    total: number;
+    errors: Array<{ index: number; error: string }>;
+    notifySummary?: BatchNotifySummary;
+  } | null>(null);
 
   const handleSubmit = async () => {
     if (submitting) return;
@@ -537,6 +543,7 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         succeeded: res.succeeded,
         failed: res.failed + parseErrors.length,
         errors: [...parseErrors, ...res.errors.map((e) => ({ index: e.index, error: e.error }))],
+        notifySummary: res.notifySummary,
       });
       if (res.succeeded > 0) {
         setCsvText('');
@@ -589,6 +596,50 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             <span className="text-success">成功：{result.succeeded}</span>
             <span className="text-danger">失败：{result.failed}</span>
           </div>
+          {result.notifySummary && result.succeeded > 0 && (
+            <div
+              className={`mb-3 rounded-md border px-3 py-2.5 text-xs leading-relaxed ${
+                result.notifySummary.customerPushed > 0 &&
+                result.notifySummary.customerUnbound === 0 &&
+                result.notifySummary.customerPushFailed === 0
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : result.notifySummary.notifyEnabled === 0
+                    ? 'border-gray-200 bg-gray-50 text-gray-600'
+                    : 'border-orange-200 bg-orange-50 text-orange-800'
+              }`}
+            >
+              <div className="font-medium">客户通知</div>
+              <p className="mt-1">{result.notifySummary.staffMessage}</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                {result.notifySummary.customerPushed > 0 && (
+                  <span className="rounded bg-white/70 px-2 py-0.5">
+                    已私信 {result.notifySummary.customerPushed}
+                  </span>
+                )}
+                {result.notifySummary.customerUnbound > 0 && (
+                  <span className="rounded bg-white/70 px-2 py-0.5">
+                    未绑定 {result.notifySummary.customerUnbound}
+                  </span>
+                )}
+                {result.notifySummary.customerPushFailed > 0 && (
+                  <span className="rounded bg-white/70 px-2 py-0.5">
+                    私信失败 {result.notifySummary.customerPushFailed}
+                  </span>
+                )}
+                {result.notifySummary.notifyDisabled > 0 && (
+                  <span className="rounded bg-white/70 px-2 py-0.5">
+                    通知已关 {result.notifySummary.notifyDisabled}
+                  </span>
+                )}
+              </div>
+              {(result.notifySummary.customerUnbound > 0 ||
+                result.notifySummary.customerPushFailed > 0) && (
+                <p className="mt-2 text-[11px] opacity-90">
+                  未收到私信的客户可到店查件；绑定微信后可在「系统管理 → 通知记录」里重发。
+                </p>
+              )}
+            </div>
+          )}
           {result.errors.length > 0 && (
             <div className="max-h-60 overflow-auto rounded-md border border-gray-200">
               <table className="w-full text-xs">
