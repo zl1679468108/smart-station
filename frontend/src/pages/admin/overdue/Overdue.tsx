@@ -77,8 +77,12 @@ const OverduePage: React.FC = () => {
     setScanning(true);
     try {
       const r = await overdueService.scanOverdue();
+      const extra =
+        r.customerNotified != null
+          ? `；客户私信 ${r.customerNotified}，未绑定 ${r.customerUnbound ?? 0}`
+          : '';
       notifySuccess(
-        `扫描完成：标记滞留 ${r.markedOverdue}，预警事件 ${r.warned}，提醒 ${r.reminded}，待退回候选 ${r.returnCandidates}`,
+        `扫描完成：标记滞留 ${r.markedOverdue}，预警 ${r.warned}，提醒 ${r.reminded}，待退回 ${r.returnCandidates}${extra}`,
       );
       await invalidateOverdue();
     } catch (e: any) {

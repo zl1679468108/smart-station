@@ -136,14 +136,14 @@ export class NotifyService {
     pickupCode?: string;
     parcelId?: string;
     stationId?: string;
-  }): Promise<void> {
+  }): Promise<NotifyDispatchResult> {
     const content = `【${opts.stationName}】您的包裹已到 ${opts.days} 天，即将退回，请立即取件${
       opts.pickupCode ? `，取件码 ${opts.pickupCode}` : ''
     }。`;
     const publicContent = `【${opts.stationName}·滞留公告】收件人 ${this.maskPhone(
       opts.phone,
     )} 有包裹已到 ${opts.days} 天，即将退回。取件码不在本群公示。`;
-    await this.dispatch({
+    return this.dispatch({
       phone: opts.phone,
       recipientName: opts.recipientName,
       title: `滞留提醒 · ${opts.stationName}`,

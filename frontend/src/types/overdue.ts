@@ -39,4 +39,8 @@ export interface OverdueScanResult {
   warned: number;
   reminded: number;
   returnCandidates: number;
+  /** 本次扫描成功私信到客户微信的件数 */
+  customerNotified?: number;
+  /** 本次扫描应提醒但客户未绑定的件数 */
+  customerUnbound?: number;
 }

@@ -208,6 +208,8 @@ export class OverdueService {
     let warned = 0;
     let reminded = 0;
     let returnCandidates = 0;
+    let customerNotified = 0;
+    let customerUnbound = 0;
     const now = Date.now();
 
     const ids = (parcels || []).map((p) => p.id);
@@ -242,7 +244,7 @@ export class OverdueService {
         // 免费通道通知（console/wecom/serverchan），不阻断
         try {
           if (p.recipient_phone) {
-            await this.notify.sendOverdueRemind({
+            const nr = await this.notify.sendOverdueRemind({
               phone: p.recipient_phone,
               recipientName: p.recipient_name,
               days,
@@ -251,6 +253,8 @@ export class OverdueService {
               stationId,
               stationName: station.name,
             });
+            if (nr.customerPushed) customerNotified += 1;
+            else if (!nr.customerBound) customerUnbound += 1;
           }
         } catch {
           /* ignore */
@@ -265,6 +269,8 @@ export class OverdueService {
       warned,
       reminded,
       returnCandidates,
+      customerNotified,
+      customerUnbound,
     };
   }
 
