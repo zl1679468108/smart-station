@@ -1,3 +1,25 @@
+/** 入库运单预检：已在库包裹摘要 */
+export interface DuplicateParcelInfo {
+  id: string;
+  trackingNumber: string;
+  pickupCode: string;
+  status: string;
+  statusLabel: string;
+  recipientName?: string | null;
+  recipientPhoneMasked?: string | null;
+  shelfNumber?: number | null;
+  shelfLayer?: number | null;
+  shelfPosition?: number | null;
+  inboundAt?: string | null;
+}
+
+export interface CheckTrackingResult {
+  exists: boolean;
+  trackingNumber: string;
+  message: string;
+  parcel?: DuplicateParcelInfo;
+}
+
 // 入库相关类型定义
 
 export type ParcelSize = 'small' | 'medium' | 'large';

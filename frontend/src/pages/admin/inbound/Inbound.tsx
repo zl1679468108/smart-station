@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as inboundService from '@/services/inbound';
+import { ApiError } from '@/services/api';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import {
   UNBOUND_FACE_HINT,
@@ -17,7 +18,13 @@ import {
 import { useCouriers, useInvalidateShelves, useShelves } from '@/hooks/useDictionary';
 import { useInvalidateDashboard } from '@/hooks/useDashboardData';
 import { useInvalidateInventoryList } from '@/hooks/useInventoryData';
-import type { BatchNotifySummary, InboundResult, ParcelSize, WaybillOcrResult } from '@/types/inbound';
+import type {
+  BatchNotifySummary,
+  DuplicateParcelInfo,
+  InboundResult,
+  ParcelSize,
+  WaybillOcrResult,
+} from '@/types/inbound';
 import type { Shelf } from '@/types/admin';
 import Icon from '@/components/ui/Icon';
 import PageHeader from '@/components/ui/PageHeader';
@@ -29,6 +36,86 @@ type Mode = 'scan' | 'manual' | 'batch';
 
 const SIZE_LABEL: Record<ParcelSize, string> = { small: '小件', medium: '中件', large: '大件' };
 const SIZE_ORDER: ParcelSize[] = ['small', 'medium', 'large'];
+
+/** 运单重复预检 hook */
+function useTrackingDuplicateCheck(trackingNumber: string) {
+  const [dup, setDup] = useState<DuplicateParcelInfo | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [dupMessage, setDupMessage] = useState('');
+
+  useEffect(() => {
+    const tn = trackingNumber.trim().toUpperCase();
+    if (tn.length < 6) {
+      setDup(null);
+      setDupMessage('');
+      setChecking(false);
+      return;
+    }
+    let cancelled = false;
+    setChecking(true);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const r = await inboundService.checkTracking(tn);
+          if (cancelled) return;
+          if (r.exists && r.parcel) {
+            setDup(r.parcel);
+            setDupMessage(r.message || '该运单已在库');
+          } else {
+            setDup(null);
+            setDupMessage('');
+          }
+        } catch {
+          if (!cancelled) {
+            setDup(null);
+            setDupMessage('');
+          }
+        } finally {
+          if (!cancelled) setChecking(false);
+        }
+      })();
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [trackingNumber]);
+
+  return { dup, checking, dupMessage, setDup, setDupMessage };
+}
+
+const DuplicateTrackingBanner: React.FC<{
+  parcel: DuplicateParcelInfo;
+  message?: string;
+}> = ({ parcel, message }) => {
+  const navigate = useNavigate();
+  return (
+    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
+      <p className="font-medium">⚠️ 运单已在驿站，请勿重复入库</p>
+      <p className="mt-1 leading-relaxed">{message || '该运单号当前仍在库/滞留/异常中。'}</p>
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-amber-900/90">
+        {parcel.pickupCode && <span>取件码 <strong className="font-mono">{parcel.pickupCode}</strong></span>}
+        {parcel.statusLabel && <span>状态 {parcel.statusLabel}</span>}
+        {parcel.shelfNumber != null && (
+          <span>
+            货架 {parcel.shelfNumber}
+            {parcel.shelfLayer != null ? `-${parcel.shelfLayer}` : ''}
+            {parcel.shelfPosition != null ? `-${parcel.shelfPosition}` : ''}
+          </span>
+        )}
+        {parcel.recipientPhoneMasked && <span>手机 {parcel.recipientPhoneMasked}</span>}
+      </div>
+      <button
+        type="button"
+        onClick={() => navigate(`/admin/inventory/${parcel.id}`)}
+        className="mt-2 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100"
+      >
+        查看在库详情
+      </button>
+    </div>
+  );
+};
+
 
 /** 手机号脱敏展示（连续同收件人提示用） */
 
@@ -335,6 +422,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const invalidateDashboard = useInvalidateDashboard();
   const invalidateInventoryList = useInvalidateInventoryList();
   const [trackingNumber, setTrackingNumber] = useState('');
+  const { dup, checking: checkingDup, dupMessage, setDup, setDupMessage } = useTrackingDuplicateCheck(trackingNumber);
   const [recipientName, setRecipientName] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('');
   const [size, setSize] = useState<ParcelSize>(() => loadLastParcelSize('small'));
@@ -379,6 +467,10 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       setError('请填写收件人姓名和手机号');
       return;
     }
+    if (dup) {
+      setError(dupMessage || '该运单已在库，不可重复入库');
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await inboundService.inbound({
@@ -415,6 +507,10 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         inputRef.current?.select();
       }, 30);
     } catch (err) {
+      if (err instanceof ApiError && err.data && typeof err.data === 'object' && (err.data as any).id) {
+        setDup(err.data as DuplicateParcelInfo);
+        setDupMessage(err.message);
+      }
       setError(err instanceof Error ? err.message : '入库失败');
     } finally {
       setSubmitting(false);
@@ -424,7 +520,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   return (
     <div className="space-y-4">
       <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-gray-200 bg-white p-5">
-        <WaybillOcrUploader disabled={submitting} onResult={handleOcrResult} />
+        <WaybillOcrUploader disabled={submitting || Boolean(dup)} onResult={handleOcrResult} />
         <div>
           <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>运单号（扫码）</label>
           <input
@@ -433,9 +529,19 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             value={trackingNumber}
             onChange={(e) => setTrackingNumber(e.target.value)}
             placeholder="扫描或输入运单号"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+            className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-primary ${
+              dup ? 'border-amber-400 bg-amber-50/40' : 'border-gray-300'
+            }`}
             disabled={submitting}
           />
+          {checkingDup && (
+            <p className="mt-1 text-[11px] text-gray-400">正在检查是否已入库…</p>
+          )}
+          {dup && (
+            <div className="mt-2">
+              <DuplicateTrackingBanner parcel={dup} message={dupMessage} />
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
@@ -561,10 +667,10 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || Boolean(dup)}
           className="w-full rounded-md bg-primary py-2.5 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
         >
-          {submitting ? '入库中...' : '确认入库'}
+          {submitting ? '入库中...' : dup ? '运单已在库' : '确认入库'}
         </button>
         <p className="text-center text-xs text-gray-400">快递公司自动识别，货架按包裹大小自动分配</p>
       </form>
@@ -707,6 +813,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     freightCollectAmount: '',
     codAmount: '',
   });
+  const { dup, checking: checkingDup, dupMessage, setDup, setDupMessage } = useTrackingDuplicateCheck(form.trackingNumber);
   const [keepRecipient, setKeepRecipient] = useState(true);
   // 快递公司列表走 React Query 缓存；下拉仅展示启用中的公司
   const { data: allCouriers = [] } = useCouriers();
@@ -736,6 +843,10 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     setResult(null);
     if (!form.trackingNumber.trim() || !form.recipientName.trim() || !form.recipientPhone.trim()) {
       setError('运单号、收件人姓名、手机号不能为空');
+      return;
+    }
+    if (dup) {
+      setError(dupMessage || '该运单已在库，不可重复入库');
       return;
     }
     setSubmitting(true);
@@ -777,6 +888,10 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         trackingInputRef.current?.select();
       }, 30);
     } catch (err) {
+      if (err instanceof ApiError && err.data && typeof err.data === 'object' && (err.data as any).id) {
+        setDup(err.data as DuplicateParcelInfo);
+        setDupMessage(err.message);
+      }
       setError(err instanceof Error ? err.message : '入库失败');
     } finally {
       setSubmitting(false);
@@ -795,9 +910,19 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
               type="text"
               value={form.trackingNumber}
               onChange={(e) => setForm({ ...form, trackingNumber: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-primary ${
+                dup ? 'border-amber-400 bg-amber-50/40' : 'border-gray-300'
+              }`}
               disabled={submitting}
             />
+            {checkingDup && (
+              <p className="mt-1 text-[11px] text-gray-400">正在检查是否已入库…</p>
+            )}
+            {dup && (
+              <div className="mt-2 sm:col-span-2">
+                <DuplicateTrackingBanner parcel={dup} message={dupMessage} />
+              </div>
+            )}
           </div>
           <div>
             <label className="mb-1 block text-sm text-gray-600">快递公司（留空自动识别）</label>
@@ -938,10 +1063,10 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || Boolean(dup)}
           className="rounded-md bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
         >
-          {submitting ? '入库中...' : '确认入库'}
+          {submitting ? '入库中...' : dup ? '运单已在库' : '确认入库'}
         </button>
       </form>
 

@@ -900,3 +900,14 @@
 | M61.1 | P1 | 交班前/班次页待收款提醒 | shifts | done | getCurrent 带 collectUnpaid；软提示+深链 |
 | M61.2 | P1 | 通知按手机号聚合 API | admin notify | done | GET /api/admin/notify/logs/by-phone |
 | M61.3 | P1 | NotifyTab 按手机号视图 | NotifyTab | done | 看明细/复制绑定话术/导出聚合 |
+
+
+---
+
+## M62 入库重复运单防呆 + 交班快照导出（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M62.1 | P1 | 运单预检 API + 冲突详情 | inbound | done | POST /api/inbound/check-tracking；Conflict 带取件码 |
+| M62.2 | P1 | 扫码/手动入库重复醒目提示 | inbound UI | done | 防提交；跳转库存详情 |
+| M62.3 | P2 | 交班快照/班次记录导出 CSV | shifts | done | 本班快照 + 历史本页 |

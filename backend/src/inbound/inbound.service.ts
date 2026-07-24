@@ -32,16 +32,13 @@ export class InboundService {
     const trackingNumber = dto.trackingNumber.trim().toUpperCase();
 
     // 1. 校验运单号在同驿站是否在库（避免重复入库）
-    const { data: exist } = await this.supabase
-      .getClient()
-      .from('ss_parcels')
-      .select('id, status')
-      .eq('tracking_number', trackingNumber)
-      .eq('station_id', stationId)
-      .in('status', ['in_stock', 'overdue', 'exception'])
-      .maybeSingle();
+    const exist = await this.findActiveByTracking(stationId, trackingNumber);
     if (exist) {
-      throw new ConflictException('该运单号在当前驿站已入库且未出库，不可重复入库');
+      throw new ConflictException({
+        message: this.duplicateMessage(exist),
+        error: 'DUPLICATE_TRACKING',
+        data: this.mapDuplicateParcel(exist),
+      });
     }
 
     // 2. 快递公司：显式 > 前缀识别；运单号必须能识别出快递公司
@@ -306,6 +303,93 @@ export class InboundService {
   }
 
   /** 按运单号前缀识别快递公司 */
+  /**
+   * 入库前运单预检：是否已在库/滞留/异常
+   * 用于扫码/手动录入时提前提醒店员，避免填完资料才撞重复。
+   */
+  async checkTracking(stationId: string, trackingNumberRaw: string) {
+    const trackingNumber = String(trackingNumberRaw || '').trim().toUpperCase();
+    if (!trackingNumber || trackingNumber.length < 4) {
+      throw new BadRequestException('请输入有效运单号');
+    }
+    const exist = await this.findActiveByTracking(stationId, trackingNumber);
+    if (!exist) {
+      return {
+        exists: false,
+        trackingNumber,
+        message: '运单号可用，可继续入库',
+      };
+    }
+    const parcel = this.mapDuplicateParcel(exist);
+    return {
+      exists: true,
+      trackingNumber,
+      message: this.duplicateMessage(exist),
+      parcel,
+    };
+  }
+
+  private async findActiveByTracking(stationId: string, trackingNumber: string) {
+    const { data, error } = await this.supabase
+      .getClient()
+      .from('ss_parcels')
+      .select(
+        `id, status, tracking_number, pickup_code, recipient_name, recipient_phone, inbound_at, shelf_layer, shelf_position,
+         shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number)`,
+      )
+      .eq('tracking_number', trackingNumber)
+      .eq('station_id', stationId)
+      .in('status', ['in_stock', 'overdue', 'exception'])
+      .maybeSingle();
+    if (error) throw new Error(`查询运单失败: ${error.message}`);
+    return data || null;
+  }
+
+  private mapDuplicateParcel(exist: any) {
+    const shelf = Array.isArray(exist.shelf) ? exist.shelf[0] : exist.shelf;
+    const statusLabel =
+      exist.status === 'in_stock'
+        ? '在库'
+        : exist.status === 'overdue'
+          ? '滞留'
+          : exist.status === 'exception'
+            ? '异常'
+            : String(exist.status || '');
+    const phone = String(exist.recipient_phone || '');
+    const phoneMasked =
+      phone.length >= 7 ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : phone ? `****${phone.slice(-4)}` : '';
+    return {
+      id: exist.id as string,
+      trackingNumber: exist.tracking_number as string,
+      pickupCode: (exist.pickup_code as string) || '',
+      status: exist.status as string,
+      statusLabel,
+      recipientName: (exist.recipient_name as string) || null,
+      recipientPhoneMasked: phoneMasked || null,
+      shelfNumber: shelf?.number != null ? Number(shelf.number) : null,
+      shelfLayer: exist.shelf_layer != null ? Number(exist.shelf_layer) : null,
+      shelfPosition: exist.shelf_position != null ? Number(exist.shelf_position) : null,
+      inboundAt: exist.inbound_at || null,
+    };
+  }
+
+  private duplicateMessage(exist: any): string {
+    const p = this.mapDuplicateParcel(exist);
+    const shelf =
+      p.shelfNumber != null
+        ? `货架 ${p.shelfNumber}${p.shelfLayer != null ? `-${p.shelfLayer}` : ''}${
+            p.shelfPosition != null ? `-${p.shelfPosition}` : ''
+          }`
+        : '';
+    const parts = [
+      `运单 ${p.trackingNumber} 已在驿站（${p.statusLabel}）`,
+      p.pickupCode ? `取件码 ${p.pickupCode}` : '',
+      shelf,
+      '不可重复入库',
+    ].filter(Boolean);
+    return parts.join('，');
+  }
+
   private async identifyCourier(trackingNumber: string) {
     const upper = trackingNumber.toUpperCase();
     const { data, error } = await this.supabase

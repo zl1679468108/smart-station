@@ -12,6 +12,46 @@ type Tab = 'duty' | 'history' | 'performance';
 
 const money = (n: number) => `¥${Number(n || 0).toFixed(2)}`;
 
+function downloadText(filename: string, content: string, mime = 'text/csv;charset=utf-8;') {
+  const blob = new Blob(['\uFEFF' + content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function escapeCsv(v: string | number | null | undefined) {
+  return `"${String(v ?? '').replace(/"/g, '""')}"`;
+}
+
+function shiftSnapshotCsv(s: ShiftItem) {
+  const rows = [
+    ['字段', '值'],
+    ['班次ID', s.id],
+    ['状态', s.status === 'open' ? '进行中' : '已交班'],
+    ['店员', s.operatorName || ''],
+    ['开班时间', s.startedAt || ''],
+    ['交班时间', s.endedAt || ''],
+    ['本班入库', s.inboundCount],
+    ['本班出库', s.outboundCount],
+    ['收款笔数', s.collectPaidCount],
+    ['收款合计', s.collectPaidTotal],
+    ['现金', s.collectCash],
+    ['微信', s.collectWechat],
+    ['支付宝', s.collectAlipay],
+    ['其他', s.collectOther],
+    ['在库盘点', s.stockCount ?? ''],
+    ['在库待收款', s.collectUnpaid ?? ''],
+    ['开班备注', s.openingNote || ''],
+    ['交班备注', s.closingNote || ''],
+  ];
+  return rows.map((r) => r.map(escapeCsv).join(',')).join('\n');
+}
+
 function fmtMin(m: number): string {
   if (!m || m < 0) return '0 分';
   const h = Math.floor(m / 60);
@@ -200,18 +240,32 @@ const ShiftsPage: React.FC = () => {
                     <p className="mt-1 text-xs text-gray-500">开班备注：{current.openingNote}</p>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStockCount(
-                      current.stockCount != null ? String(current.stockCount) : '',
-                    );
-                    setCloseOpen(true);
-                  }}
-                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primaryHover"
-                >
-                  交班
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      downloadText(
+                        `班次快照-${(current.operatorName || '店员').replace(/\s+/g, '')}-${String(current.startedAt || '').slice(0, 10)}.csv`,
+                        shiftSnapshotCsv(current),
+                      );
+                    }}
+                    className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    导出本班快照
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStockCount(
+                        current.stockCount != null ? String(current.stockCount) : '',
+                      );
+                      setCloseOpen(true);
+                    }}
+                    className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primaryHover"
+                  >
+                    交班
+                  </button>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <StatCard label="本班入库" value={String(current.inboundCount)} />
@@ -283,6 +337,54 @@ const ShiftsPage: React.FC = () => {
 
       {tab === 'history' && (
         <div className="space-y-3">
+          {history.length > 0 && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  const header = [
+                    '店员',
+                    '开班',
+                    '交班',
+                    '入库',
+                    '出库',
+                    '收款笔数',
+                    '收款合计',
+                    '现金',
+                    '微信',
+                    '支付宝',
+                    '其他',
+                    '状态',
+                    '开班备注',
+                    '交班备注',
+                  ];
+                  const rows = history.map((s) => [
+                    s.operatorName || '',
+                    s.startedAt || '',
+                    s.endedAt || '',
+                    s.inboundCount,
+                    s.outboundCount,
+                    s.collectPaidCount,
+                    s.collectPaidTotal,
+                    s.collectCash,
+                    s.collectWechat,
+                    s.collectAlipay,
+                    s.collectOther,
+                    s.status === 'open' ? '进行中' : '已交班',
+                    s.openingNote || '',
+                    s.closingNote || '',
+                  ]);
+                  const csv = [header, ...rows]
+                    .map((r) => r.map(escapeCsv).join(','))
+                    .join('\n');
+                  downloadText(`班次记录-第${historyPage}页.csv`, csv);
+                }}
+                className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+              >
+                导出本页 CSV
+              </button>
+            </div>
+          )}
           {historyLoading ? (
             <div className="py-16 text-center text-sm text-gray-400">加载中…</div>
           ) : history.length === 0 ? (

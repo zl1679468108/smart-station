@@ -34,6 +34,19 @@ function formatRequestError(err: unknown): string {
   return msg;
 }
 
+/** 带业务 data 的 API 错误（如重复运单详情） */
+export class ApiError extends Error {
+  status?: number;
+  data?: unknown;
+
+  constructor(message: string, opts?: { status?: number; data?: unknown }) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = opts?.status;
+    this.data = opts?.data;
+  }
+}
+
 function notifyRequestError(message: string): void {
   const now = Date.now();
   if (message === lastErrorNotifyMessage && now - lastErrorNotifyAt < ERROR_NOTIFY_DEDUP_MS) {
@@ -142,11 +155,17 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
     const result = (await response.json().catch(() => null)) as ApiResponse<T> | null;
 
     if (!response.ok) {
-      throw new Error(result?.message || `请求失败（${response.status}）`);
+      throw new ApiError(result?.message || `请求失败（${response.status}）`, {
+        status: response.status,
+        data: result?.data,
+      });
     }
 
     if (!result || !result.success) {
-      throw new Error(result?.message || '请求失败');
+      throw new ApiError(result?.message || '请求失败', {
+        status: response.status,
+        data: result?.data,
+      });
     }
 
     const showSuccess = options.notifySuccess ?? isMutation;
@@ -164,6 +183,9 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
     // 用友好文案重抛，页面内联 error 与 toast 一致（避免展示英文 Failed to fetch）
     if (shouldNotify && showError && options.errorMessage !== false) {
       notifyRequestError(options.errorMessage || friendly);
+    }
+    if (err instanceof ApiError) {
+      throw new ApiError(friendly, { status: err.status, data: err.data });
     }
     throw new Error(friendly);
   } finally {

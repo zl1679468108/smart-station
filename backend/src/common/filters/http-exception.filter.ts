@@ -26,6 +26,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = '服务器内部错误';
+    let data: unknown = null;
 
     if (
       exception instanceof SupabaseNetworkError ||
@@ -37,6 +38,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       status = exception.getStatus();
       const res = exception.getResponse();
       // 支持自定义 message 字符串，也支持 class-validator 返回的 { message: string[] } 结构
+      // 以及业务冲突附带 data（如重复运单详情）
       if (typeof res === 'string') {
         message = res;
       } else if (typeof res === 'object' && res !== null) {
@@ -45,6 +47,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
           message = r.message.join('; ');
         } else if (typeof r.message === 'string') {
           message = r.message;
+        }
+        if (r.data !== undefined) {
+          data = r.data;
         }
       }
     } else {
@@ -55,7 +60,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     response.status(status).json({
       success: false,
       message,
-      data: null,
+      data,
     });
   }
 }

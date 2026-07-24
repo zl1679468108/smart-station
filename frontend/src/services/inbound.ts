@@ -1,6 +1,22 @@
 // 入库 API 服务
 import { post } from './api';
-import type { InboundPayload, InboundResult, BatchInboundResult } from '@/types/inbound';
+import type {
+  BatchInboundResult,
+  CheckTrackingResult,
+  InboundPayload,
+  InboundResult,
+} from '@/types/inbound';
+
+/** 入库前运单预检 */
+export function checkTracking(
+  trackingNumber: string,
+): Promise<CheckTrackingResult> {
+  return post(
+    '/api/inbound/check-tracking',
+    { trackingNumber },
+    { successMessage: false, notifyError: false, skipLoading: true },
+  );
+}
 
 export function inbound(payload: InboundPayload): Promise<InboundResult> {
   return post<InboundResult>('/api/inbound', payload, { successMessage: '包裹已入库' });
