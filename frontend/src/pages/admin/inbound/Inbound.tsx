@@ -8,6 +8,7 @@ import {
   UNBOUND_FACE_HINT,
   buildBindGuideScript,
   buildFacePickupScript,
+  buildUnboundFollowupScript,
 } from '@/utils/staffScripts';
 import {
   loadLastParcelSize,
@@ -1820,12 +1821,16 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     downloadText(`批量入库失败_${stamp}.csv`, csv);
   };
 
+  const getUnpushedSuccesses = () =>
+    (result?.successes || []).filter((s) => s.notifyEnabled && !s.customerPushed);
+
   const handleExportResultSuccesses = () => {
     if (!result?.successes?.length) return;
-    const header = ['运单号', '取件码', '通知状态', '是否已私信', '是否已绑定'];
+    const header = ['运单号', '取件码', '手机号', '通知状态', '是否已私信', '是否已绑定'];
     const rows = result.successes.map((s) => [
       s.trackingNumber,
       s.pickupCode || '',
+      s.recipientPhone || '',
       s.staffMessage || '',
       s.customerPushed ? '是' : '否',
       s.customerBound ? '是' : '否',
@@ -1834,6 +1839,74 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '');
     downloadText(`批量入库成功_${stamp}.csv`, csv);
   };
+
+  const handleExportUnpushedSuccesses = () => {
+    const list = getUnpushedSuccesses();
+    if (list.length === 0) {
+      notifyError('本批没有未私信成功件可导出');
+      return;
+    }
+    const header = ['运单号', '取件码', '手机号', '是否已绑定', '通知状态'];
+    const rows = list.map((s) => [
+      s.trackingNumber,
+      s.pickupCode || '',
+      s.recipientPhone || '',
+      s.customerBound ? '是' : '否',
+      s.staffMessage || '',
+    ]);
+    const csv = [header, ...rows].map((r) => r.map((c) => escapeCsv(c)).join(',')).join('\n');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '');
+    downloadText(`批量入库未私信_${stamp}.csv`, csv);
+    notifySuccess(`已导出未私信 ${list.length} 件`);
+  };
+
+  const handleCopyUnpushedFollowup = async () => {
+    const list = getUnpushedSuccesses();
+    if (list.length === 0) {
+      notifyError('本批没有未私信客户可复制');
+      return;
+    }
+    // 按手机号聚合
+    const map = new Map<
+      string,
+      { phone: string; unbound: number; pushFailed: number; recipientName?: string | null }
+    >();
+    for (const s of list) {
+      const phone = String(s.recipientPhone || '').trim();
+      if (!phone) continue;
+      const cur = map.get(phone) || {
+        phone,
+        unbound: 0,
+        pushFailed: 0,
+      };
+      if (s.customerBound) cur.pushFailed += 1;
+      else cur.unbound += 1;
+      map.set(phone, cur);
+    }
+    const items = Array.from(map.values());
+    if (items.length === 0) {
+      // 无手机号时退化为绑定话术 + 运单清单
+      const lines = list.map(
+        (s, i) =>
+          `${i + 1}. 运单 ${s.trackingNumber} 取件码 ${s.pickupCode || '-'}（${s.customerBound ? '私信失败' : '未绑定'}）`,
+      );
+      const text = [
+        `【批量入库·未私信跟进】共 ${list.length} 件（仅店内，勿发群）`,
+        ...lines,
+        '',
+        buildBindGuideScript(),
+      ].join('\n');
+      const ok = await copyText(text);
+      if (ok) notifySuccess(`已复制 ${list.length} 件未私信跟进（无完整手机号）`);
+      else notifyError('复制失败');
+      return;
+    }
+    const text = buildUnboundFollowupScript(items);
+    const ok = await copyText(text);
+    if (ok) notifySuccess(`已复制 ${items.length} 人未私信跟进清单（勿发群）`);
+    else notifyError('复制失败');
+  };
+
 
   const handleSubmit = async () => {
     if (submitting || prechecking) return;
@@ -2153,6 +2226,25 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                   导出成功清单
                 </button>
               )}
+              {result.successes &&
+                result.successes.some((s) => s.notifyEnabled && !s.customerPushed) && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleExportUnpushedSuccesses}
+                      className="rounded-md border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-100"
+                    >
+                      导出未私信
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyUnpushedFollowup()}
+                      className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+                    >
+                      复制未私信跟进清单
+                    </button>
+                  </>
+                )}
               {result.errors.length > 0 && (
                 <button
                   type="button"

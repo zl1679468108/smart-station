@@ -6,6 +6,7 @@ import { notifyError, notifySuccess } from '@/utils/notification';
 import { buildBindGuideScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 import EmptyState from '@/components/ui/EmptyState';
+import NotifyReachBar from '@/components/NotifyReachBar';
 
 const money = (n: number) => `¥${Number(n || 0).toFixed(2)}`;
 
@@ -49,6 +50,7 @@ const CashDayPanel: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      <NotifyReachBar context="finance" />
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="date"
@@ -83,6 +85,26 @@ const CashDayPanel: React.FC = () => {
           className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
         >
           今日通知
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/admin/system?tab=notify&filter=unbound&view=byPhone')}
+          className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-medium text-orange-900 hover:bg-orange-100"
+        >
+          未绑定跟进
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            void (async () => {
+              const ok = await copyText(buildBindGuideScript());
+              if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+              else notifyError('复制失败');
+            })();
+          }}
+          className="rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-sm text-orange-800 hover:bg-orange-50"
+        >
+          复制绑定话术
         </button>
         <button
           type="button"
