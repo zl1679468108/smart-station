@@ -217,6 +217,25 @@ const AppointmentsPage: React.FC = () => {
         }
       />
 
+      {lastNotify && (
+        <div className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-violet-100 bg-violet-50 px-3 py-2.5">
+          <div>
+            <p className="text-sm font-medium text-violet-900">预约通知回执</p>
+            <p className="mt-0.5 text-xs text-violet-900/90">{lastNotify}</p>
+            <p className="mt-1 text-[11px] text-violet-800/80">
+              未绑定微信的客户请口头告知时段；可引导对方在查件页扫一扫收码。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLastNotify(null)}
+            className="text-[11px] text-violet-700 underline"
+          >
+            关闭
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4">
         <label className="text-xs text-gray-600">
           预约日期
