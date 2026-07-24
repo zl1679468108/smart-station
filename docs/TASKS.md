@@ -1180,3 +1180,10 @@
 | M93.1 | P1 | 滞留页今日触达条 | overdue | done | 发提醒前看未绑定 |
 | M93.2 | P1 | 异常页今日触达条 | exception | done | 补发/联系前跟进 |
 | M93.3 | P2 | NotifyReachBar 场景文案 | components | done | overdue/exception 上下文 |
+
+## M94 查件页绑定转化强化（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M94.1 | P1 | 查到件结果两步文案 | query Home | done | 先记码再绑定 |
+| M94.2 | P1 | 手机端底部固定「去绑定」 | query Home | done | 下滑不丢入口 |
+| M94.3 | P2 | 未查到也引导绑定 | query Home | done | 有件微信提醒 |

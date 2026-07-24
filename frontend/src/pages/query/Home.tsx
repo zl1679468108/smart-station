@@ -182,7 +182,17 @@ const Home: React.FC = () => {
       <main className="flex flex-1 flex-col overflow-hidden lg:flex-row">
         {/* 左侧/上部：输入区 + 结果 */}
         <div className="page-layout-main flex-1 overflow-auto lg:order-1">
-          <div className="mx-auto max-w-2xl">
+          <div
+            className={`mx-auto max-w-2xl ${
+              items !== null &&
+              layoutData?.station?.notifyGuide?.bindEnabled !== false &&
+              bindStatus &&
+              !bindStatus.bound &&
+              !bindForceOpen
+                ? 'pb-28 sm:pb-0'
+                : ''
+            }`}
+          >
             {tab === 'phone' && (
               <PhoneQueryView
                 onSubmit={handleResult}
@@ -236,6 +246,33 @@ const Home: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* 手机端底部绑定转化：查到件后下滑不会丢掉「去绑定」 */}
+      {items !== null &&
+        layoutData?.station?.notifyGuide?.bindEnabled !== false &&
+        bindStatus &&
+        !bindStatus.bound &&
+        !bindForceOpen && (
+          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-orange-200 bg-white/95 px-4 py-3 shadow-[0_-6px_24px_rgba(15,23,42,0.12)] backdrop-blur sm:hidden">
+            <div className="mx-auto flex max-w-2xl items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-900">
+                  {items.length > 0 ? '先记下取件码，再绑定收下次' : '还没查到？先绑定有件提醒'}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-snug text-gray-500">
+                  绑定后微信私信取件码；群里不会公开你的码。没绑定就到店查/看货架。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={openBindPanel}
+                className="min-h-[44px] shrink-0 rounded-md bg-primary px-3 text-sm font-semibold text-white hover:bg-primaryHover"
+              >
+                去绑定
+              </button>
+            </div>
+          </div>
+        )}
 
       {/* Toast */}
       {toast && (
@@ -638,7 +675,7 @@ const ResultView: React.FC<{
               onClick={onBindClick}
               className="mt-3 min-h-[44px] w-full rounded-md bg-primary px-3 text-sm font-medium text-white hover:bg-primaryHover"
             >
-              扫一扫，有件自动收码
+              没查到也先绑定：有件微信提醒
             </button>
           )}
         </div>
@@ -660,11 +697,20 @@ const ResultView: React.FC<{
         </div>
       ) : (
         <div className="rounded-xl border-2 border-primary/30 bg-orange-50 px-4 py-3 shadow-sm">
-          <p className="text-sm font-semibold text-gray-900">扫一扫，有件自动收码</p>
-          <p className="mt-1 text-xs leading-relaxed text-gray-600">
-            {lastQueryPhone ? `当前查询 ${phoneHint}。` : ''}
-            先记下下方取件码到店取件。再花 1 分钟绑定：下次包裹到了，微信直接告诉你取件码。
-            <span className="text-gray-500">（群里不会公开你的码）</span>
+          <p className="text-sm font-semibold text-gray-900">两步取件更省心</p>
+          <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-gray-700">
+            <li>
+              <strong className="font-semibold text-gray-900">先记下下方取件码</strong>
+              ，到店找货架或请店员帮忙（没绑定也能取）。
+            </li>
+            <li>
+              <strong className="font-semibold text-gray-900">再花约 1 分钟绑定微信</strong>
+              {lastQueryPhone ? `（${phoneHint}）` : ''}
+              ：下次包裹到了，微信直接告诉你取件码。
+            </li>
+          </ol>
+          <p className="mt-2 text-[11px] text-gray-500">
+            没绑定就到店查件或看货架；通知群里<strong className="font-medium text-gray-600">不会公开你的取件码</strong>。
           </p>
           {showBindCta && (
             <button
@@ -672,7 +718,7 @@ const ResultView: React.FC<{
               onClick={onBindClick}
               className="mt-3 min-h-[48px] w-full rounded-md bg-primary px-3 text-sm font-semibold text-white hover:bg-primaryHover sm:w-auto sm:min-w-[200px] sm:px-5"
             >
-              现在绑定（约 1 分钟）
+              现在绑定，下次自动收码
             </button>
           )}
         </div>
