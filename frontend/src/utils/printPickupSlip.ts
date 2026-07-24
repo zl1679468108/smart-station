@@ -203,3 +203,121 @@ export function printPickupSlips(input: PickupSlipInput | PickupSlipInput[]): bo
 export function printPickupSlip(input: PickupSlipInput): boolean {
   return printPickupSlips(input);
 }
+
+export interface OutboundReceiptInput {
+  stationName?: string | null;
+  pickupCode?: string | null;
+  trackingNumber?: string | null;
+  recipientName?: string | null;
+  recipientPhone?: string | null;
+  amountText?: string | null;
+  outboundAt?: string | null;
+}
+
+/** 出库取件回执（给客户/店内留存，手机号脱敏） */
+export function printOutboundReceipt(input: OutboundReceiptInput): boolean {
+  const station = escapeHtml(String(input.stationName || '智能快递驿站').trim() || '智能快递驿站');
+  const code = escapeHtml(String(input.pickupCode || '').trim() || '—');
+  const tracking = escapeHtml(String(input.trackingNumber || '').trim() || '—');
+  const name = escapeHtml(maskName(input.recipientName));
+  const phone = escapeHtml(maskPhone(input.recipientPhone));
+  const amount = escapeHtml(String(input.amountText || '').trim());
+  const time = escapeHtml(String(input.outboundAt || '').trim() || new Date().toLocaleString('zh-CN'));
+  const amountRow = amount
+    ? `<div class="row"><span>收款</span><strong>${amount}</strong></div>`
+    : '';
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>取件回执</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 8px;
+      color: #111;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #fff;
+    }
+    .slip {
+      width: 72mm;
+      max-width: 100%;
+      margin: 0 auto;
+      padding: 10px 6px 12px;
+      border: 1px dashed #bbb;
+    }
+    .station { text-align: center; font-size: 13px; font-weight: 600; }
+    .title { margin-top: 2px; text-align: center; font-size: 12px; color: #047857; font-weight: 700; }
+    .badge {
+      margin: 10px auto 8px;
+      width: fit-content;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #ecfdf5;
+      color: #047857;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .code {
+      margin: 6px 0 10px;
+      text-align: center;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 4px;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .row span { color: #666; flex-shrink: 0; }
+    .row strong { text-align: right; font-weight: 600; word-break: break-all; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .tip {
+      margin-top: 10px;
+      padding-top: 6px;
+      border-top: 1px dashed #ccc;
+      text-align: center;
+      font-size: 10px;
+      color: #555;
+      line-height: 1.4;
+    }
+    @media print {
+      body { padding: 0; }
+      .slip { border: none; }
+    }
+  </style>
+</head>
+<body>
+  <section class="slip">
+    <div class="station">${station}</div>
+    <div class="title">取件回执</div>
+    <div class="badge">已取件</div>
+    <div class="code">${code}</div>
+    <div class="row"><span>运单号</span><strong class="mono">${tracking}</strong></div>
+    <div class="row"><span>收件人</span><strong>${name} ${phone}</strong></div>
+    ${amountRow}
+    <div class="row"><span>出库时间</span><strong>${time}</strong></div>
+    <div class="tip">感谢取件 · 如有疑问请到店出示本回执</div>
+  </section>
+  <script>
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        try { window.focus(); window.print(); } catch (e) {}
+      }, 80);
+    });
+  </script>
+</body>
+</html>`;
+  const win = window.open('', '_blank', 'noopener,noreferrer,width=480,height=720');
+  if (!win) return false;
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  return true;
+}

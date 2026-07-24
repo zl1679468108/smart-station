@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '@/utils/auth';
 import * as outboundService from '@/services/outbound';
 import * as inventoryService from '@/services/inventory';
 import { useInvalidateShelves } from '@/hooks/useDictionary';
@@ -8,6 +9,7 @@ import { useInvalidateInventoryDetail, useInvalidateInventoryList } from '@/hook
 import { useInvalidateOutboundRecords, useOutboundRecords } from '@/hooks/useOutboundData';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import { copyText } from '@/utils/stationVisit';
+import { printOutboundReceipt } from '@/utils/printPickupSlip';
 import {
   buildCollectReceiptScript,
   buildCollectWaiveScript,
@@ -96,6 +98,9 @@ const Outbound: React.FC = () => {
 
 // ============ 人工辅助出库（查询 + 确认两步流程） ============
 const ManualOutbound: React.FC = () => {
+  const { stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const invalidateShelves = useInvalidateShelves();
@@ -367,6 +372,23 @@ const ManualOutbound: React.FC = () => {
               <OutboundBindNudge phone={lastReceipt.phone} variant="admin" />
             </div>
             <div className="flex shrink-0 flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const ok = printOutboundReceipt({
+                    stationName,
+                    pickupCode: lastReceipt.pickupCode,
+                    trackingNumber: lastReceipt.trackingNumber,
+                    recipientPhone: lastReceipt.phone,
+                    amountText: lastReceipt.amountText,
+                  });
+                  if (ok) notifySuccess('已打开取件回执打印预览');
+                  else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+                }}
+                className="rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+              >
+                打印回执
+              </button>
               {lastReceipt.script && (
                 <button
                   type="button"

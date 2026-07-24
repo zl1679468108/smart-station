@@ -1,3 +1,4 @@
+import { useAuth } from '@/utils/auth';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as outboundService from '@/services/outbound';
 import { useInvalidateShelves } from '@/hooks/useDictionary';
@@ -7,6 +8,7 @@ import { useInvalidateOutboundRecords } from '@/hooks/useOutboundData';
 import type { OutboundResult } from '@/types/outbound';
 import Icon from '@/components/ui/Icon';
 import { useDashboard } from '@/hooks/useDashboardData';
+import { printOutboundReceipt } from '@/utils/printPickupSlip';
 import OutboundBindNudge, { type OutboundBindState } from '@/components/OutboundBindNudge';
 
 type Phase = 'scan' | 'submitting' | 'success' | 'error';
@@ -15,6 +17,9 @@ type Phase = 'scan' | 'submitting' | 'success' | 'error';
 // 扫码枪作为键盘输入设备会向 input 注入文本并回车，因此输入框是核心交互
 // 摄像头 BarcodeDetector 作为可选增强（部分浏览器支持）
 const Scan: React.FC = () => {
+  const { stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const invalidateShelves = useInvalidateShelves();
   const invalidateDashboard = useInvalidateDashboard();
   const invalidateInventoryDetail = useInvalidateInventoryDetail();
@@ -214,12 +219,34 @@ const Scan: React.FC = () => {
           variant="scan"
           onStateChange={setBindNudgeState}
         />
-        <button
-          onClick={() => setPhase('scan')}
-          className="mt-5 rounded-md border border-white/60 px-6 py-2 text-sm text-white hover:bg-white/10"
-        >
-          立即继续扫码
-        </button>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              const ok = printOutboundReceipt({
+                stationName,
+                pickupCode: result.pickupCode,
+                trackingNumber: result.trackingNumber,
+                recipientName: result.recipientName,
+                recipientPhone: result.recipientPhone,
+              });
+              if (!ok) {
+                // scan 页尽量不打断，仅 console
+                // eslint-disable-next-line no-console
+                console.warn('打印窗口被拦截');
+              }
+            }}
+            className="rounded-md border border-white/60 bg-white/10 px-6 py-2 text-sm text-white hover:bg-white/20"
+          >
+            打印回执
+          </button>
+          <button
+            onClick={() => setPhase('scan')}
+            className="rounded-md border border-white/60 px-6 py-2 text-sm text-white hover:bg-white/10"
+          >
+            立即继续扫码
+          </button>
+        </div>
       </div>
     );
   }
