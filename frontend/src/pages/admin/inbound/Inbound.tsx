@@ -14,6 +14,13 @@ type Mode = 'scan' | 'manual' | 'batch';
 const SIZE_LABEL: Record<ParcelSize, string> = { small: '小件', medium: '中件', large: '大件' };
 const SIZE_ORDER: ParcelSize[] = ['small', 'medium', 'large'];
 
+/** 手机号脱敏展示（连续同收件人提示用） */
+function maskPhone(phone: string): string {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length >= 7) return `${digits.slice(0, 3)}****${digits.slice(-4)}`;
+  return phone || '';
+}
+
 // 入库管理页：扫码入库（主）/ 手动录入 / 批量导入（入口）
 const Inbound: React.FC = () => {
   const [mode, setMode] = useState<Mode>('scan');
@@ -168,6 +175,11 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const [result, setResult] = useState<InboundResult | null>(null);
   /** 本会话最近成功入库，便于连续扫码时回看取件码/通知 */
   const [recent, setRecent] = useState<InboundResult[]>([]);
+  /**
+   * 连续同收件人：成功后保留姓名/手机号/尺寸，只清空运单与金额
+   * 晚高峰同一人多件时少打字
+   */
+  const [keepRecipient, setKeepRecipient] = useState(true);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -214,13 +226,15 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       invalidateShelves();
       invalidateDashboard();
       invalidateInventoryList();
-      // 清空表单，聚焦回运单号输入框，便于连续扫码
+      // 运单/备注/金额每次清空；姓名手机按「连续同收件人」开关
       setTrackingNumber('');
-      setRecipientName('');
-      setRecipientPhone('');
       setNote('');
       setFreightCollectAmount('');
       setCodAmount('');
+      if (!keepRecipient) {
+        setRecipientName('');
+        setRecipientPhone('');
+      }
       // 稍后再聚焦，避免与成功区重绘抢焦点
       setTimeout(() => inputRef.current?.focus(), 30);
     } catch (err) {
@@ -269,6 +283,37 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             />
           </div>
         </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={keepRecipient}
+              onChange={(e) => setKeepRecipient(e.target.checked)}
+              disabled={submitting}
+              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+            />
+            连续同收件人（成功后保留姓名手机，只换运单）
+          </label>
+          {keepRecipient && (recipientName || recipientPhone) && (
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => {
+                setRecipientName('');
+                setRecipientPhone('');
+                setKeepRecipient(false);
+              }}
+              className="text-xs text-gray-500 hover:text-danger"
+            >
+              换收件人
+            </button>
+          )}
+        </div>
+        {keepRecipient && recipientName && recipientPhone && (
+          <p className="text-[11px] text-emerald-700">
+            下一件将继续给：{recipientName} · {maskPhone(recipientPhone)}
+          </p>
+        )}
         <SizeSelector value={size} onChange={setSize} disabled={submitting} shelves={shelves} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
@@ -390,6 +435,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     freightCollectAmount: '',
     codAmount: '',
   });
+  const [keepRecipient, setKeepRecipient] = useState(true);
   // 快递公司列表走 React Query 缓存；下拉仅展示启用中的公司
   const { data: allCouriers = [] } = useCouriers();
   const couriers = allCouriers.filter((c) => c.status === 'active');
@@ -440,17 +486,17 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       invalidateShelves();
       invalidateDashboard();
       invalidateInventoryList();
-      setForm({
+      setForm((prev) => ({
         trackingNumber: '',
         courierCompanyId: '',
-        recipientName: '',
-        recipientPhone: '',
-        size: 'small',
+        recipientName: keepRecipient ? prev.recipientName : '',
+        recipientPhone: keepRecipient ? prev.recipientPhone : '',
+        size: keepRecipient ? prev.size : 'small',
         shelfId: '',
         note: '',
         freightCollectAmount: '',
         codAmount: '',
-      });
+      }));
     } catch (err) {
       setError(err instanceof Error ? err.message : '入库失败');
     } finally {
@@ -510,6 +556,31 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
               disabled={submitting}
             />
           </div>
+        </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={keepRecipient}
+              onChange={(e) => setKeepRecipient(e.target.checked)}
+              disabled={submitting}
+              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+            />
+            连续同收件人（成功后保留姓名手机，只换运单）
+          </label>
+          {keepRecipient && (form.recipientName || form.recipientPhone) && (
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => {
+                setForm((prev) => ({ ...prev, recipientName: '', recipientPhone: '' }));
+                setKeepRecipient(false);
+              }}
+              className="text-xs text-gray-500 hover:text-danger"
+            >
+              换收件人
+            </button>
+          )}
         </div>
         <SizeSelector
           value={form.size}
