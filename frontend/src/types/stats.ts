@@ -22,6 +22,10 @@ export interface DashboardHourly {
 export interface DashboardTodo {
   overdueWarn: number;
   exceptionUnresolved: number;
+  /** 待处理寄件单 */
+  shippingPending?: number;
+  /** 已取件待发出 */
+  shippingPicked?: number;
 }
 
 /** 今日到件通知触达（工作台运营卡片） */

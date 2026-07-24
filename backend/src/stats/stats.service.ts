@@ -103,8 +103,11 @@ export class StatsService {
     const overdue = overdueRes.count || 0;
     const exception = exceptionRes.count || 0;
 
-    // 今日到件通知触达（ss_sms_logs.inbound_notice）+ 有效绑定人数
-    const notify = await this.getNotifyReach(stationId, todayStart, todayEnd);
+    // 寄件待办 + 今日到件通知触达（并行，失败不拖垮工作台）
+    const [shippingTodo, notify] = await Promise.all([
+      this.getShippingTodo(stationId),
+      this.getNotifyReach(stationId, todayStart, todayEnd),
+    ]);
 
     return {
       today: {
@@ -122,9 +125,47 @@ export class StatsService {
       todo: {
         overdueWarn: overdue,
         exceptionUnresolved: exception,
+        shippingPending: shippingTodo.pending,
+        shippingPicked: shippingTodo.picked,
       },
       notify,
     };
+  }
+
+  /** 寄件运营待办：待处理 / 已取件待发出 */
+  private async getShippingTodo(stationId: string) {
+    const empty = { pending: 0, picked: 0 };
+    try {
+      const [pendingRes, pickedRes] = await Promise.all([
+        this.supabase
+          .getClient()
+          .from('ss_shippings')
+          .select('id', { count: 'exact', head: true })
+          .eq('station_id', stationId)
+          .eq('status', 'pending'),
+        this.supabase
+          .getClient()
+          .from('ss_shippings')
+          .select('id', { count: 'exact', head: true })
+          .eq('station_id', stationId)
+          .eq('status', 'picked'),
+      ]);
+      if (pendingRes.error || pickedRes.error) {
+        const msg = String(pendingRes.error?.message || pickedRes.error?.message || '');
+        if (msg.includes('ss_shippings') || msg.includes('does not exist')) return empty;
+        // eslint-disable-next-line no-console
+        console.warn('[Stats] 寄件待办查询失败:', msg);
+        return empty;
+      }
+      return {
+        pending: pendingRes.count || 0,
+        picked: pickedRes.count || 0,
+      };
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[Stats] 寄件待办异常:', err);
+      return empty;
+    }
   }
 
   /**

@@ -579,6 +579,17 @@
 
 ---
 
+## 1.7.2 业务功能：寄件待办 + 状态推进打磨（2026-07-24）
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M42.1 | P1 | 工作台寄件待办 | stats + dashboard | done | `shippingPending`/`shippingPicked`；跳转 `?status=` |
+| M42.2 | P1 | 寄件状态机校验 | shipping | done | pending→picked/shipped/cancelled；picked→shipped/cancelled |
+| M42.3 | P1 | 寄件列表运营动作 | frontend/shipping | done | 深链筛选；防连点；取消确认；待处理「直接发出」 |
+| M42.4 | P2 | 文档 | docs | done | TASKS 同步 |
+
+---
+
 ## v1.0+ 后续版本规划
 
 > 5 个未实现模块的必要性判断（PRD §4.7-4.11 已有完整定义）：

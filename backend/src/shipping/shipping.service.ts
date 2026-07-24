@@ -246,8 +246,21 @@ export class ShippingService {
       throw new BadRequestException('已发出或已取消的寄件单不可再变更状态');
     }
 
+    // 状态机：待处理 → 已取件/取消；已取件 → 已发出/取消；允许待处理直接发出（到店即寄）
+    const allowed: Record<string, string[]> = {
+      pending: ['picked', 'shipped', 'cancelled'],
+      picked: ['shipped', 'cancelled'],
+    };
+    const next = String(dto.status || '');
+    const from = String(existing.status || '');
+    if (!(allowed[from] || []).includes(next)) {
+      throw new BadRequestException(
+        `状态不可从「${from}」变更为「${next}」，请按 待处理→已取件→已发出 推进`,
+      );
+    }
+
     const patch: Record<string, unknown> = {
-      status: dto.status,
+      status: next,
       updated_at: new Date().toISOString(),
     };
     if (dto.note !== undefined) patch.note = dto.note;

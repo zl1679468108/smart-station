@@ -301,6 +301,40 @@ const Dashboard: React.FC = () => {
                 </span>
               )}
             </button>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/shipping?status=pending')}
+              className="flex w-full flex-col rounded-md bg-sky-50 px-3 py-3 text-left hover:bg-sky-100/80"
+            >
+              <div className="flex w-full items-center justify-between">
+                <span className="text-sm text-gray-600">寄件待处理</span>
+                <span className="text-lg font-bold text-sky-700">
+                  {todo.shippingPending ?? 0}
+                </span>
+              </div>
+              {(todo.shippingPending ?? 0) === 0 ? (
+                <span className="mt-1 text-xs text-gray-400">暂无待处理寄件单</span>
+              ) : (
+                <span className="mt-1 text-xs text-sky-700/80">点击处理下单客户寄件</span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/shipping?status=picked')}
+              className="flex w-full flex-col rounded-md bg-indigo-50 px-3 py-3 text-left hover:bg-indigo-100/80"
+            >
+              <div className="flex w-full items-center justify-between">
+                <span className="text-sm text-gray-600">寄件待发出</span>
+                <span className="text-lg font-bold text-indigo-700">
+                  {todo.shippingPicked ?? 0}
+                </span>
+              </div>
+              {(todo.shippingPicked ?? 0) === 0 ? (
+                <span className="mt-1 text-xs text-gray-400">无待发出寄件</span>
+              ) : (
+                <span className="mt-1 text-xs text-indigo-700/80">已取件，待交快递发出</span>
+              )}
+            </button>
           </div>
         </div>
       </div>

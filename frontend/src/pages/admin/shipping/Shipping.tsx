@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import * as shippingService from '@/services/shipping';
 import { fetchCouriers } from '@/services/inventory';
 import type { CourierCompany } from '@/types/admin';
@@ -140,14 +141,43 @@ const OrdersTab: React.FC<{ couriers: CourierCompany[]; writable: boolean }> = (
   couriers,
   writable,
 }) => {
-  const [status, setStatus] = useState<'' | ShippingStatus>('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const statusFromQuery = searchParams.get('status') as ShippingStatus | null;
+  const initialStatus: '' | ShippingStatus =
+    statusFromQuery && ['pending', 'picked', 'shipped', 'cancelled'].includes(statusFromQuery)
+      ? statusFromQuery
+      : '';
+
+  const [status, setStatus] = useState<'' | ShippingStatus>(initialStatus);
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<ShippingItem[]>([]);
   const [total, setTotal] = useState(0);
+  const [advancingId, setAdvancingId] = useState<string | null>(null);
   const pageSize = 20;
+
+  useEffect(() => {
+    if (
+      statusFromQuery &&
+      ['pending', 'picked', 'shipped', 'cancelled'].includes(statusFromQuery) &&
+      statusFromQuery !== status
+    ) {
+      setStatus(statusFromQuery);
+      setPage(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFromQuery]);
+
+  const changeStatusFilter = (next: '' | ShippingStatus) => {
+    setStatus(next);
+    setPage(1);
+    const sp = new URLSearchParams(searchParams);
+    if (!next) sp.delete('status');
+    else sp.set('status', next);
+    setSearchParams(sp, { replace: true });
+  };
 
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<CreateShippingBody>(EMPTY_FORM);
@@ -231,11 +261,19 @@ const OrdersTab: React.FC<{ couriers: CourierCompany[]; writable: boolean }> = (
   };
 
   const onAdvance = async (item: ShippingItem, next: ShippingStatus) => {
+    if (advancingId) return;
+    if (next === 'cancelled') {
+      const ok = window.confirm(`确认取消寄件单 ${item.shippingNo}？取消后不可恢复。`);
+      if (!ok) return;
+    }
+    setAdvancingId(item.id);
     try {
       await shippingService.updateShippingStatus(item.id, next);
       await load();
     } catch (e: any) {
       notifyError(e?.message || '操作失败');
+    } finally {
+      setAdvancingId(null);
     }
   };
 
@@ -252,10 +290,7 @@ const OrdersTab: React.FC<{ couriers: CourierCompany[]; writable: boolean }> = (
           <button
             key={t.key || 'all'}
             type="button"
-            onClick={() => {
-              setStatus(t.key);
-              setPage(1);
-            }}
+            onClick={() => changeStatusFilter(t.key)}
             className={`rounded-full px-3 py-1.5 text-sm ${
               status === t.key
                 ? 'bg-primary text-white'
@@ -329,20 +364,33 @@ const OrdersTab: React.FC<{ couriers: CourierCompany[]; writable: boolean }> = (
                     </div>
                   </div>
                   {writable && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {action && (
                         <button
                           type="button"
-                          className="rounded-lg bg-primary px-3 py-1.5 text-xs text-white hover:bg-primary/90"
+                          disabled={advancingId === item.id}
+                          className="rounded-lg bg-primary px-3 py-1.5 text-xs text-white hover:bg-primary/90 disabled:opacity-60"
                           onClick={() => onAdvance(item, action.next)}
                         >
-                          {action.label}
+                          {advancingId === item.id ? '处理中…' : action.label}
+                        </button>
+                      )}
+                      {item.status === 'pending' && (
+                        <button
+                          type="button"
+                          disabled={advancingId === item.id}
+                          className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs text-primary hover:bg-primary/10 disabled:opacity-60"
+                          onClick={() => onAdvance(item, 'shipped')}
+                          title="到店即寄，跳过已取件"
+                        >
+                          直接发出
                         </button>
                       )}
                       {(item.status === 'pending' || item.status === 'picked') && (
                         <button
                           type="button"
-                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+                          disabled={advancingId === item.id}
+                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-60"
                           onClick={() => onAdvance(item, 'cancelled')}
                         >
                           取消
