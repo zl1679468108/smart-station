@@ -3,6 +3,7 @@
 # 用法：
 #   bash scripts/smoke-trial.sh
 #   API_BASE=http://127.0.0.1:3030 STATION_ID=xxx bash scripts/smoke-trial.sh
+#   SMOKE_TOKEN=... STATION_ID=... bash scripts/smoke-trial.sh   # 可选：带鉴权探测批量补发
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FAIL=0
@@ -11,7 +12,7 @@ ok() { echo "  ✓ $1"; }
 warn() { echo "  ! $1"; }
 bad() { echo "  ✗ $1"; FAIL=1; }
 
-echo "[smoke] 1/4 环境预检（preflight）"
+echo "[smoke] 1/5 环境预检（preflight）"
 if bash "$ROOT/scripts/preflight.sh"; then
   ok "preflight 通过"
 else
@@ -53,7 +54,7 @@ if [ -z "$STATION_ID" ]; then
 fi
 
 echo
-echo "[smoke] 2/4 后端健康检查  $API_BASE/api/health"
+echo "[smoke] 2/5 后端健康检查  $API_BASE/api/health"
 if ! command -v curl >/dev/null 2>&1; then
   bad "未安装 curl，无法探测 HTTP"
 else
@@ -74,7 +75,7 @@ else
 fi
 
 echo
-echo "[smoke] 3/4 查件公开引导  /api/kiosk/notify-guide"
+echo "[smoke] 3/5 查件公开引导  /api/kiosk/notify-guide"
 QS=""
 if [ -n "$STATION_ID" ]; then
   QS="?stationId=$(python3 -c 'import urllib.parse,os; print(urllib.parse.quote(os.environ["S"]))' S="$STATION_ID" 2>/dev/null || echo "$STATION_ID")"
@@ -129,7 +130,7 @@ if command -v curl >/dev/null 2>&1; then
 fi
 
 echo
-echo "[smoke] 4/4 前端可达性  $FE_BASE"
+echo "[smoke] 4/5 前端可达性  $FE_BASE"
 if command -v curl >/dev/null 2>&1; then
   set +e
   FE_BODY="$(curl -sS -m 8 -o /tmp/ss-smoke-fe.html -w '%{http_code}' "$FE_BASE/" 2>&1)"
@@ -150,9 +151,79 @@ if command -v curl >/dev/null 2>&1; then
 fi
 
 echo
+
+echo
+echo "[smoke] 5/5 批量补发路由挂载（无 token 应 401/403）"
+if command -v curl >/dev/null 2>&1; then
+  probe_auth_route() {
+    local name="$1" method="$2" path="$3" body="${4:-}"
+    local url="$API_BASE$path"
+    local tmp_hdr tmp_body code
+    tmp_hdr="$(mktemp 2>/dev/null || echo /tmp/ss-smoke-hdr.$$)"
+    tmp_body="$(mktemp 2>/dev/null || echo /tmp/ss-smoke-body.$$)"
+    set +e
+    if [ -n "$body" ]; then
+      code="$(curl -sS -m 8 -X "$method" "$url" \
+        -H 'Content-Type: application/json' \
+        -d "$body" \
+        -D "$tmp_hdr" -o "$tmp_body" -w '%{http_code}' 2>/tmp/ss-smoke-curl.err)"
+    else
+      code="$(curl -sS -m 8 -X "$method" "$url" \
+        -D "$tmp_hdr" -o "$tmp_body" -w '%{http_code}' 2>/tmp/ss-smoke-curl.err)"
+    fi
+    local rc=$?
+    set -e
+    if [ "$rc" -ne 0 ]; then
+      warn "$name 不可达（后端未起可忽略）"
+      return
+    fi
+    # 401/403 = 路由在且鉴权生效；400 = 已过鉴权但参数校验（有 token 时也可能）
+    if echo "$code" | grep -E '^(401|403)$' >/dev/null 2>&1; then
+      ok "$name 已挂载（HTTP $code 鉴权拦截正常）"
+    elif echo "$code" | grep -E '^(400|422)$' >/dev/null 2>&1; then
+      ok "$name 已挂载（HTTP $code 参数校验）"
+    elif echo "$code" | grep -E '^(404)$' >/dev/null 2>&1; then
+      bad "$name 404 未挂载：$path"
+    elif echo "$code" | grep -E '^(200|201)$' >/dev/null 2>&1; then
+      # 无 token 却 200 不正常，但若环境开了 Public 也不强失败
+      warn "$name 返回 $code（预期无 token 时 401/403，请确认鉴权）"
+    else
+      warn "$name HTTP $code（body: $(head -c 120 "$tmp_body" 2>/dev/null | tr '\n' ' ')）"
+    fi
+  }
+
+  probe_auth_route "通知批量补发" POST "/api/admin/notify/logs/resend-batch" '{"ids":[]}'
+  probe_auth_route "到件批量补发" POST "/api/inbound/resend-notice-batch" '{"ids":[]}'
+  probe_auth_route "滞留批量提醒" POST "/api/overdue/remind-batch" '{"ids":[]}'
+
+  # 可选：带 token 做空 ids 业务校验（不真正发送）
+  if [ -n "${SMOKE_TOKEN:-}" ] && [ -n "${STATION_ID:-}" ]; then
+    echo "  · 附加：带 token 校验批量补发空 ids（应 400）"
+    set +e
+    BODY="$(curl -sS -m 10 -X POST "$API_BASE/api/admin/notify/logs/resend-batch" \
+      -H "Authorization: Bearer $SMOKE_TOKEN" \
+      -H "x-station-id: $STATION_ID" \
+      -H 'Content-Type: application/json' \
+      -d '{"ids":[]}' 2>&1)"
+    RC=$?
+    set -e
+    if [ "$RC" -ne 0 ]; then
+      warn "带 token 探测失败：$BODY"
+    elif echo "$BODY" | grep -E '请选择|至少|ids|400|Bad|message' >/dev/null 2>&1; then
+      ok "通知批量补发空 ids 被业务/校验拦截（未真实发送）"
+    else
+      warn "带 token 响应未识别：$BODY"
+    fi
+  else
+    warn "未设 SMOKE_TOKEN+STATION_ID，跳过带鉴权空 ids 探测（可选）"
+  fi
+else
+  warn "无 curl，跳过批量补发路由探测"
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   echo "[smoke] 未通过。请对照 docs/TRIAL-CHECKLIST.md 检查环境与服务。"
   exit 1
 fi
-echo "[smoke] 通过。建议继续人工点验：入库 → 私信失败一键补发 → 查件绑定 → 出库 → 交班。"
+echo "[smoke] 通过。建议继续人工点验：入库 → 私信失败一键补发（通知页/库存批量） → 查件绑定 → 出库 → 交班。"
 echo "        清单：docs/TRIAL-CHECKLIST.md"
