@@ -15,9 +15,10 @@ import {
   useStatsPeakHours,
 } from '@/hooks/useStatsReport';
 import { useDashboard } from '@/hooks/useDashboardData';
+import * as adminService from '@/services/admin';
 import PageHeader from '@/components/ui/PageHeader';
 import { notifyError, notifySuccess } from '@/utils/notification';
-import { buildBindGuideScript } from '@/utils/staffScripts';
+import { buildBindGuideScript, buildUnboundFollowupScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 
 const GRANULARITY_TABS: { key: TrendGranularity; label: string; span: number }[] = [
@@ -63,6 +64,83 @@ const StatsPage: React.FC = () => {
     notifyToday && notifyToday.inboundNotices > 0
       ? Math.round((notifyToday.customerPushed / notifyToday.inboundNotices) * 100)
       : null;
+  const [exportingUnbound, setExportingUnbound] = useState(false);
+
+  const loadTodayUnboundPhones = async () => {
+    const res = await adminService.listNotifyLogPhoneSummary({
+      limit: 300,
+      todayOnly: true,
+      reach: 'unbound',
+      templateCode: 'inbound_notice',
+    });
+    return (res.items || []).filter((r) => Number(r.unbound || 0) > 0);
+  };
+
+  const copyTodayUnboundList = async () => {
+    if (exportingUnbound) return;
+    setExportingUnbound(true);
+    try {
+      const items = await loadTodayUnboundPhones();
+      if (items.length === 0) {
+        notifyError('今日暂无未绑定到件客户');
+        return;
+      }
+      const text = buildUnboundFollowupScript(
+        items.map((r) => ({
+          phone: r.phone,
+          phoneMasked: r.phoneMasked,
+          recipientName: r.recipientName,
+          unbound: r.unbound,
+          pushFailed: r.pushFailed,
+        })),
+      );
+      const ok = await copyText(text);
+      if (ok) notifySuccess(`已复制今日未绑定 ${items.length} 人清单（勿发群）`);
+      else notifyError('复制失败');
+    } catch (e: any) {
+      notifyError(e?.message || '加载未绑定清单失败');
+    } finally {
+      setExportingUnbound(false);
+    }
+  };
+
+  const exportTodayUnboundCsv = async () => {
+    if (exportingUnbound) return;
+    setExportingUnbound(true);
+    try {
+      const items = await loadTodayUnboundPhones();
+      if (items.length === 0) {
+        notifyError('今日暂无未绑定到件客户');
+        return;
+      }
+      const escape = (v: string | number | null | undefined) =>
+        `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const header = ['手机号', '脱敏', '姓名', '未绑定次数', '私信失败', '最近时间'];
+      const rows = items.map((r) => [
+        r.phone,
+        r.phoneMasked,
+        r.recipientName || '',
+        r.unbound,
+        r.pushFailed,
+        r.lastAt || '',
+      ]);
+      const csv = [header, ...rows].map((row) => row.map(escape).join(',')).join('\n');
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `今日未绑定到件_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      notifySuccess(`已导出未绑定 ${items.length} 人`);
+    } catch (e: any) {
+      notifyError(e?.message || '导出失败');
+    } finally {
+      setExportingUnbound(false);
+    }
+  };
 
   return (
     <div className="w-full space-y-4">
@@ -167,6 +245,22 @@ const StatsPage: React.FC = () => {
                   className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
                 >
                   按手机号跟进
+                </button>
+                <button
+                  type="button"
+                  disabled={exportingUnbound}
+                  onClick={() => void copyTodayUnboundList()}
+                  className="rounded-md border border-orange-300 bg-white px-2 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-50 disabled:opacity-60"
+                >
+                  {exportingUnbound ? '处理中…' : '复制今日未绑定清单'}
+                </button>
+                <button
+                  type="button"
+                  disabled={exportingUnbound}
+                  onClick={() => void exportTodayUnboundCsv()}
+                  className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-100 disabled:opacity-60"
+                >
+                  导出未绑定 CSV
                 </button>
               </div>
             )}

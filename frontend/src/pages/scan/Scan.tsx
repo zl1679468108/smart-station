@@ -6,6 +6,10 @@ import { useInvalidateInventoryDetail, useInvalidateInventoryList } from '@/hook
 import { useInvalidateOutboundRecords } from '@/hooks/useOutboundData';
 import type { OutboundResult } from '@/types/outbound';
 import Icon from '@/components/ui/Icon';
+import { useDashboard } from '@/hooks/useDashboardData';
+import { buildBindGuideScript } from '@/utils/staffScripts';
+import { copyText } from '@/utils/stationVisit';
+import { notifyError, notifySuccess } from '@/utils/notification';
 
 type Phase = 'scan' | 'submitting' | 'success' | 'error';
 
@@ -18,6 +22,8 @@ const Scan: React.FC = () => {
   const invalidateInventoryDetail = useInvalidateInventoryDetail();
   const invalidateInventoryList = useInvalidateInventoryList();
   const invalidateOutboundRecords = useInvalidateOutboundRecords();
+  const { data: dash } = useDashboard({ refetchInterval: 60000 });
+  const notify = dash?.notify;
   const [phase, setPhase] = useState<Phase>('scan');
   const [trackingNumber, setTrackingNumber] = useState('');
   const [error, setError] = useState('');
@@ -164,10 +170,10 @@ const Scan: React.FC = () => {
     }
   };
 
-  // 成功页停留 3 秒后返回扫描页（PRD 4.5.2）
+  // 成功页停留后返回扫描页；点复制会稍延长，避免打断
   useEffect(() => {
     if (phase !== 'success') return;
-    const t = setTimeout(() => setPhase('scan'), 3000);
+    const t = setTimeout(() => setPhase('scan'), 4500);
     return () => clearTimeout(t);
   }, [phase]);
 
@@ -179,7 +185,7 @@ const Scan: React.FC = () => {
           <Icon name="check" size={56} strokeWidth={3} />
         </div>
         <h1 className="mb-2 text-3xl font-bold">出库成功</h1>
-        <p className="mb-6 text-sm text-white/80">3 秒后自动返回扫描页</p>
+        <p className="mb-4 text-sm text-white/80">约 4 秒后自动返回扫描页</p>
         <div className="w-full max-w-sm space-y-2 rounded-lg bg-white/10 p-5 text-left text-sm">
           <div className="flex justify-between">
             <span className="text-white/70">运单号</span>
@@ -189,14 +195,37 @@ const Scan: React.FC = () => {
             <span className="text-white/70">收件人</span>
             <span>{result.recipientName}</span>
           </div>
+          <div className="flex justify-between gap-2">
+            <span className="shrink-0 text-white/70">手机</span>
+            <span className="font-mono">{result.recipientPhone || '-'}</span>
+          </div>
           <div className="flex justify-between">
             <span className="text-white/70">取件码</span>
             <span className="font-mono">{result.pickupCode || '-'}</span>
           </div>
         </div>
+        <div className="mt-4 w-full max-w-sm rounded-lg border border-white/25 bg-black/20 px-4 py-3 text-left text-xs leading-relaxed text-white/90">
+          <p className="font-medium text-white">取件时顺带引导绑定</p>
+          <p className="mt-1 text-white/75">
+            下次到件微信自动收码，少跑空。群里不会公开取件码。
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              void (async () => {
+                const ok = await copyText(buildBindGuideScript());
+                if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                else notifyError('复制失败');
+              })();
+            }}
+            className="mt-3 min-h-[44px] w-full rounded-md bg-white px-3 text-sm font-semibold text-emerald-800 hover:bg-white/90"
+          >
+            复制绑定话术
+          </button>
+        </div>
         <button
           onClick={() => setPhase('scan')}
-          className="mt-6 rounded-md border border-white/60 px-6 py-2 text-sm text-white hover:bg-white/10"
+          className="mt-5 rounded-md border border-white/60 px-6 py-2 text-sm text-white hover:bg-white/10"
         >
           立即继续扫码
         </button>
@@ -275,6 +304,17 @@ const Scan: React.FC = () => {
           </button>
         </div>
       </form>
+      {notify && notify.inboundNotices > 0 && (
+        <div className="relative z-10 mt-6 w-96 max-w-full rounded-lg border border-white/15 bg-black/45 px-3 py-2 text-left text-[11px] text-white/85">
+          <p>
+            今日到件触达：已私信 {notify.customerPushed}/{notify.inboundNotices}
+            {notify.customerUnbound > 0
+              ? ` · 未绑定 ${notify.customerUnbound}（取件时引导绑定）`
+              : ''}
+            {notify.customerPushFailed > 0 ? ` · 私信失败 ${notify.customerPushFailed}` : ''}
+          </p>
+        </div>
+      )}
     </div>
   );
 };
