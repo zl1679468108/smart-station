@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type {
   TrendResult,
   TrendGranularity,
@@ -6,13 +7,18 @@ import type {
   RetentionResult,
   PeakHoursResult,
 } from '@/types/stats-report';
+import type { DashboardNotify } from '@/types/stats';
 import {
   useStatsTrend,
   useStatsFunnel,
   useStatsRetention,
   useStatsPeakHours,
 } from '@/hooks/useStatsReport';
+import { useDashboard } from '@/hooks/useDashboardData';
 import PageHeader from '@/components/ui/PageHeader';
+import { notifyError, notifySuccess } from '@/utils/notification';
+import { buildBindGuideScript } from '@/utils/staffScripts';
+import { copyText } from '@/utils/stationVisit';
 
 const GRANULARITY_TABS: { key: TrendGranularity; label: string; span: number }[] = [
   { key: 'day', label: '日', span: 14 },
@@ -26,7 +32,15 @@ const RANGE_OPTIONS = [
   { value: 90, label: '近 90 天' },
 ];
 
+const STAGE_HINT: Record<string, string> = {
+  inbound: '窗口内新入库件数',
+  outbound: '其中已出库件数',
+  overdue: '当前仍滞留件数',
+  returned: '已退回件数',
+};
+
 const StatsPage: React.FC = () => {
+  const navigate = useNavigate();
   const [granularity, setGranularity] = useState<TrendGranularity>('day');
   const [days, setDays] = useState(30);
 
@@ -35,17 +49,132 @@ const StatsPage: React.FC = () => {
   const funnelQuery = useStatsFunnel(days);
   const retentionQuery = useStatsRetention(days);
   const peakQuery = useStatsPeakHours(days);
+  const dashboardQuery = useDashboard();
 
   const trend = trendQuery.data ?? null;
   const funnel = funnelQuery.data ?? null;
   const retention = retentionQuery.data ?? null;
   const peak = peakQuery.data ?? null;
+  const notifyToday: DashboardNotify | null = dashboardQuery.data?.notify ?? null;
   const rangeLoading =
     funnelQuery.isPending || retentionQuery.isPending || peakQuery.isPending;
 
+  const pushRate =
+    notifyToday && notifyToday.inboundNotices > 0
+      ? Math.round((notifyToday.customerPushed / notifyToday.inboundNotices) * 100)
+      : null;
+
   return (
     <div className="w-full space-y-4">
-      <PageHeader title="数据统计" description="业务量趋势、转化漏斗、滞留率与取件高峰" />
+      <PageHeader
+        title="数据统计"
+        description="看清入库出库走势、取件转化、滞留与高峰；今日触达可直接跟进未绑定客户"
+      />
+
+      {/* 今日到件触达（运营） */}
+      <section className="rounded-xl border border-orange-100 bg-orange-50/70 p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-medium text-gray-800">今日到件触达</h2>
+            <p className="mt-0.5 text-[11px] text-gray-600">
+              客户有没有真正收到取件码私信（与工作台同源）
+            </p>
+          </div>
+          {notifyToday && (
+            <div className="text-right text-xs text-gray-600">
+              <div>已绑定 {notifyToday.activeBindings} 人</div>
+              {pushRate != null && (
+                <div className="mt-0.5 font-medium text-gray-800">
+                  私信率 {pushRate}%（{notifyToday.customerPushed}/
+                  {notifyToday.inboundNotices}）
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {dashboardQuery.isPending && !notifyToday ? (
+          <p className="mt-3 text-xs text-gray-400">加载中…</p>
+        ) : notifyToday ? (
+          <>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => navigate('/admin/system?tab=notify&filter=pushed')}
+                className="rounded-full bg-white px-2.5 py-1 text-emerald-700 ring-1 ring-emerald-100 hover:bg-emerald-50"
+              >
+                已私信 {notifyToday.customerPushed}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  navigate('/admin/system?tab=notify&filter=unbound&view=byPhone')
+                }
+                className="rounded-full bg-white px-2.5 py-1 text-orange-800 ring-1 ring-orange-100 hover:bg-orange-50"
+              >
+                未绑定 {notifyToday.customerUnbound}
+              </button>
+              {notifyToday.customerPushFailed > 0 && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/admin/system?tab=notify&filter=push_failed')}
+                  className="rounded-full bg-white px-2.5 py-1 text-amber-800 ring-1 ring-amber-100 hover:bg-amber-50"
+                >
+                  私信失败 {notifyToday.customerPushFailed}
+                </button>
+              )}
+              {notifyToday.sendFailed > 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate('/admin/system?tab=notify&filter=failed&today=1')
+                  }
+                  className="rounded-full bg-white px-2.5 py-1 text-red-700 ring-1 ring-red-100 hover:bg-red-50"
+                >
+                  发送失败 {notifyToday.sendFailed}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => navigate('/admin/system?tab=notify&filter=inbound')}
+                className="rounded-full bg-white px-2.5 py-1 text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50"
+              >
+                到件通知 {notifyToday.inboundNotices}
+              </button>
+            </div>
+            {notifyToday.customerUnbound > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <p className="text-[11px] text-orange-900/90">
+                  未绑定客户收不到微信私信，请当面报码或引导绑定后再补发。
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void (async () => {
+                      const ok = await copyText(buildBindGuideScript());
+                      if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                      else notifyError('复制失败');
+                    })();
+                  }}
+                  className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+                >
+                  复制绑定话术
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate('/admin/system?tab=notify&filter=unbound&view=byPhone')
+                  }
+                  className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+                >
+                  按手机号跟进
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="mt-3 text-xs text-gray-500">暂无今日触达数据</p>
+        )}
+      </section>
 
       {/* 业务量趋势 */}
       <section className="rounded-xl bg-white p-4 shadow-sm">
@@ -94,20 +223,48 @@ const StatsPage: React.FC = () => {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* 转化漏斗 */}
         <section className="rounded-xl bg-white p-4 shadow-sm">
-          <h2 className="mb-3 text-sm font-medium text-gray-700">转化漏斗</h2>
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-medium text-gray-700">转化漏斗</h2>
+              <p className="mt-0.5 text-[11px] text-gray-500">
+                近 {days} 天：入库 → 出库 → 当前滞留 → 退回（百分比相对入库）
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/inventory?status=overdue')}
+              className="text-[11px] text-primary hover:underline"
+            >
+              看滞留库存
+            </button>
+          </div>
           {funnel ? <FunnelChart funnel={funnel} /> : <ChartEmpty loading={rangeLoading} />}
         </section>
 
         {/* 滞留率 */}
         <section className="rounded-xl bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-medium text-gray-700">滞留率</h2>
-            {retention && (
-              <span className="text-sm text-gray-500">
-                总体 <span className="font-semibold text-danger">{retention.rate}%</span>
-                （{retention.overdue}/{retention.total}）
-              </span>
-            )}
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-medium text-gray-700">滞留率</h2>
+              <p className="mt-0.5 text-[11px] text-gray-500">
+                近 {days} 天按快递公司对比，越高越要催取
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {retention && (
+                <span className="text-sm text-gray-500">
+                  总体 <span className="font-semibold text-danger">{retention.rate}%</span>
+                  （{retention.overdue}/{retention.total}）
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => navigate('/admin/overdue')}
+                className="text-[11px] text-primary hover:underline"
+              >
+                去发滞留提醒
+              </button>
+            </div>
           </div>
           {retention ? <RetentionChart retention={retention} /> : <ChartEmpty loading={rangeLoading} />}
         </section>
@@ -115,8 +272,13 @@ const StatsPage: React.FC = () => {
 
       {/* 取件高峰 */}
       <section className="rounded-xl bg-white p-4 shadow-sm">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-gray-700">取件高峰（按小时）</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-medium text-gray-700">取件高峰（按小时）</h2>
+            <p className="mt-0.5 text-[11px] text-gray-500">
+              近 {days} 天出库分布，便于安排人手与现场引导
+            </p>
+          </div>
           {peak && peak.peakHour != null && (
             <span className="text-sm text-gray-500">
               高峰时段 <span className="font-semibold text-primary">{peak.peakHour}:00</span>
@@ -208,9 +370,14 @@ const FunnelChart: React.FC<{ funnel: FunnelResult }> = ({ funnel }) => {
       {funnel.stages.map((s, i) => (
         <div key={s.key}>
           <div className="mb-0.5 flex items-center justify-between text-xs text-gray-500">
-            <span>{s.label}</span>
             <span>
-              {s.count} · {s.percent}%
+              {s.label}
+              {STAGE_HINT[s.key] ? (
+                <span className="ml-1 text-[11px] text-gray-400">（{STAGE_HINT[s.key]}）</span>
+              ) : null}
+            </span>
+            <span>
+              {s.count} 件 · {s.percent}%
             </span>
           </div>
           <div className="h-6 w-full overflow-hidden rounded bg-gray-100">
