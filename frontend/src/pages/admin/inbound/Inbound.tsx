@@ -1,6 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as inboundService from '@/services/inbound';
 import { notifyError, notifySuccess } from '@/utils/notification';
+import {
+  loadLastParcelSize,
+  playInboundSuccessBeep,
+  saveLastParcelSize,
+  isSuccessBeepEnabled,
+  setSuccessBeepEnabled,
+} from '@/utils/inboundOps';
 import { useCouriers, useInvalidateShelves, useShelves } from '@/hooks/useDictionary';
 import { useInvalidateDashboard } from '@/hooks/useDashboardData';
 import { useInvalidateInventoryList } from '@/hooks/useInventoryData';
@@ -253,7 +260,8 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const [trackingNumber, setTrackingNumber] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('');
-  const [size, setSize] = useState<ParcelSize>('small');
+  const [size, setSize] = useState<ParcelSize>(() => loadLastParcelSize('small'));
+  const [beepOn, setBeepOn] = useState(() => isSuccessBeepEnabled());
   const [note, setNote] = useState('');
   const [freightCollectAmount, setFreightCollectAmount] = useState('');
   const [codAmount, setCodAmount] = useState('');
@@ -310,6 +318,8 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       });
       setResult(res);
       setRecent((prev) => [res, ...prev].slice(0, 5));
+      saveLastParcelSize(size);
+      playInboundSuccessBeep();
       invalidateShelves();
       invalidateDashboard();
       invalidateInventoryList();
@@ -399,12 +409,34 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             </button>
           )}
         </div>
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={beepOn}
+            onChange={(e) => {
+              const on = e.target.checked;
+              setBeepOn(on);
+              setSuccessBeepEnabled(on);
+            }}
+            disabled={submitting}
+            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+          />
+          入库成功提示音（短哔一声）
+        </label>
         {keepRecipient && recipientName && recipientPhone && (
           <p className="text-[11px] text-emerald-700">
             下一件将继续给：{recipientName} · {maskPhone(recipientPhone)}
           </p>
         )}
-        <SizeSelector value={size} onChange={setSize} disabled={submitting} shelves={shelves} />
+        <SizeSelector
+          value={size}
+          onChange={(s) => {
+            setSize(s);
+            saveLastParcelSize(s);
+          }}
+          disabled={submitting}
+          shelves={shelves}
+        />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm text-gray-600">到付运费（元）</label>
@@ -591,7 +623,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     courierCompanyId: '',
     recipientName: '',
     recipientPhone: '',
-    size: 'small' as ParcelSize,
+    size: loadLastParcelSize('small') as ParcelSize,
     shelfId: '',
     note: '',
     freightCollectAmount: '',
@@ -645,6 +677,8 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         inboundMethod: 'manual',
       });
       setResult(res);
+      saveLastParcelSize(form.size);
+      playInboundSuccessBeep();
       invalidateShelves();
       invalidateDashboard();
       invalidateInventoryList();
@@ -752,7 +786,10 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         </div>
         <SizeSelector
           value={form.size}
-          onChange={(v) => setForm({ ...form, size: v, shelfId: '' })}
+          onChange={(v) => {
+            setForm({ ...form, size: v, shelfId: '' });
+            saveLastParcelSize(v);
+          }}
           disabled={submitting}
           shelves={shelves}
         />

@@ -301,6 +301,9 @@ scripts/                  部署脚本
 
 ## 13. 部署
 
+试用联调清单见 [docs/TRIAL-CHECKLIST.md](./docs/TRIAL-CHECKLIST.md)。部署前可执行 `bash scripts/preflight.sh`。
+
+
 **平台**（待定，候选）：
 - 腾讯云开发 (CloudBase)：CloudRun + 静态网站托管
 - Vercel（前端） + Railway（后端）
