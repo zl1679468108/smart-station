@@ -520,30 +520,42 @@ const onBatchRemindOverdue = async () => {
                 看今日通知
               </button>
               {(lastBatchRemind.includes('未绑定') || lastBatchRemind.includes('未私信')) && (
-                <button
-                  type="button"
-                  className="rounded border border-amber-200 bg-white px-2 py-0.5 text-[11px] text-amber-900 hover:bg-amber-100"
-                  onClick={() =>
-                    navigate('/admin/system?tab=notify&filter=unbound&view=byPhone')
-                  }
-                >
-                  按手机号跟进
-                </button>
-              )}
-              {(lastBatchRemind.includes('未绑定') || lastBatchRemind.includes('未私信')) && (
-                <button
-                  type="button"
-                  className="rounded border border-amber-200 bg-white px-2 py-0.5 text-[11px] text-amber-900 hover:bg-amber-100"
-                  onClick={() => {
-                    void (async () => {
-                      const ok = await copyText(buildBindGuideScript());
-                      if (ok) notifySuccess('已复制绑定引导（不含取件码）');
-                      else notifyError('复制失败');
-                    })();
-                  }}
-                >
-                  复制绑定话术
-                </button>
+                <>
+                  <p className="w-full text-[11px] text-amber-900/90">
+                    催取时顺便绑：当面报码 → 复制绑定话术 → 客户查件页绑定后再补发。
+                  </p>
+                  <button
+                    type="button"
+                    className="rounded border border-amber-200 bg-white px-2 py-0.5 text-[11px] font-medium text-amber-950 hover:bg-amber-100"
+                    onClick={() => {
+                      void (async () => {
+                        const ok = await copyText(buildBindGuideScript());
+                        if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                        else notifyError('复制失败');
+                      })();
+                    }}
+                  >
+                    复制绑定话术
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded border border-amber-200 bg-white px-2 py-0.5 text-[11px] text-amber-900 hover:bg-amber-100"
+                    onClick={() =>
+                      navigate('/admin/system?tab=notify&filter=unbound&view=byPhone&days=3')
+                    }
+                  >
+                    近3日未绑定
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded border border-amber-200 bg-white px-2 py-0.5 text-[11px] text-amber-900 hover:bg-amber-100"
+                    onClick={() =>
+                      navigate('/admin/system?tab=notify&filter=unbound&view=byPhone')
+                    }
+                  >
+                    按手机号跟进
+                  </button>
+                </>
               )}
             </div>
           </div>

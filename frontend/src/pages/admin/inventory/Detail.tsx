@@ -6,6 +6,7 @@ import * as inboundService from '@/services/inbound';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import { copyText } from '@/utils/stationVisit';
 import { buildBindGuideScript, buildFacePickupScript } from '@/utils/staffScripts';
+import OutboundBindNudge from '@/components/OutboundBindNudge';
 import {
   useInvalidateInventoryDetail,
   useInvalidateInventoryList,
@@ -64,6 +65,7 @@ const ParcelDetailPage: React.FC = () => {
   const [lastNotify, setLastNotify] = useState<string>('');
   const [remindingOverdue, setRemindingOverdue] = useState(false);
   const [lastRemindHint, setLastRemindHint] = useState<string | null>(null);
+  const [lastRemindUnbound, setLastRemindUnbound] = useState(false);
 
   useEffect(() => {
     if (!detail) return;
@@ -202,6 +204,7 @@ const ParcelDetailPage: React.FC = () => {
                       try {
                         const r = await overdueService.remindOverdue(id);
                         setLastRemindHint(r.staffMessage || '提醒已发送');
+                        setLastRemindUnbound(!r.customerBound);
                         notifySuccess(r.staffMessage || '提醒已发送');
                         invalidateDetail();
                         invalidateList();
@@ -232,14 +235,31 @@ const ParcelDetailPage: React.FC = () => {
             )}
             {lastRemindHint && (
               <div className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                滞留提醒回执：{lastRemindHint}
-                <button
-                  type="button"
-                  className="ml-2 underline"
-                  onClick={() => setLastRemindHint(null)}
-                >
-                  关闭
-                </button>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <p>滞留提醒回执：{lastRemindHint}</p>
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => {
+                      setLastRemindHint(null);
+                      setLastRemindUnbound(false);
+                    }}
+                  >
+                    关闭
+                  </button>
+                </div>
+                {lastRemindUnbound ? (
+                  <div className="mt-2">
+                    <p className="text-[11px] font-medium text-orange-900">
+                      客户未绑定：催取时顺便引导绑定，绑定后可再发提醒私信取件码。
+                    </p>
+                    <OutboundBindNudge phone={detail.recipientPhone} variant="admin" />
+                  </div>
+                ) : (
+                  <p className="mt-1.5 text-[11px] text-emerald-800">
+                    客户已绑定：微信应能收到取件码，可少说绑定话术。
+                  </p>
+                )}
               </div>
             )}
           </div>

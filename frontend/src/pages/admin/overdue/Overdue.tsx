@@ -10,7 +10,8 @@ import EmptyState from '@/components/ui/EmptyState';
 import PageHeader from '@/components/ui/PageHeader';
 import NotifyReachBar from '@/components/NotifyReachBar';
 import { copyText } from '@/utils/stationVisit';
-import { buildFacePickupScript } from '@/utils/staffScripts';
+import { buildFacePickupScript, buildBindGuideScript } from '@/utils/staffScripts';
+import OutboundBindNudge from '@/components/OutboundBindNudge';
 import Pagination from '@/components/ui/Pagination';
 
 const LEVEL_TABS: { key: '' | OverdueLevel; label: string }[] = [
@@ -61,6 +62,8 @@ const OverduePage: React.FC = () => {
     customerUnbound: number;
     failed?: number;
     staffMessage: string;
+    /** 单件提醒时的手机号，便于按人引导绑定 */
+    samplePhone?: string | null;
   } | null>(null);
   const pageSize = 20;
   const fromDashboard = searchParams.get('from') === 'dashboard';
@@ -136,6 +139,9 @@ const OverduePage: React.FC = () => {
     try {
       const r = await overdueService.remindOverdue(id);
       notifySuccess(r.staffMessage || '提醒已发送');
+      const phone =
+        items.find((it) => it.id === id)?.recipientPhone ||
+        null;
       setLastReach({
         source: 'single',
         title: '单件提醒触达',
@@ -143,6 +149,7 @@ const OverduePage: React.FC = () => {
         customerUnbound: r.customerBound ? 0 : 1,
         failed: r.customerBound && !r.customerPushed ? 1 : 0,
         staffMessage: r.staffMessage || '提醒已发送',
+        samplePhone: phone,
       });
       await invalidateOverdue();
     } catch (e: any) {
@@ -252,18 +259,55 @@ const OverduePage: React.FC = () => {
             )}
           </div>
           {(lastReach.customerUnbound > 0 || (lastReach.failed || 0) > 0) && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <p className="text-[11px] text-sky-900/80">
-                未私信请当面报码；客户绑定后可到通知记录补发滞留提醒。
+            <div className="mt-3 space-y-2 rounded-md border border-orange-200 bg-orange-50/80 px-3 py-2.5">
+              <p className="text-[11px] font-semibold text-orange-950">
+                催取时顺便绑：未绑定客户收不到微信私信
               </p>
-              <button
-                type="button"
-                onClick={() => navigate('/admin/system?tab=notify&filter=overdue')}
-                className="rounded-md border border-sky-200 bg-white px-2.5 py-1 text-[11px] font-medium text-sky-800 hover:bg-sky-100/60"
-              >
-                查看滞留通知记录
-              </button>
+              <ol className="list-decimal space-y-0.5 pl-4 text-[11px] leading-relaxed text-orange-900">
+                <li>当面报取件码（可复制当面话术，勿发群）</li>
+                <li>引导客户查件页绑定微信通知</li>
+                <li>绑定后可再发滞留提醒，取件码会私信到微信</li>
+              </ol>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void (async () => {
+                      const ok = await copyText(buildBindGuideScript());
+                      if (ok) notifySuccess('已复制绑定引导（不含取件码，可发客户）');
+                      else notifyError('复制失败');
+                    })();
+                  }}
+                  className="min-h-[36px] rounded-md bg-orange-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-orange-700"
+                >
+                  复制绑定话术
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate('/admin/system?tab=notify&filter=unbound&view=byPhone&days=3')
+                  }
+                  className="min-h-[36px] rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-100"
+                >
+                  近3日未绑定
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/admin/system?tab=notify&filter=overdue')}
+                  className="min-h-[36px] rounded-md border border-sky-200 bg-white px-2.5 py-1 text-[11px] font-medium text-sky-800 hover:bg-sky-50"
+                >
+                  查看滞留通知记录
+                </button>
+              </div>
+              {lastReach.source === 'single' && lastReach.samplePhone && (
+                <OutboundBindNudge phone={lastReach.samplePhone} variant="admin" />
+              )}
             </div>
+          )}
+          {lastReach.customerUnbound === 0 && (lastReach.failed || 0) === 0 && lastReach.customerPushed > 0 && (
+            <p className="mt-2 text-[11px] text-emerald-800">
+              本轮已私信成功：客户微信应能看到取件码，可少说绑定话术。
+            </p>
           )}
         </div>
       )}
