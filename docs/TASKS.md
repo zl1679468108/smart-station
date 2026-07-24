@@ -889,3 +889,14 @@
 | M60.2 | P1 | 入库/出库未开班软提示 | inbound+outbound | done | 引导去开班，不阻断 |
 | M60.3 | P1 | 通知记录分页 | admin notify API | done | page + pageSize |
 | M60.4 | P2 | 通知记录导出本页 CSV | NotifyTab | done | 含触达/状态中文 |
+
+
+---
+
+## M61 交班待收款提醒 + 通知按手机号聚合（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M61.1 | P1 | 交班前/班次页待收款提醒 | shifts | done | getCurrent 带 collectUnpaid；软提示+深链 |
+| M61.2 | P1 | 通知按手机号聚合 API | admin notify | done | GET /api/admin/notify/logs/by-phone |
+| M61.3 | P1 | NotifyTab 按手机号视图 | NotifyTab | done | 看明细/复制绑定话术/导出聚合 |

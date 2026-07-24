@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as shiftService from '@/services/shift';
 import type { ShiftItem, StaffPerformanceItem } from '@/types/shift';
 import PageHeader from '@/components/ui/PageHeader';
@@ -34,6 +35,7 @@ function daysAgoBeijing(days: number): string {
 }
 
 const ShiftsPage: React.FC = () => {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('duty');
   const [current, setCurrent] = useState<ShiftItem | null>(null);
   const [loadingCurrent, setLoadingCurrent] = useState(true);
@@ -227,6 +229,20 @@ const ShiftsPage: React.FC = () => {
                 <p className="mt-3 text-xs text-gray-500">
                   当前在库约 {current.stockCount} 件（系统统计，交班可手填盘点）
                 </p>
+              )}
+              {Number(current.collectUnpaid || 0) > 0 && (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-rose-100 bg-rose-50 px-3 py-2">
+                  <p className="text-xs text-rose-800">
+                    在库待收款 {current.collectUnpaid} 件，出库时记得收款
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/admin/inventory?collectStatus=unpaid')}
+                    className="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-medium text-rose-800 hover:bg-rose-50"
+                  >
+                    去查看
+                  </button>
+                </div>
               )}
               <button
                 type="button"
@@ -423,6 +439,24 @@ const ShiftsPage: React.FC = () => {
             <div className="rounded-md bg-gray-50 px-3 py-2 text-xs">
               本班入库 {current.inboundCount} · 出库 {current.outboundCount} · 收款{' '}
               {money(current.collectPaidTotal)}
+            </div>
+          )}
+          {current && Number(current.collectUnpaid || 0) > 0 && (
+            <div className="rounded-md border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+              <p>
+                驿站还有 <strong>{current.collectUnpaid}</strong> 件在库待收款（到付/代收）。
+                交班不强制清完，请告知接班同事留意。
+              </p>
+              <button
+                type="button"
+                className="mt-2 rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-medium text-rose-800 hover:bg-rose-50"
+                onClick={() => {
+                  setCloseOpen(false);
+                  navigate('/admin/inventory?collectStatus=unpaid');
+                }}
+              >
+                查看待收款包裹
+              </button>
             </div>
           )}
           <div>

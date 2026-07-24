@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import * as adminService from '@/services/admin';
-import type { NotifyBindingItem, NotifyLogItem } from '@/types/admin';
+import type { NotifyBindingItem, NotifyLogItem, NotifyPhoneSummaryItem } from '@/types/admin';
 import { formatBeijingTimestamp } from '@/utils/date';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
@@ -43,11 +43,14 @@ function isLogFilter(v: string): v is LogFilter {
 const NotifyTab: React.FC = () => {
   const [bindings, setBindings] = useState<NotifyBindingItem[]>([]);
   const [logs, setLogs] = useState<NotifyLogItem[]>([]);
+  const [phoneSummaries, setPhoneSummaries] = useState<NotifyPhoneSummaryItem[]>([]);
+  const [phoneSummaryTotal, setPhoneSummaryTotal] = useState(0);
+  const [phoneSummaryScanned, setPhoneSummaryScanned] = useState(0);
   const [bindingTotal, setBindingTotal] = useState(0);
   const [logTotal, setLogTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [sub, setSub] = useState<'bindings' | 'logs'>('bindings');
+  const [sub, setSub] = useState<'bindings' | 'logs' | 'byPhone'>('bindings');
   const [phoneInput, setPhoneInput] = useState('');
   const [phoneQuery, setPhoneQuery] = useState('');
   const [resendingId, setResendingId] = useState<string | null>(null);
@@ -89,14 +92,39 @@ const NotifyTab: React.FC = () => {
         logOpts.todayOnly = true;
       }
 
-      const [b, l] = await Promise.all([
+      const summaryOpts: Parameters<typeof adminService.listNotifyLogPhoneSummary>[0] = {
+        limit: 300,
+        phone,
+      };
+      if (logFilter === 'today') summaryOpts.todayOnly = true;
+      if (logFilter === 'failed') summaryOpts.status = 'failed';
+      if (logFilter === 'inbound') summaryOpts.templateCode = 'inbound_notice';
+      if (logFilter === 'overdue') summaryOpts.templateCode = 'overdue_remind';
+      if (REACH_FILTERS.includes(logFilter)) {
+        summaryOpts.reach = logFilter;
+        summaryOpts.todayOnly = true;
+        summaryOpts.templateCode = 'inbound_notice';
+      }
+      if (logFilter === 'failed' && searchParams.get('today') === '1') {
+        summaryOpts.todayOnly = true;
+      }
+      // 默认聚合看今日，避免全量过大
+      if (!logFilter && !phone) {
+        summaryOpts.todayOnly = true;
+      }
+
+      const [b, l, s] = await Promise.all([
         adminService.listNotifyBindings({ limit: 80, phone }),
         adminService.listNotifyLogs(logOpts),
+        adminService.listNotifyLogPhoneSummary(summaryOpts),
       ]);
       setBindings(b.items || []);
       setBindingTotal(b.total ?? b.items?.length ?? 0);
       setLogs(l.items || []);
       setLogTotal(l.total ?? l.items?.length ?? 0);
+      setPhoneSummaries(s.items || []);
+      setPhoneSummaryTotal(s.total ?? s.items?.length ?? 0);
+      setPhoneSummaryScanned(s.scanned ?? 0);
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载失败');
     } finally {
@@ -109,8 +137,8 @@ const NotifyTab: React.FC = () => {
   }, [load]);
 
   useEffect(() => {
-    if (logFilter) setSub('logs');
-  }, [logFilter]);
+    if (logFilter && sub === 'bindings') setSub('logs');
+  }, [logFilter, sub]);
 
   // URL filter 变化时同步（工作台深链）
   useEffect(() => {
@@ -199,6 +227,50 @@ const NotifyTab: React.FC = () => {
   };
 
   const exportLogsCsv = () => {
+    const escape = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+    if (sub === 'byPhone') {
+      if (phoneSummaries.length === 0) {
+        notifyError('当前没有可导出的聚合记录');
+        return;
+      }
+      const header = [
+        '手机号',
+        '姓名',
+        '次数',
+        '已私信',
+        '未私信',
+        '私信失败',
+        '发送失败',
+        '最近类型',
+        '最近触达',
+        '最近时间',
+      ];
+      const rows = phoneSummaries.map((row) => [
+        row.phoneMasked || row.phone || '',
+        row.recipientName || '',
+        String(row.total ?? 0),
+        String(row.pushed ?? 0),
+        String(row.unbound ?? 0),
+        String(row.pushFailed ?? 0),
+        String(row.failed ?? 0),
+        row.lastTemplateLabel || '',
+        row.lastReachLabel || '',
+        row.lastAt || '',
+      ]);
+      const csv = [header, ...rows].map((r) => r.map(escape).join(',')).join('\n');
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '通知记录-按手机号.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      notifySuccess(`已导出 ${phoneSummaries.length} 个手机号`);
+      return;
+    }
+
     if (logs.length === 0) {
       notifyError('当前没有可导出的记录');
       return;
@@ -223,7 +295,6 @@ const NotifyTab: React.FC = () => {
       (log.content || '').replace(/\r?\n/g, ' '),
       (log.errorMessage || '').replace(/\r?\n/g, ' '),
     ]);
-    const escape = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
     const csv = [header, ...rows].map((r) => r.map(escape).join(',')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -258,10 +329,10 @@ const NotifyTab: React.FC = () => {
           <button
             type="button"
             onClick={() => exportLogsCsv()}
-            disabled={logs.length === 0}
+            disabled={sub === 'byPhone' ? phoneSummaries.length === 0 : logs.length === 0}
             className="min-h-[40px] rounded-md border border-gray-200 bg-white px-3 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
-            导出本页 CSV
+            {sub === 'byPhone' ? '导出聚合 CSV' : '导出本页 CSV'}
           </button>
           <button
             type="button"
@@ -341,17 +412,18 @@ const NotifyTab: React.FC = () => {
           [
             { key: 'bindings' as const, label: `客户绑定（${bindingTotal}）` },
             { key: 'logs' as const, label: `发送记录（${logTotal}）` },
+            { key: 'byPhone' as const, label: `按手机号（${phoneSummaryTotal}）` },
           ] as const
-        ).map((t) => (
+        ).map((tab) => (
           <button
-            key={t.key}
+            key={tab.key}
             type="button"
-            onClick={() => setSub(t.key)}
+            onClick={() => setSub(tab.key)}
             className={`min-h-[40px] flex-1 rounded-md text-xs font-medium ${
-              sub === t.key ? 'bg-white text-primary shadow-sm' : 'text-gray-600'
+              sub === tab.key ? 'bg-white text-primary shadow-sm' : 'text-gray-600'
             }`}
           >
-            {t.label}
+            {tab.label}
           </button>
         ))}
       </div>
@@ -443,6 +515,92 @@ const NotifyTab: React.FC = () => {
                 ))}
               </tbody>
             </table>
+          )}
+        </div>
+      ) : sub === 'byPhone' ? (
+        <div className="space-y-2">
+          <p className="text-[11px] text-gray-500">
+            按手机号汇总最近发送记录（已扫 {phoneSummaryScanned} 条日志）。优先列出未私信/失败多的客户，点手机号可筛选明细。
+          </p>
+          {phoneSummaries.length === 0 ? (
+            <EmptyState
+              title={phoneQuery ? '未找到匹配客户' : '暂无聚合数据'}
+              description={
+                phoneQuery
+                  ? '换个手机号或尾号试试'
+                  : '可先选「今日/未私信」再看，或等有到件通知后刷新'
+              }
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-gray-50 text-xs text-gray-500">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">手机号</th>
+                    <th className="px-3 py-2 font-medium">次数</th>
+                    <th className="px-3 py-2 font-medium">已私信</th>
+                    <th className="px-3 py-2 font-medium">未私信</th>
+                    <th className="px-3 py-2 font-medium">私信失败</th>
+                    <th className="px-3 py-2 font-medium">发送失败</th>
+                    <th className="px-3 py-2 font-medium">最近</th>
+                    <th className="px-3 py-2 font-medium">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {phoneSummaries.map((row) => (
+                    <tr key={row.phone} className="border-t border-gray-100">
+                      <td className="px-3 py-2">
+                        <div className="font-mono text-xs text-gray-800">{row.phoneMasked}</div>
+                        {row.recipientName && (
+                          <div className="text-[11px] text-gray-400">{row.recipientName}</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-gray-700">{row.total}</td>
+                      <td className="px-3 py-2 text-xs text-emerald-700">{row.pushed}</td>
+                      <td className="px-3 py-2 text-xs text-orange-700">{row.unbound}</td>
+                      <td className="px-3 py-2 text-xs text-amber-700">{row.pushFailed}</td>
+                      <td className="px-3 py-2 text-xs text-red-700">{row.failed}</td>
+                      <td className="px-3 py-2 text-[11px] text-gray-500">
+                        <div>{row.lastTemplateLabel || '—'}</div>
+                        <div>{row.lastReachLabel || ''}</div>
+                        <div>{formatBeijingTimestamp(row.lastAt || '')}</div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 hover:border-primary hover:text-primary"
+                            onClick={() => {
+                              setPhoneInput(row.phone);
+                              setPhoneQuery(row.phone);
+                              setLogPage(1);
+                              setSub('logs');
+                            }}
+                          >
+                            看明细
+                          </button>
+                          {(row.unbound > 0 || row.pushFailed > 0) && (
+                            <button
+                              type="button"
+                              className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] text-orange-800 hover:bg-orange-50"
+                              onClick={() => {
+                                void (async () => {
+                                  const ok = await copyText(buildBindGuideScript());
+                                  if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                                  else notifyError('复制失败');
+                                })();
+                              }}
+                            >
+                              复制绑定话术
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       ) : (

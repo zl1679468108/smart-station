@@ -895,6 +895,126 @@ export class AdminService {
   }
 
   /**
+   * 通知记录按手机号聚合（运营复盘）
+   * - 抓取近期日志内存聚合，便于看「谁多次未私信/失败」
+   */
+  async listNotifyLogPhoneSummary(
+    stationId: string,
+    opts?: {
+      limit?: number;
+      phone?: string;
+      status?: string;
+      templateCode?: string;
+      todayOnly?: boolean;
+      reach?: string;
+    },
+  ) {
+    const reach = this.normalizeReach(opts?.reach);
+    const take = Math.min(Math.max(Number(opts?.limit) || 300, 50), 500);
+    const phone = this.normalizePhoneQuery(opts?.phone);
+
+    let q = this.supabase
+      .getClient()
+      .from('ss_sms_logs')
+      .select(
+        'id, template_code, recipient_phone, recipient_name, status, params, created_at',
+      )
+      .eq('station_id', stationId)
+      .order('created_at', { ascending: false })
+      .limit(take);
+
+    if (phone) {
+      if (/^1\d{10}$/.test(phone)) q = q.eq('recipient_phone', phone);
+      else q = q.like('recipient_phone', `%${phone}%`);
+    }
+    if (opts?.status) q = q.eq('status', opts.status);
+    if (opts?.templateCode) q = q.eq('template_code', opts.templateCode);
+    if (opts?.todayOnly) {
+      const now = new Date(Date.now() + 8 * 3600 * 1000);
+      const y = now.getUTCFullYear();
+      const m = String(now.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(now.getUTCDate()).padStart(2, '0');
+      const start = new Date(`${y}-${m}-${d}T00:00:00+08:00`).toISOString();
+      q = q.gte('created_at', start);
+    }
+
+    const { data, error } = await q;
+    if (error) throw new Error(`查询通知聚合失败: ${error.message}`);
+
+    type Agg = {
+      phone: string;
+      phoneMasked: string;
+      recipientName: string | null;
+      total: number;
+      sent: number;
+      failed: number;
+      unbound: number;
+      pushed: number;
+      pushFailed: number;
+      lastAt: string | null;
+      lastTemplateCode: string;
+      lastTemplateLabel: string;
+      lastReach: 'unbound' | 'pushed' | 'push_failed';
+      lastReachLabel: string;
+    };
+
+    const map = new Map<string, Agg>();
+    for (const r of data || []) {
+      const rawPhone = String(r.recipient_phone || '').trim();
+      if (!rawPhone) continue;
+      const params =
+        r.params && typeof r.params === 'object' ? (r.params as Record<string, unknown>) : {};
+      const channelResults = Array.isArray(params.channelResults)
+        ? (params.channelResults as Array<{ channel?: string; ok?: boolean }>)
+        : [];
+      const customerReach = this.deriveCustomerReach(channelResults);
+      if (reach && customerReach !== reach) continue;
+
+      let agg = map.get(rawPhone);
+      if (!agg) {
+        agg = {
+          phone: rawPhone,
+          phoneMasked: this.maskPhone(rawPhone),
+          recipientName: (r.recipient_name as string) || null,
+          total: 0,
+          sent: 0,
+          failed: 0,
+          unbound: 0,
+          pushed: 0,
+          pushFailed: 0,
+          lastAt: r.created_at || null,
+          lastTemplateCode: r.template_code as string,
+          lastTemplateLabel: this.templateLabel(r.template_code as string),
+          lastReach: customerReach,
+          lastReachLabel: this.customerReachLabel(customerReach),
+        };
+        map.set(rawPhone, agg);
+      }
+      agg.total += 1;
+      if (r.status === 'sent') agg.sent += 1;
+      if (r.status === 'failed') agg.failed += 1;
+      if (customerReach === 'unbound') agg.unbound += 1;
+      else if (customerReach === 'pushed') agg.pushed += 1;
+      else agg.pushFailed += 1;
+      // rows already ordered desc; first seen is latest
+    }
+
+    const items = Array.from(map.values()).sort((a, b) => {
+      // 优先未私信/失败多的客户
+      const score = (x: Agg) => x.unbound * 3 + x.pushFailed * 2 + x.failed;
+      const d = score(b) - score(a);
+      if (d !== 0) return d;
+      return String(b.lastAt || '').localeCompare(String(a.lastAt || ''));
+    });
+
+    return {
+      items,
+      total: items.length,
+      scanned: (data || []).length,
+    };
+  }
+
+  /**
    * 重新发送通知（到件/滞留）。
    * 适用：发送失败补发，或客户后来绑定了微信需要再推一次取件码。
    * 验证码类不支持重发（时效短且有独立限流）。

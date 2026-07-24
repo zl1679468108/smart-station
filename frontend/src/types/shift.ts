@@ -21,6 +21,8 @@ export interface ShiftItem {
   collectAlipay: number;
   collectOther: number;
   stockCount: number | null;
+  /** 驿站在库待收款件数（交班提醒） */
+  collectUnpaid?: number | null;
   createdAt?: string;
 }
 

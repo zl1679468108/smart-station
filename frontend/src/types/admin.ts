@@ -160,6 +160,23 @@ export interface NotifyChannelResultItem {
   label: string;
 }
 
+export interface NotifyPhoneSummaryItem {
+  phone: string;
+  phoneMasked: string;
+  recipientName?: string | null;
+  total: number;
+  sent: number;
+  failed: number;
+  unbound: number;
+  pushed: number;
+  pushFailed: number;
+  lastAt?: string | null;
+  lastTemplateCode?: string;
+  lastTemplateLabel?: string;
+  lastReach?: 'unbound' | 'pushed' | 'push_failed';
+  lastReachLabel?: string;
+}
+
 export interface NotifyLogItem {
   id: string;
   templateCode: string;

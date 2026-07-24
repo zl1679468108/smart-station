@@ -34,8 +34,11 @@ export class ShiftService {
       .maybeSingle();
     if (error) throw new Error(`查询当前班次失败: ${error.message}`);
     if (!data) return null;
-    const live = await this.computeLiveStats(stationId, operatorId, data.started_at);
-    return this.mapShift(data, live);
+    const [live, collectUnpaid] = await Promise.all([
+      this.computeLiveStats(stationId, operatorId, data.started_at),
+      this.countCollectUnpaid(stationId),
+    ]);
+    return this.mapShift(data, live, { collectUnpaid });
   }
 
   /** 开班 */
@@ -383,17 +386,40 @@ export class ShiftService {
     };
   }
 
-  private mapShift(row: any, live?: {
-    inboundCount: number;
-    outboundCount: number;
-    collectPaidCount: number;
-    collectPaidTotal: number;
-    collectCash: number;
-    collectWechat: number;
-    collectAlipay: number;
-    collectOther: number;
-    stockCountLive: number | null;
-  }) {
+  private async countCollectUnpaid(stationId: string): Promise<number> {
+    try {
+      const { count, error } = await this.supabase
+        .getClient()
+        .from('ss_parcels')
+        .select('id', { count: 'exact', head: true })
+        .eq('station_id', stationId)
+        .eq('collect_status', 'unpaid')
+        .in('status', ['in_stock', 'overdue']);
+      if (error) {
+        // 字段未迁移时不阻断交班
+        return 0;
+      }
+      return count || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  private mapShift(
+    row: any,
+    live?: {
+      inboundCount: number;
+      outboundCount: number;
+      collectPaidCount: number;
+      collectPaidTotal: number;
+      collectCash: number;
+      collectWechat: number;
+      collectAlipay: number;
+      collectOther: number;
+      stockCountLive: number | null;
+    },
+    extra?: { collectUnpaid?: number },
+  ) {
     const flatten = (v: any) => (Array.isArray(v) ? v[0] : v);
     const isOpen = row.status === 'open';
     return {
@@ -417,6 +443,8 @@ export class ShiftService {
       collectAlipay: isOpen && live ? live.collectAlipay : Number(row.collect_alipay || 0),
       collectOther: isOpen && live ? live.collectOther : Number(row.collect_other || 0),
       stockCount: isOpen && live ? live.stockCountLive : row.stock_count,
+      /** 驿站在库待收款件数（交班提醒用，非本班独有） */
+      collectUnpaid: extra?.collectUnpaid ?? null,
       createdAt: row.created_at,
     };
   }

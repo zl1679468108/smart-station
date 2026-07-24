@@ -11,6 +11,7 @@ import type {
   LayoutArea,
   NotifyBindingItem,
   NotifyLogItem,
+  NotifyPhoneSummaryItem,
   NotifyResendResult,
 } from '@/types/admin';
 
@@ -217,6 +218,29 @@ export function listNotifyLogs(opts?: {
   if (opts?.todayOnly) params.set('todayOnly', '1');
   if (opts?.reach) params.set('reach', opts.reach);
   return get(`/api/admin/notify/logs?${params.toString()}`);
+}
+
+export function listNotifyLogPhoneSummary(opts?: {
+  limit?: number;
+  phone?: string;
+  status?: string;
+  templateCode?: string;
+  todayOnly?: boolean;
+  reach?: string;
+}): Promise<{
+  items: NotifyPhoneSummaryItem[];
+  total: number;
+  scanned: number;
+}> {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  if (opts?.phone) params.set('phone', opts.phone);
+  if (opts?.status) params.set('status', opts.status);
+  if (opts?.templateCode) params.set('templateCode', opts.templateCode);
+  if (opts?.todayOnly) params.set('todayOnly', '1');
+  if (opts?.reach) params.set('reach', opts.reach);
+  const q = params.toString();
+  return get(`/api/admin/notify/logs/by-phone${q ? `?${q}` : ''}`);
 }
 
 export function resendNotifyLog(id: string): Promise<NotifyResendResult> {

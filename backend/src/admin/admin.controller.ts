@@ -183,6 +183,27 @@ export class AdminController {
     });
   }
 
+  /** 通知记录按手机号聚合 */
+  @Get('notify/logs/by-phone')
+  async listNotifyLogPhoneSummary(
+    @StationId() stationId: string,
+    @Query('limit') limit?: string,
+    @Query('phone') phone?: string,
+    @Query('status') status?: string,
+    @Query('templateCode') templateCode?: string,
+    @Query('todayOnly') todayOnly?: string,
+    @Query('reach') reach?: string,
+  ) {
+    return this.adminService.listNotifyLogPhoneSummary(stationId, {
+      limit: limit ? Number(limit) : 300,
+      phone,
+      status,
+      templateCode,
+      todayOnly: todayOnly === '1' || todayOnly === 'true',
+      reach,
+    });
+  }
+
   @Get('notify/logs')
   async listNotifyLogs(
     @StationId() stationId: string,
