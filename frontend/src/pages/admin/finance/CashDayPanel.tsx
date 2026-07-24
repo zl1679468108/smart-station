@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as financeService from '@/services/finance';
 import type { CashDaySummary } from '@/types/finance';
-import { notifyError } from '@/utils/notification';
+import { notifyError, notifySuccess } from '@/utils/notification';
+import { buildBindGuideScript } from '@/utils/staffScripts';
+import { copyText } from '@/utils/stationVisit';
 import EmptyState from '@/components/ui/EmptyState';
 
 const money = (n: number) => `¥${Number(n || 0).toFixed(2)}`;
@@ -67,6 +69,20 @@ const CashDayPanel: React.FC = () => {
           className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-100"
         >
           查看在库待收款（{cashDay?.unpaidInStock ?? 0}）
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/admin/outbound?unpaid=1')}
+          className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50"
+        >
+          去出库收款
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/admin/system?tab=notify&filter=today')}
+          className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+        >
+          今日通知
         </button>
         <button
           type="button"

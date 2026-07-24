@@ -1136,3 +1136,11 @@
 | M87.1 | P1 | 异常卡片看包裹/看通知/复制话术 | exception | done | |
 | M87.2 | P1 | 在库/滞留异常可补发到件 | exception | done | |
 | M87.3 | P2 | 页顶通知跟进快捷入口 | exception | done | |
+
+## M88 寄件/财务运营深链（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M88.1 | P1 | 寄件单复制进度话术+看通知 | shipping | done | |
+| M88.2 | P1 | 寄件状态更新回执条 | shipping | done | |
+| M88.3 | P2 | 收款日结直达出库/今日通知 | finance cash-day | done | |
+| M88.4 | P2 | 寄件页 PageHeader 统一 | shipping | done | |

@@ -103,3 +103,27 @@ export function buildAppointmentFaceScript(opts: {
   ].join('');
 }
 
+/** 寄件进度一对一告知（勿发企微群） */
+export function buildShippingFaceScript(opts: {
+  shippingNo: string;
+  statusLabel: string;
+  senderName?: string | null;
+  receiverName?: string | null;
+  courierName?: string | null;
+  freight?: number | null;
+  stationName?: string;
+}): string {
+  const who = opts.senderName?.trim() ? `${opts.senderName.trim()}，` : '';
+  const station = opts.stationName?.trim() || '驿站';
+  const parts = [
+    `${who}您在${station}的寄件单 ${opts.shippingNo} 当前状态：${opts.statusLabel}。`,
+  ];
+  if (opts.receiverName?.trim()) parts.push(`收件人 ${opts.receiverName.trim()}。`);
+  if (opts.courierName?.trim()) parts.push(`承运 ${opts.courierName.trim()}。`);
+  if (opts.freight != null && Number(opts.freight) > 0) {
+    parts.push(`运费 ¥${Number(opts.freight).toFixed(2)}。`);
+  }
+  parts.push('如有疑问请到店或联系店员。');
+  return parts.join('');
+}
+

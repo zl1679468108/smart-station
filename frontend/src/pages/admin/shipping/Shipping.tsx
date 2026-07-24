@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as shippingService from '@/services/shipping';
 import { fetchCouriers } from '@/services/inventory';
 import type { CourierCompany } from '@/types/admin';
@@ -14,7 +14,10 @@ import type {
 } from '@/types/shipping';
 import { useAuth } from '@/utils/auth';
 import { canWrite } from '@/utils/permission';
-import { notifyError } from '@/utils/notification';
+import { notifyError, notifySuccess } from '@/utils/notification';
+import { buildBindGuideScript, buildShippingFaceScript } from '@/utils/staffScripts';
+import { copyText } from '@/utils/stationVisit';
+import PageHeader from '@/components/ui/PageHeader';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
@@ -94,12 +97,10 @@ const ShippingPage: React.FC = () => {
 
   return (
     <div className="w-full space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-800">寄件管理</h1>
-          <p className="mt-1 text-sm text-gray-500">寄件下单、上门取件、运费试算与地址簿</p>
-        </div>
-      </div>
+      <PageHeader
+        title="寄件管理"
+        description="寄件下单、上门取件、运费试算与地址簿；可复制进度话术、按手机看通知"
+      />
 
       <div className="flex gap-2 border-b border-gray-200">
         <button
@@ -141,7 +142,9 @@ const OrdersTab: React.FC<{ couriers: CourierCompany[]; writable: boolean }> = (
   couriers,
   writable,
 }) => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [lastTip, setLastTip] = useState<string | null>(null);
   const statusFromQuery = searchParams.get('status') as ShippingStatus | null;
   const initialStatus: '' | ShippingStatus =
     statusFromQuery && ['pending', 'picked', 'shipped', 'cancelled'].includes(statusFromQuery)
@@ -269,6 +272,9 @@ const OrdersTab: React.FC<{ couriers: CourierCompany[]; writable: boolean }> = (
     setAdvancingId(item.id);
     try {
       await shippingService.updateShippingStatus(item.id, next);
+      const tip = `寄件单 ${item.shippingNo} 已更新为「${STATUS_LABEL[next]}」`;
+      setLastTip(tip);
+      notifySuccess(tip);
       await load();
     } catch (e: any) {
       notifyError(e?.message || '操作失败');
@@ -283,11 +289,37 @@ const OrdersTab: React.FC<{ couriers: CourierCompany[]; writable: boolean }> = (
     return null;
   };
 
-  return (
+    return (
     <div className="space-y-4">
+      {lastTip && (
+        <div className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+          <p>{lastTip}</p>
+          <button type="button" className="underline" onClick={() => setLastTip(null)}>
+            关闭
+          </button>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-orange-100 bg-orange-50/70 px-3 py-2">
+        <p className="text-[11px] text-orange-900">
+          寄件进度请一对一告知客户；可复制话术，或按发件手机号查看通知记录。
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            void (async () => {
+              const ok = await copyText(buildBindGuideScript());
+              if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+              else notifyError('复制失败');
+            })();
+          }}
+          className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+        >
+          复制绑定话术
+        </button>
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         {STATUS_TABS.map((t) => (
-          <button
+        <button
             key={t.key || 'all'}
             type="button"
             onClick={() => changeStatusFilter(t.key)}
@@ -363,41 +395,75 @@ const OrdersTab: React.FC<{ couriers: CourierCompany[]; writable: boolean }> = (
                       {item.insuredAmount ? ` · 保价 ¥${item.insuredAmount}` : ''}
                     </div>
                   </div>
-                  {writable && (
-                    <div className="flex flex-wrap gap-2">
-                      {action && (
-                        <button
-                          type="button"
-                          disabled={advancingId === item.id}
-                          className="rounded-lg bg-primary px-3 py-1.5 text-xs text-white hover:bg-primary/90 disabled:opacity-60"
-                          onClick={() => onAdvance(item, action.next)}
-                        >
-                          {advancingId === item.id ? '处理中…' : action.label}
-                        </button>
-                      )}
-                      {item.status === 'pending' && (
-                        <button
-                          type="button"
-                          disabled={advancingId === item.id}
-                          className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs text-primary hover:bg-primary/10 disabled:opacity-60"
-                          onClick={() => onAdvance(item, 'shipped')}
-                          title="到店即寄，跳过已取件"
-                        >
-                          直接发出
-                        </button>
-                      )}
-                      {(item.status === 'pending' || item.status === 'picked') && (
-                        <button
-                          type="button"
-                          disabled={advancingId === item.id}
-                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-60"
-                          onClick={() => onAdvance(item, 'cancelled')}
-                        >
-                          取消
-                        </button>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                      onClick={() => {
+                        void (async () => {
+                          const ok = await copyText(
+                            buildShippingFaceScript({
+                              shippingNo: item.shippingNo,
+                              statusLabel: STATUS_LABEL[item.status],
+                              senderName: item.senderName,
+                              receiverName: item.receiverName,
+                              courierName: item.courier?.name,
+                              freight: item.freight,
+                            }),
+                          );
+                          if (ok) notifySuccess('已复制寄件进度话术（一对一告知，勿发群）');
+                          else notifyError('复制失败');
+                        })();
+                      }}
+                    >
+                      复制话术
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                      onClick={() => {
+                        const phone = (item.senderPhone || '').replace(/\D/g, '').slice(0, 11);
+                        navigate(
+                          phone
+                            ? `/admin/system?tab=notify&phone=${encodeURIComponent(phone)}`
+                            : '/admin/system?tab=notify',
+                        );
+                      }}
+                    >
+                      看通知
+                    </button>
+                    {writable && action && (
+                      <button
+                        type="button"
+                        disabled={advancingId === item.id}
+                        className="rounded-lg bg-primary px-3 py-1.5 text-xs text-white hover:bg-primary/90 disabled:opacity-60"
+                        onClick={() => onAdvance(item, action.next)}
+                      >
+                        {advancingId === item.id ? '处理中…' : action.label}
+                      </button>
+                    )}
+                    {writable && item.status === 'pending' && (
+                      <button
+                        type="button"
+                        disabled={advancingId === item.id}
+                        className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs text-primary hover:bg-primary/10 disabled:opacity-60"
+                        onClick={() => onAdvance(item, 'shipped')}
+                        title="到店即寄，跳过已取件"
+                      >
+                        直接发出
+                      </button>
+                    )}
+                    {writable && (item.status === 'pending' || item.status === 'picked') && (
+                      <button
+                        type="button"
+                        disabled={advancingId === item.id}
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+                        onClick={() => onAdvance(item, 'cancelled')}
+                      >
+                        取消
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
