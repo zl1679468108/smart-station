@@ -699,11 +699,16 @@ const ResultView: React.FC<{
         return (
           <div key={item.id} className="rounded-xl bg-white p-4 shadow-sm">
             <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-gray-500">取件码</span>
                 <span className="font-mono text-2xl font-bold tracking-widest text-primary">
                   {item.pickupCode || '-'}
                 </span>
+                {item.status === 'overdue' && (
+                  <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700">
+                    即将超期，请尽快取件
+                  </span>
+                )}
               </div>
               {/* 取件文字指引：请前往 A 区 X 号货架（第 Y 层） */}
               {shelfNum !== null && (

@@ -17,6 +17,8 @@ import { ManualOutboundDto, SelfServiceOutboundDto, OutboundSearchDto } from './
 
 const MAX_ATTEMPTS = 3;
 const LOCK_MINUTES = 10;
+/** 可取件/可出库状态：在库 + 滞留（滞留仍应允许取走） */
+const PICKABLE_STATUSES = ['in_stock', 'overdue'] as const;
 
 @Injectable()
 export class OutboundService {
@@ -40,7 +42,7 @@ export class OutboundService {
         'id, tracking_number, recipient_name, recipient_phone, pickup_code, status, inbound_at, shelf_layer, shelf_position, shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number), courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(id, name, code)',
       )
       .eq('station_id', stationId)
-      .eq('status', 'in_stock');
+      .in('status', [...PICKABLE_STATUSES]);
 
     if (dto.phone) {
       query = query.eq('recipient_phone', dto.phone);
@@ -67,6 +69,7 @@ export class OutboundService {
           recipientName: r.recipient_name,
           recipientPhone: r.recipient_phone,
           pickupCode: r.pickup_code,
+          status: r.status as string,
           inboundAt: r.inbound_at,
           courierName: flatten(r.courier)?.name ?? null,
         };
@@ -112,9 +115,17 @@ export class OutboundService {
       throw new NotFoundException('未找到匹配的在库包裹');
     }
 
-    // 状态校验
-    if (parcel.status !== 'in_stock') {
-      throw new BadRequestException(`包裹状态为 ${parcel.status}，不可出库`);
+    // 状态校验：在库/滞留可出库；异常/已出库/退回不可
+    if (!(PICKABLE_STATUSES as readonly string[]).includes(String(parcel.status))) {
+      const label =
+        parcel.status === 'out_stock'
+          ? '已出库'
+          : parcel.status === 'exception'
+            ? '异常件'
+            : parcel.status === 'returned'
+              ? '已退回'
+              : parcel.status;
+      throw new BadRequestException(`包裹状态为「${label}」，不可出库`);
     }
 
     // 取件码匹配校验（若用运单号查，但提供了取件码，需校验一致）
@@ -157,7 +168,7 @@ export class OutboundService {
         'id, tracking_number, recipient_name, recipient_phone, pickup_code, status, inbound_at, station_id, shelf_layer, shelf_position, shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number), courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(id, name, code)',
       )
       .eq('tracking_number', dto.trackingNumber.trim().toUpperCase())
-      .eq('status', 'in_stock');
+      .in('status', [...PICKABLE_STATUSES]);
 
     if (dto.stationId) {
       query = query.eq('station_id', dto.stationId);
@@ -260,6 +271,9 @@ export class OutboundService {
     // 写事件轨迹（含身份核验留证，便于纠纷回溯）
     const methodLabel = opts.method === 'manual' ? '人工辅助' : '自助扫描';
     let description = `${methodLabel}出库`;
+    if (parcel.status === 'overdue') {
+      description += '（滞留件）';
+    }
     if (opts.verify?.type === 'phone_tail') {
       description += '（已核验手机后4位）';
       if (opts.verify.note) description += `：${opts.verify.note}`;
@@ -272,6 +286,7 @@ export class OutboundService {
       description,
       metadata: {
         method: opts.method,
+        previousStatus: parcel.status,
         verify: opts.verify
           ? {
               type: opts.verify.type,

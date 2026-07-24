@@ -314,16 +314,30 @@ const SearchResultList: React.FC<{
   onOutbound: (item: OutboundSearchItem) => void;
 }> = ({ items, onOutbound }) => {
   if (items.length === 0) {
-    return <EmptyState title="未查询到在库包裹" description="可能已出库或尚未到达" />;
+    return (
+      <EmptyState
+        title="未查询到可取件包裹"
+        description="可能已出库、尚未到达，或不在本驿站"
+      />
+    );
   }
+
+  const overdueCount = items.filter((i) => i.status === 'overdue').length;
 
   return (
     <div className="space-y-3">
       <div className="text-sm text-gray-600">
-        找到 {items.length} 个在库包裹，核验后点击「确认出库」
+        找到 {items.length} 个可取件包裹
+        {overdueCount > 0 ? `（含 ${overdueCount} 件滞留）` : ''}
+        ，核验身份后点击「确认出库」
       </div>
       {items.map((item) => (
-        <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-4">
+        <div
+          key={item.id}
+          className={`rounded-lg border bg-white p-4 ${
+            item.status === 'overdue' ? 'border-orange-200' : 'border-gray-200'
+          }`}
+        >
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 space-y-1.5">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -335,6 +349,11 @@ const SearchResultList: React.FC<{
                   <span className="text-sm">
                     <span className="text-gray-500">取件码：</span>
                     <span className="font-mono font-medium text-primary">{item.pickupCode}</span>
+                  </span>
+                )}
+                {item.status === 'overdue' && (
+                  <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700">
+                    滞留 · 仍可出库
                   </span>
                 )}
               </div>
@@ -440,6 +459,11 @@ const ConfirmDialog: React.FC<{
               {' '}
               · 取件码 <span className="font-mono font-medium text-primary">{item.pickupCode}</span>
             </>
+          )}
+          {item.status === 'overdue' && (
+            <span className="ml-2 rounded-full bg-orange-50 px-2 py-0.5 text-[11px] text-orange-700">
+              滞留件
+            </span>
           )}
         </p>
         <p>

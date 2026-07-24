@@ -801,9 +801,10 @@ export class KioskService {
       .getClient()
       .from('ss_parcels')
       .select(
-        'id, tracking_number, recipient_name, recipient_phone, pickup_code, shelf_layer, shelf_position, inbound_at, station:ss_stations!ss_parcels_station_id_fkey(name), shelf:ss_shelves!ss_parcels_shelf_id_fkey(number), courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(name, code)',
+        'id, tracking_number, recipient_name, recipient_phone, pickup_code, status, shelf_layer, shelf_position, inbound_at, station:ss_stations!ss_parcels_station_id_fkey(name), shelf:ss_shelves!ss_parcels_shelf_id_fkey(number), courier:ss_courier_companies!ss_parcels_courier_company_id_fkey(name, code)',
       )
-      .eq('status', 'in_stock')
+      // 滞留件仍可查询取件，避免客户查不到超期包裹
+      .in('status', ['in_stock', 'overdue'])
       .eq('station_id', stationId);
 
     if (opts.recipientPhone) {
@@ -830,6 +831,7 @@ export class KioskService {
           recipientName: this.maskName(r.recipient_name),
           recipientPhoneTail: this.maskPhone(r.recipient_phone),
           pickupCode: r.pickup_code,
+          status: r.status as string,
           inboundAt: r.inbound_at,
           stationName: flatten(r.station)?.name ?? null,
           courierName: flatten(r.courier)?.name ?? null,

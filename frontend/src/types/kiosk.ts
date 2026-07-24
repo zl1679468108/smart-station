@@ -8,6 +8,8 @@ export interface KioskParcelItem {
   /** 脱敏：手机号尾号 4 位，格式 ****1234 */
   recipientPhoneTail: string;
   pickupCode: string | null;
+  /** in_stock | overdue — 滞留仍可取件 */
+  status?: string;
   inboundAt: string;
   stationName: string | null;
   courierName: string | null;

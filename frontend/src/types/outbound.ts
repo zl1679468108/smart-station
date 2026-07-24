@@ -25,6 +25,8 @@ export interface OutboundSearchItem {
   recipientName: string;
   recipientPhone: string;
   pickupCode: string | null;
+  /** in_stock | overdue */
+  status?: string;
   inboundAt: string;
   courierName: string | null;
 }
