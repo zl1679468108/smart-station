@@ -87,3 +87,19 @@ export function buildCollectWaiveScript(opts: {
   return `【${station}】本件原应收 ¥${amount}，已按店内规则免收。${note}如有疑问请到店咨询。`;
 }
 
+/** 预约到店当面/微信一对一告知（勿发企微群含完整手机号） */
+export function buildAppointmentFaceScript(opts: {
+  slotDate: string;
+  slotLabel: string;
+  recipientName?: string | null;
+  stationName?: string;
+}): string {
+  const who = opts.recipientName?.trim() ? `${opts.recipientName.trim()}，` : '';
+  const station = opts.stationName?.trim() || '驿站';
+  return [
+    `${who}您已预约${station}到店。`,
+    `时段：${opts.slotDate} ${opts.slotLabel}。`,
+    '到店报手机号或取件码即可。若要微信收提醒，可在查件页绑定微信通知。',
+  ].join('');
+}
+

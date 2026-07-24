@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as appointmentService from '@/services/appointment';
 import type {
   AppointmentItem,
@@ -12,6 +12,11 @@ import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
 import { notifyError, notifySuccess } from '@/utils/notification';
+import {
+  buildAppointmentFaceScript,
+  buildBindGuideScript,
+} from '@/utils/staffScripts';
+import { copyText } from '@/utils/stationVisit';
 
 function todayBeijing(): string {
   const now = new Date(Date.now() + 8 * 3600 * 1000);
@@ -38,6 +43,7 @@ const statusTone: Record<string, string> = {
 };
 
 const AppointmentsPage: React.FC = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialStatus = searchParams.get('status') || '';
   const initialDate = searchParams.get('date');
@@ -57,6 +63,7 @@ const AppointmentsPage: React.FC = () => {
   const [busyId, setBusyId] = useState<string | null>(null);
   /** 最近一次预约通知回执（创建/确认） */
   const [lastNotify, setLastNotify] = useState<string | null>(null);
+  const [lastNotifyPhone, setLastNotifyPhone] = useState<string | null>(null);
 
   // URL 深链变化时同步（工作台 → 今日待确认）
   useEffect(() => {
@@ -150,6 +157,7 @@ const AppointmentsPage: React.FC = () => {
       });
       const hint = item.notifyHint || '代客预约已登记';
       setLastNotify(hint);
+      setLastNotifyPhone(cPhone.replace(/\D/g, '').slice(0, 11) || null);
       notifySuccess(hint);
       setCreateOpen(false);
       setCPhone('');
@@ -170,9 +178,20 @@ const AppointmentsPage: React.FC = () => {
   const updateStatus = async (id: string, next: AppointmentStatus) => {
     setBusyId(id);
     try {
+      const prev = items.find((x) => x.id === id);
       const item = await appointmentService.updateAppointmentStatus(id, next);
       if (item?.notifyHint) {
         setLastNotify(item.notifyHint);
+        const phone = (
+          item.recipientPhoneFull ||
+          prev?.recipientPhoneFull ||
+          item.recipientPhone ||
+          prev?.recipientPhone ||
+          ''
+        )
+          .replace(/\D/g, '')
+          .slice(0, 11);
+        setLastNotifyPhone(phone.length === 11 ? phone : null);
         notifySuccess(item.notifyHint);
       } else if (next === 'confirmed') {
         notifySuccess('已确认预约');
@@ -219,16 +238,58 @@ const AppointmentsPage: React.FC = () => {
 
       {lastNotify && (
         <div className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-violet-100 bg-violet-50 px-3 py-2.5">
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-medium text-violet-900">预约通知回执</p>
             <p className="mt-0.5 text-xs text-violet-900/90">{lastNotify}</p>
             <p className="mt-1 text-[11px] text-violet-800/80">
               未绑定微信的客户请口头告知时段；可引导对方在查件页扫一扫收码。
             </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                className="rounded-md border border-violet-200 bg-white px-2 py-1 text-[11px] font-medium text-violet-800 hover:bg-violet-100"
+                onClick={() => {
+                  void (async () => {
+                    const ok = await copyText(buildBindGuideScript());
+                    if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                    else notifyError('复制失败');
+                  })();
+                }}
+              >
+                复制绑定话术
+              </button>
+              {lastNotifyPhone && (
+                <button
+                  type="button"
+                  className="rounded-md border border-violet-200 bg-white px-2 py-1 text-[11px] font-medium text-violet-800 hover:bg-violet-100"
+                  onClick={() =>
+                    navigate(
+                      `/admin/system?tab=notify&phone=${encodeURIComponent(lastNotifyPhone)}`,
+                    )
+                  }
+                >
+                  看该手机通知
+                </button>
+              )}
+              {(lastNotify.includes('未绑定') || lastNotify.includes('绑定')) && (
+                <button
+                  type="button"
+                  className="rounded-md border border-violet-200 bg-white px-2 py-1 text-[11px] font-medium text-violet-800 hover:bg-violet-100"
+                  onClick={() =>
+                    navigate('/admin/system?tab=notify&filter=unbound&view=byPhone')
+                  }
+                >
+                  按手机号跟进
+                </button>
+              )}
+            </div>
           </div>
           <button
             type="button"
-            onClick={() => setLastNotify(null)}
+            onClick={() => {
+              setLastNotify(null);
+              setLastNotifyPhone(null);
+            }}
             className="text-[11px] text-violet-700 underline"
           >
             关闭
@@ -354,6 +415,41 @@ const AppointmentsPage: React.FC = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void (async () => {
+                              const ok = await copyText(
+                                buildAppointmentFaceScript({
+                                  slotDate: row.slotDate,
+                                  slotLabel: row.slotLabel || `${row.slotStart}-${row.slotEnd}`,
+                                  recipientName: row.recipientName,
+                                }),
+                              );
+                              if (ok) notifySuccess('已复制预约话术（一对一告知，勿发群）');
+                              else notifyError('复制失败');
+                            })();
+                          }}
+                          className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                        >
+                          复制话术
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const raw =
+                              row.recipientPhoneFull || row.recipientPhone || '';
+                            const phone = raw.replace(/\D/g, '').slice(0, 11);
+                            navigate(
+                              phone.length >= 4
+                                ? `/admin/system?tab=notify&phone=${encodeURIComponent(phone)}`
+                                : '/admin/system?tab=notify',
+                            );
+                          }}
+                          className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                        >
+                          看通知
+                        </button>
                         {row.status === 'pending' && (
                           <button
                             type="button"

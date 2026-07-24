@@ -6,6 +6,8 @@ import type {
   AppointmentSlot,
   AppointmentSlotsResult,
 } from '@/types/appointment';
+import { buildAppointmentFaceScript } from '@/utils/staffScripts';
+import { copyText } from '@/utils/stationVisit';
 
 type Props = {
   /** 查件成功后的手机号，预填 */
@@ -165,35 +167,48 @@ const PickupAppointmentCard: React.FC<Props> = ({ defaultPhone, onBindClick }) =
                 <li>到店报手机号或取件码即可</li>
                 <li>群里不会公开你的取件码</li>
               </ul>
-              {(success.notifyHint || '').includes('未绑定') ||
-              (success.notifyHint || '').includes('绑定微信') ? (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {onBindClick && (
-                    <button
-                      type="button"
-                      onClick={onBindClick}
-                      className="min-h-[40px] rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primaryHover"
-                    >
-                      去绑定微信收提醒
-                    </button>
-                  )}
+              <div className="mt-2 flex flex-wrap gap-2">
+                {onBindClick && (
                   <button
                     type="button"
-                    onClick={() => setSuccess(null)}
-                    className="min-h-[40px] rounded-md border border-emerald-200 bg-white px-3 text-xs text-emerald-900 hover:bg-emerald-100/50"
+                    onClick={onBindClick}
+                    className="min-h-[40px] rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primaryHover"
                   >
-                    继续预约
+                    {(success.notifyHint || '').includes('未绑定') ||
+                    (success.notifyHint || '').includes('绑定')
+                      ? '去绑定微信收提醒'
+                      : '管理微信提醒'}
                   </button>
-                </div>
-              ) : (
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void (async () => {
+                      const ok = await copyText(
+                        buildAppointmentFaceScript({
+                          slotDate: success.slotDate,
+                          slotLabel: success.slotLabel,
+                          recipientName: success.recipientName,
+                        }),
+                      );
+                      // 查件页无 toast 全局时用 alert 太重；静默失败即可，成功靠按钮文案
+                      if (!ok) {
+                        // keep silent on kiosk; clipboard may be restricted
+                      }
+                    })();
+                  }}
+                  className="min-h-[40px] rounded-md border border-emerald-200 bg-white px-3 text-xs text-emerald-900 hover:bg-emerald-100/50"
+                >
+                  复制预约信息
+                </button>
                 <button
                   type="button"
                   onClick={() => setSuccess(null)}
-                  className="mt-2 text-[11px] text-emerald-800 underline"
+                  className="min-h-[40px] rounded-md border border-emerald-200 bg-white px-3 text-xs text-emerald-900 hover:bg-emerald-100/50"
                 >
-                  再约一个时段
+                  继续预约
                 </button>
-              )}
+              </div>
             </div>
           )}
 
