@@ -1377,3 +1377,14 @@
 | M122.1 | P1 | printAppointmentSlip | print util | done | 脱敏 |
 | M122.2 | P1 | 预约列表打印凭条 | appointments | done | |
 
+## M123 查件结果复制取件码（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M123.1 | P0 | 结果页复制单码/全部码 | query Home | done | H5/PAD 均可用 |
+| M123.2 | P1 | 结果顶栏强化绑定 CTA | query ResultView | done | |
+
+## M124 试用冒烟脚本（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M124.1 | P1 | scripts/smoke-trial.sh | scripts | done | preflight+health+notify-guide |
+

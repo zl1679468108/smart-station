@@ -301,7 +301,8 @@ scripts/                  部署脚本
 
 ## 13. 部署
 
-试用联调清单见 [docs/TRIAL-CHECKLIST.md](./docs/TRIAL-CHECKLIST.md)。部署前可执行 `bash scripts/preflight.sh`。
+试用联调清单见 [docs/TRIAL-CHECKLIST.md](./docs/TRIAL-CHECKLIST.md)。部署前可执行 `bash scripts/preflight.sh
+# 可选冒烟：bash scripts/smoke-trial.sh`。
 
 
 **平台**（待定，候选）：

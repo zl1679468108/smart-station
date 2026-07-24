@@ -18,6 +18,7 @@ import {
 } from '@/components/warehouse3d';
 import { formatBeijingTimestamp } from '@/utils/date';
 import NotifyBindCard from '@/components/NotifyBindCard';
+import { copyText } from '@/utils/stationVisit';
 import StationVisitCard from '@/components/StationVisitCard';
 import PickupAppointmentCard from '@/components/PickupAppointmentCard';
 import { useQueryDevice } from '@/hooks/useQueryDevice';
@@ -650,6 +651,35 @@ const ResultView: React.FC<{
   bindEnabled = true,
   onBindClick,
 }) => {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const flashCopied = (key: string) => {
+    setCopiedKey(key);
+    window.setTimeout(() => {
+      setCopiedKey((cur) => (cur === key ? null : cur));
+    }, 1500);
+  };
+
+  const onCopyOne = async (code: string, id: string) => {
+    const textCode = String(code || '').trim();
+    if (!textCode) return;
+    const ok = await copyText(textCode);
+    if (ok) flashCopied(id);
+  };
+
+  const onCopyAll = async () => {
+    const codes = items
+      .map((it) => String(it.pickupCode || '').trim())
+      .filter(Boolean);
+    if (codes.length === 0) return;
+    const body =
+      codes.length === 1
+        ? codes[0]
+        : codes.map((c, i) => `${i + 1}. ${c}`).join('\n');
+    const ok = await copyText(body);
+    if (ok) flashCopied('all');
+  };
+
   // 提取所有需高亮的「货架号 + 层号 + 包裹数」（按货架号去重，统计每个货架的包裹数）
   const highlights = useMemo(() => {
     const map = new Map<number, { layer: number | null; count: number }>();
@@ -714,6 +744,31 @@ const ResultView: React.FC<{
       <div className="text-center">
         <h3 className="text-base font-bold text-gray-800">找到 {items.length} 个包裹</h3>
         <p className="text-xs text-gray-500">请凭取件码到对应货架取件 · 也可到店请工作人员协助</p>
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => void onCopyAll()}
+            className="min-h-[40px] rounded-md border border-primary/30 bg-white px-3 text-xs font-semibold text-primary hover:bg-orange-50"
+          >
+            {copiedKey === 'all'
+              ? '已复制全部取件码'
+              : items.length > 1
+                ? `复制全部取件码（${items.length}）`
+                : '复制取件码'}
+          </button>
+          {showBindCta && (
+            <button
+              type="button"
+              onClick={onBindClick}
+              className="min-h-[40px] rounded-md bg-primary px-3 text-xs font-semibold text-white hover:bg-primaryHover"
+            >
+              绑定后微信收码
+            </button>
+          )}
+        </div>
+        <p className="mt-1 text-[11px] text-gray-400">
+          先复制保存取件码，再绑定更稳；码只给你自己，群里不会公开
+        </p>
       </div>
 
       {/* 绑定转化 / 未绑定兜底 */}
@@ -811,6 +866,15 @@ const ResultView: React.FC<{
                 <span className="font-mono text-2xl font-bold tracking-widest text-primary">
                   {item.pickupCode || '-'}
                 </span>
+                {item.pickupCode && (
+                  <button
+                    type="button"
+                    onClick={() => void onCopyOne(item.pickupCode || '', item.id)}
+                    className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-100"
+                  >
+                    {copiedKey === item.id ? '已复制' : '复制'}
+                  </button>
+                )}
                 {item.status === 'overdue' && (
                   <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700">
                     即将超期，请尽快取件
