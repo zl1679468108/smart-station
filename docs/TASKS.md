@@ -1173,3 +1173,10 @@
 | M92.1 | P1 | NotifyReachBar 共用组件 | components | done | 入库/库存同源 |
 | M92.2 | P1 | 库存页替换为计数触达条 | inventory | done | 私信/未绑定/失败可点 |
 | M92.3 | P2 | 入库改用共用组件 | inbound | done | 去掉页内重复实现 |
+
+## M93 滞留/异常页触达条（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M93.1 | P1 | 滞留页今日触达条 | overdue | done | 发提醒前看未绑定 |
+| M93.2 | P1 | 异常页今日触达条 | exception | done | 补发/联系前跟进 |
+| M93.3 | P2 | NotifyReachBar 场景文案 | components | done | overdue/exception 上下文 |

@@ -8,6 +8,7 @@ import { canWrite } from '@/utils/permission';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import EmptyState from '@/components/ui/EmptyState';
 import PageHeader from '@/components/ui/PageHeader';
+import NotifyReachBar from '@/components/NotifyReachBar';
 import { copyText } from '@/utils/stationVisit';
 import { buildFacePickupScript } from '@/utils/staffScripts';
 import Pagination from '@/components/ui/Pagination';
@@ -210,6 +211,8 @@ const OverduePage: React.FC = () => {
           )
         }
       />
+
+      <NotifyReachBar className="mb-3" context="overdue" />
 
 
       

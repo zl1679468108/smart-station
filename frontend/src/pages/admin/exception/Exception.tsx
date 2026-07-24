@@ -18,6 +18,7 @@ import { copyText } from '@/utils/stationVisit';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
 import PageHeader from '@/components/ui/PageHeader';
+import NotifyReachBar from '@/components/NotifyReachBar';
 import Modal from '@/components/ui/Modal';
 import SearchSelect, { type SearchSelectOption } from '@/components/ui/SearchSelect';
 
@@ -213,6 +214,8 @@ const ExceptionPage: React.FC = () => {
           )
         }
       />
+
+      <NotifyReachBar className="mb-3" context="exception" />
 
       <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-orange-100 bg-orange-50/70 px-3 py-2">
         <p className="text-[11px] text-orange-900">
