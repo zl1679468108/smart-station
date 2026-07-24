@@ -162,8 +162,15 @@ const ParcelDetailPage: React.FC = () => {
                 {ev.eventType === 'outbound' &&
                   ev.metadata &&
                   typeof ev.metadata === 'object' &&
-                  (ev.metadata as { verify?: { type?: string; phoneTail?: string; note?: string; evidenceUrl?: string } })
-                    .verify?.type === 'phone_tail' && (
+                  (ev.metadata as {
+                    verify?: {
+                      type?: string;
+                      phoneTail?: string;
+                      note?: string;
+                      evidenceUrl?: string;
+                      signatureUrl?: string;
+                    };
+                  }).verify?.type === 'phone_tail' && (
                     <div className="mt-1 space-y-1">
                       <p className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
                         身份核验：手机后4位
@@ -182,6 +189,16 @@ const ParcelDetailPage: React.FC = () => {
                           className="block text-[11px] text-primary hover:underline"
                         >
                           查看拍照留证
+                        </a>
+                      )}
+                      {(ev.metadata as { verify?: { signatureUrl?: string } }).verify?.signatureUrl && (
+                        <a
+                          href={(ev.metadata as { verify?: { signatureUrl?: string } }).verify?.signatureUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block text-[11px] text-primary hover:underline"
+                        >
+                          查看取件签名
                         </a>
                       )}
                     </div>

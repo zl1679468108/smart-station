@@ -23,6 +23,8 @@ export function manualOutbound(payload: {
   verifyNote?: string;
   /** 可选拍照留证 base64 */
   evidenceImageBase64?: string;
+  /** 可选取件签名 base64（大件推荐） */
+  signatureImageBase64?: string;
 }): Promise<OutboundResult> {
   return post<OutboundResult>('/api/outbound/manual', payload, { successMessage: '包裹已出库' });
 }

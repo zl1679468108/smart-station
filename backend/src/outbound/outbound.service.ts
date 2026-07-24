@@ -144,14 +144,25 @@ export class OutboundService {
       throw new BadRequestException('手机号后 4 位不正确，请向取件人重新确认');
     }
 
-    // 可选拍照留证（失败不阻断出库）
+    // 可选拍照 / 签名留证（失败不阻断出库）
     let evidenceUrl: string | undefined;
+    let signatureUrl: string | undefined;
     if (dto.evidenceImageBase64) {
       evidenceUrl =
         (await this.tryUploadEvidence(
           ctx.stationId,
           parcel.id,
           dto.evidenceImageBase64,
+          'photo',
+        )) || undefined;
+    }
+    if (dto.signatureImageBase64) {
+      signatureUrl =
+        (await this.tryUploadEvidence(
+          ctx.stationId,
+          parcel.id,
+          dto.signatureImageBase64,
+          'signature',
         )) || undefined;
     }
 
@@ -166,6 +177,7 @@ export class OutboundService {
         phoneTail: givenTail,
         note: (dto.verifyNote || '').trim() || undefined,
         evidenceUrl,
+        signatureUrl,
       },
     });
   }
@@ -266,6 +278,7 @@ export class OutboundService {
         phoneTail?: string;
         note?: string;
         evidenceUrl?: string;
+        signatureUrl?: string;
       };
     },
   ) {
@@ -290,6 +303,7 @@ export class OutboundService {
     if (opts.verify?.type === 'phone_tail') {
       description += '（已核验手机后4位）';
       if (opts.verify.evidenceUrl) description += '（已拍照留证）';
+      if (opts.verify.signatureUrl) description += '（已签名留证）';
       if (opts.verify.note) description += `：${opts.verify.note}`;
     }
     await this.supabase.getClient().from('ss_parcel_events').insert({
@@ -308,6 +322,7 @@ export class OutboundService {
               phoneTail: opts.verify.phoneTail || null,
               note: opts.verify.note || null,
               evidenceUrl: opts.verify.evidenceUrl || null,
+              signatureUrl: opts.verify.signatureUrl || null,
               verifiedAt: new Date().toISOString(),
             }
           : { type: 'none' },
@@ -333,11 +348,12 @@ export class OutboundService {
   }
 
 
-  /** 拍照留证上传（可选，失败返回 null 不阻断出库） */
+  /** 拍照/签名留证上传（可选，失败返回 null 不阻断出库） */
   private async tryUploadEvidence(
     stationId: string,
     parcelId: string,
     imageBase64: string,
+    kind: 'photo' | 'signature' = 'photo',
   ): Promise<string | null> {
     try {
       const raw = String(imageBase64 || '').trim();
@@ -361,7 +377,7 @@ export class OutboundService {
           ? 'webp'
           : 'jpg';
       const bucket = (process.env.SUPABASE_STORAGE_BUCKET || 'ss-evidence').trim();
-      const path = `outbound/${stationId}/${parcelId}/${Date.now()}.${ext}`;
+      const path = `outbound/${stationId}/${parcelId}/${kind}-${Date.now()}.${ext}`;
       const client = this.supabase.getClient();
       const { error } = await client.storage.from(bucket).upload(path, buf, {
         contentType,

@@ -40,6 +40,14 @@ export class ManualOutboundDto {
   @IsOptional()
   @IsString()
   evidenceImageBase64?: string;
+
+  /**
+   * 可选取件签名（大件推荐；png/jpeg base64，可含 data URI 前缀）
+   * 上传到 Supabase Storage；失败不阻断出库
+   */
+  @IsOptional()
+  @IsString()
+  signatureImageBase64?: string;
 }
 
 /**

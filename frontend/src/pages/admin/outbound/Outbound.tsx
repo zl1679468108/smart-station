@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as outboundService from '@/services/outbound';
 import { useInvalidateShelves } from '@/hooks/useDictionary';
 import { useInvalidateDashboard } from '@/hooks/useDashboardData';
@@ -74,7 +74,12 @@ const ManualOutbound: React.FC = () => {
   // 确认出库（防连点 + 手机后4位身份核验）
   const handleConfirmOutbound = async (
     item: OutboundSearchItem,
-    verify: { phoneTail: string; verifyNote?: string; evidenceImageBase64?: string },
+    verify: {
+      phoneTail: string;
+      verifyNote?: string;
+      evidenceImageBase64?: string;
+      signatureImageBase64?: string;
+    },
   ) => {
     if (confirmLoading) return;
     const tail = verify.phoneTail.replace(/\D/g, '');
@@ -90,6 +95,7 @@ const ManualOutbound: React.FC = () => {
         phoneTail: tail,
         verifyNote: verify.verifyNote,
         evidenceImageBase64: verify.evidenceImageBase64,
+        signatureImageBase64: verify.signatureImageBase64,
       });
       invalidateShelves();
       invalidateDashboard();
@@ -394,6 +400,7 @@ const ConfirmDialog: React.FC<{
     phoneTail: string;
     verifyNote?: string;
     evidenceImageBase64?: string;
+    signatureImageBase64?: string;
   }) => void;
   onCancel: () => void;
 }> = ({ item, loading, onConfirm, onCancel }) => {
@@ -403,14 +410,110 @@ const ConfirmDialog: React.FC<{
   const [evidencePreview, setEvidencePreview] = useState<string | null>(null);
   const [evidenceBase64, setEvidenceBase64] = useState<string | undefined>();
   const [compressing, setCompressing] = useState(false);
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string | undefined>();
+  const [hasSignature, setHasSignature] = useState(false);
+  const sigCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const drawingRef = useRef(false);
+  const hasDrawnRef = useRef(false);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
 
-  // 确认弹窗内不展示完整后4位，要求当面询问取件人
   // 确认弹窗故意不展示后 4 位，避免店员照抄屏幕
   const phoneMasked = (() => {
     const p = String(item.recipientPhone || '').replace(/\D/g, '');
     if (p.length >= 7) return `${p.slice(0, 3)}********`;
     return '***********';
   })();
+
+  const initSignatureCanvas = () => {
+    const canvas = sigCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cssW = Math.max(Math.floor(rect.width), 280);
+    const cssH = 140;
+    canvas.width = Math.floor(cssW * dpr);
+    canvas.height = Math.floor(cssH * dpr);
+    canvas.style.width = `${cssW}px`;
+    canvas.style.height = `${cssH}px`;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, cssW, cssH);
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    hasDrawnRef.current = false;
+    setHasSignature(false);
+    setSignatureDataUrl(undefined);
+  };
+
+  useEffect(() => {
+    initSignatureCanvas();
+    const onResize = () => initSignatureCanvas();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const pointFromEvent = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = sigCanvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (loading) return;
+    const canvas = sigCanvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    const pt = pointFromEvent(e);
+    if (!canvas || !ctx || !pt) return;
+    canvas.setPointerCapture(e.pointerId);
+    drawingRef.current = true;
+    lastPointRef.current = pt;
+    ctx.beginPath();
+    ctx.moveTo(pt.x, pt.y);
+    ctx.lineTo(pt.x + 0.01, pt.y + 0.01);
+    ctx.stroke();
+    hasDrawnRef.current = true;
+    setHasSignature(true);
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawingRef.current || loading) return;
+    const canvas = sigCanvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    const pt = pointFromEvent(e);
+    const last = lastPointRef.current;
+    if (!ctx || !pt || !last) return;
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(pt.x, pt.y);
+    ctx.stroke();
+    lastPointRef.current = pt;
+  };
+
+  const endStroke = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawingRef.current) return;
+    drawingRef.current = false;
+    lastPointRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    const canvas = sigCanvasRef.current;
+    if (canvas && hasDrawnRef.current) {
+      // jpeg 体积更小，适配 400KB 上传上限
+      setSignatureDataUrl(canvas.toDataURL('image/jpeg', 0.85));
+    }
+  };
+
+  const clearSignature = () => {
+    initSignatureCanvas();
+  };
 
   const compressImage = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -475,11 +578,17 @@ const ConfirmDialog: React.FC<{
       setLocalError('请输入 4 位数字');
       return;
     }
+    // 提交前再导出一次签名，避免最后一笔未 flush
+    let sig = signatureDataUrl;
+    if (hasDrawnRef.current && sigCanvasRef.current) {
+      sig = sigCanvasRef.current.toDataURL('image/jpeg', 0.85);
+    }
     setLocalError('');
     onConfirm({
       phoneTail: tail,
       verifyNote: verifyNote.trim() || undefined,
       evidenceImageBase64: evidenceBase64,
+      signatureImageBase64: hasDrawnRef.current ? sig : undefined,
     });
   };
 
@@ -487,7 +596,7 @@ const ConfirmDialog: React.FC<{
     <Modal
       open
       onClose={onCancel}
-      widthClassName="max-w-sm"
+      widthClassName="max-w-md"
       title={
         <span className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primaryLight text-primary">
@@ -576,6 +685,39 @@ const ConfirmDialog: React.FC<{
             disabled={loading}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
           />
+        </div>
+        <div>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <label className="block text-xs text-gray-500">取件签名（大件推荐，可选）</label>
+            <button
+              type="button"
+              disabled={loading || !hasSignature}
+              onClick={clearSignature}
+              className="text-[11px] text-gray-500 hover:text-danger disabled:opacity-40"
+            >
+              清除重签
+            </button>
+          </div>
+          <div className="overflow-hidden rounded-md border border-dashed border-gray-300 bg-white">
+            <canvas
+              ref={sigCanvasRef}
+              className="block w-full touch-none"
+              style={{ height: 140, touchAction: 'none' }}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={endStroke}
+              onPointerCancel={endStroke}
+              onPointerLeave={(e) => {
+                if (drawingRef.current) endStroke(e);
+              }}
+            />
+          </div>
+          <p className="mt-1 text-[11px] text-gray-400">
+            让取件人在框内手写签名（平板可直接手写）。大件建议签；普通件可跳过。
+          </p>
+          {hasSignature && (
+            <p className="mt-0.5 text-[11px] text-emerald-600">已采集签名</p>
+          )}
         </div>
         <div>
           <label className="mb-1 block text-xs text-gray-500">拍照留证（可选）</label>
