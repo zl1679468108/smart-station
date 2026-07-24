@@ -20,6 +20,26 @@ export interface CheckTrackingResult {
   parcel?: DuplicateParcelInfo;
 }
 
+export interface CheckTrackingBatchItem {
+  index: number;
+  trackingNumber: string;
+  exists: boolean;
+  inBatchDuplicate: boolean;
+  blocked: boolean;
+  message: string;
+  parcel?: DuplicateParcelInfo;
+}
+
+export interface CheckTrackingBatchResult {
+  total: number;
+  ready: number;
+  blocked: number;
+  stockDuplicate: number;
+  batchDuplicate: number;
+  items: CheckTrackingBatchItem[];
+  staffMessage: string;
+}
+
 // 入库相关类型定义
 
 export type ParcelSize = 'small' | 'medium' | 'large';

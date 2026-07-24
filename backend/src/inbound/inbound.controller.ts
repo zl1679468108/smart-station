@@ -7,6 +7,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CheckTrackingDto } from './dto/check-tracking.dto';
+import { CheckTrackingBatchDto } from './dto/check-tracking-batch.dto';
 import { InboundService } from './inbound.service';
 import { InboundDto } from './dto/inbound.dto';
 import { TokenAuthGuard } from '../common/guards/token-auth.guard';
@@ -36,6 +37,16 @@ export class InboundController {
     @StationId() stationId: string,
   ) {
     return this.inboundService.checkTracking(stationId, body.trackingNumber);
+  }
+
+  /** 批量运单预检（库内重复 + CSV 内重复） */
+  @Post('check-tracking-batch')
+  @HttpCode(200)
+  async checkTrackingBatch(
+    @Body() body: CheckTrackingBatchDto,
+    @StationId() stationId: string,
+  ) {
+    return this.inboundService.checkTrackingBatch(stationId, body.trackingNumbers || []);
   }
 
   @Post()

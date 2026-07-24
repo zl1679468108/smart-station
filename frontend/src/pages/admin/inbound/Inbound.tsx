@@ -20,6 +20,7 @@ import { useInvalidateDashboard } from '@/hooks/useDashboardData';
 import { useInvalidateInventoryList } from '@/hooks/useInventoryData';
 import type {
   BatchNotifySummary,
+  CheckTrackingBatchResult,
   DuplicateParcelInfo,
   InboundResult,
   ParcelSize,
@@ -1088,6 +1089,8 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const [csvText, setCsvText] = useState('');
   const [defaultSize, setDefaultSize] = useState<ParcelSize>(() => loadLastParcelSize('small'));
   const [submitting, setSubmitting] = useState(false);
+  const [prechecking, setPrechecking] = useState(false);
+  const [precheck, setPrecheck] = useState<CheckTrackingBatchResult | null>(null);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{
     succeeded: number;
@@ -1156,17 +1159,82 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     if (items.length === 0) {
       setError(`无有效数据，${parseErrors.length} 行解析失败`);
       setResult({ total: lines.length, succeeded: 0, failed: parseErrors.length, errors: parseErrors });
+      setPrecheck(null);
       return;
+    }
+
+    // 先预检：库内重复 + CSV 内重复
+    setPrechecking(true);
+    setError('');
+    setPrecheck(null);
+    let check: CheckTrackingBatchResult | null = null;
+    try {
+      check = await inboundService.checkTrackingBatch(items.map((x) => x.trackingNumber));
+      setPrecheck(check);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '预检失败');
+      setPrechecking(false);
+      return;
+    }
+    setPrechecking(false);
+
+    const stockBlocked = new Set(
+      (check?.items || []).filter((x) => x.exists).map((x) => x.trackingNumber.toUpperCase()),
+    );
+    const readyFinal: typeof items = [];
+    const firstSeen = new Set<string>();
+    const skippedErrors: Array<{ index: number; error: string }> = [...parseErrors];
+    items.forEach((it, idx) => {
+      const tn = it.trackingNumber.trim().toUpperCase();
+      if (stockBlocked.has(tn)) {
+        const hit = (check?.items || []).find((c) => c.trackingNumber === tn && c.exists);
+        skippedErrors.push({
+          index: idx,
+          error: hit?.message || '运单已在库，已跳过',
+        });
+        return;
+      }
+      if (firstSeen.has(tn)) {
+        skippedErrors.push({ index: idx, error: '本批 CSV 内运单号重复，已跳过' });
+        return;
+      }
+      firstSeen.add(tn);
+      readyFinal.push(it);
+    });
+
+    if (readyFinal.length === 0) {
+      setError(check?.staffMessage || '没有可入库的运单（均为重复）');
+      setResult({
+        total: lines.length,
+        succeeded: 0,
+        failed: skippedErrors.length,
+        errors: skippedErrors,
+      });
+      return;
+    }
+
+    const skipCount = items.length - readyFinal.length;
+    if (skipCount > 0) {
+      const ok = window.confirm(
+        `${check?.staffMessage || '预检完成'}\n\n将跳过 ${skipCount} 条重复，仅导入 ${readyFinal.length} 条。是否继续？`,
+      );
+      if (!ok) return;
     }
 
     setSubmitting(true);
     try {
-      const res = await inboundService.batchInbound(items);
+      const res = await inboundService.batchInbound(readyFinal);
       setResult({
-        total: res.total,
+        total: items.length + parseErrors.length,
         succeeded: res.succeeded,
-        failed: res.failed + parseErrors.length,
-        errors: [...parseErrors, ...res.errors.map((e) => ({ index: e.index, error: e.error }))],
+        failed: res.failed + skippedErrors.length,
+        errors: [
+          ...skippedErrors,
+          ...res.errors.map((e) => ({
+            index: e.index,
+            error: `${readyFinal[e.index]?.trackingNumber || ''} ${e.error}`.trim(),
+          })),
+        ],
         notifySummary: res.notifySummary,
         successes: (res.results || []).map((row) => ({
           id: row.result?.id || '',
@@ -1216,19 +1284,47 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         </div>
         <textarea
           value={csvText}
-          onChange={(e) => setCsvText(e.target.value)}
+          onChange={(e) => {
+            setCsvText(e.target.value);
+            setPrecheck(null);
+          }}
           rows={8}
           placeholder={'SF1234567890,张三,13800001234,易碎品\nZTO9876543210,李四,13900005678'}
           className="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm outline-none focus:border-primary"
           disabled={submitting}
         />
         {error && <div className="mt-3 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+        {precheck && precheck.blocked > 0 && (
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
+            <p className="font-medium">{precheck.staffMessage}</p>
+            <p className="mt-1 text-[11px] opacity-90">
+              导入时会自动跳过库内已存在与 CSV 内重复运单；下方失败列表会写明原因。
+            </p>
+            <div className="mt-2 max-h-36 overflow-auto rounded border border-amber-100 bg-white/70">
+              <ul className="divide-y divide-amber-50">
+                {precheck.items
+                  .filter((x) => x.blocked)
+                  .slice(0, 30)
+                  .map((x) => (
+                    <li key={`${x.index}-${x.trackingNumber}`} className="px-2 py-1.5 font-mono text-[11px]">
+                      <span className="text-gray-800">{x.trackingNumber}</span>
+                      <span className="ml-2 text-amber-800">
+                        {x.exists
+                          ? `已在库${x.parcel?.pickupCode ? ` · 取件码 ${x.parcel.pickupCode}` : ''}`
+                          : x.message}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          </div>
+        )}
         <button
-          onClick={handleSubmit}
-          disabled={submitting || !csvText.trim()}
+          onClick={() => void handleSubmit()}
+          disabled={submitting || prechecking || !csvText.trim()}
           className="mt-3 rounded-md bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
         >
-          {submitting ? '导入中...' : '开始导入'}
+          {prechecking ? '预检中...' : submitting ? '导入中...' : '预检并导入'}
         </button>
       </div>
 

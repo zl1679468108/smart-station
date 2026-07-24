@@ -382,7 +382,11 @@ const SearchResultList: React.FC<{
         <div
           key={item.id}
           className={`rounded-lg border bg-white p-4 ${
-            item.status === 'overdue' ? 'border-orange-200' : 'border-gray-200'
+            Number(item.collectDueAmount || 0) > 0 && item.collectStatus === 'unpaid'
+              ? 'border-rose-300 ring-1 ring-rose-100'
+              : item.status === 'overdue'
+                ? 'border-orange-200'
+                : 'border-gray-200'
           }`}
         >
           <div className="flex items-start justify-between gap-3">
@@ -426,9 +430,15 @@ const SearchResultList: React.FC<{
             </div>
             <button
               onClick={() => onOutbound(item)}
-              className="shrink-0 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primaryHover"
+              className={`shrink-0 rounded-md px-4 py-2 text-sm font-medium text-white hover:opacity-90 ${
+                Number(item.collectDueAmount || 0) > 0 && item.collectStatus === 'unpaid'
+                  ? 'bg-rose-600 hover:bg-rose-700'
+                  : 'bg-primary hover:bg-primaryHover'
+              }`}
             >
-              确认出库
+              {Number(item.collectDueAmount || 0) > 0 && item.collectStatus === 'unpaid'
+                ? '收款出库'
+                : '确认出库'}
             </button>
           </div>
         </div>
@@ -465,6 +475,7 @@ const ConfirmDialog: React.FC<{
   >('');
   const [collectNote, setCollectNote] = useState('');
   const [collectAction, setCollectAction] = useState<'pay' | 'waive'>('pay');
+  const [collectConfirmed, setCollectConfirmed] = useState(false);
   const sigCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const hasDrawnRef = useRef(false);
@@ -640,6 +651,10 @@ const ConfirmDialog: React.FC<{
       setLocalError('该件需收款，请选择收款方式');
       return;
     }
+    if (needCollect && collectAction === 'pay' && !collectConfirmed) {
+      setLocalError('请勾选「已当面收妥」后再出库');
+      return;
+    }
     if (needCollect && collectAction === 'waive' && !collectNote.trim()) {
       setLocalError('免收须填写原因');
       return;
@@ -693,11 +708,20 @@ const ConfirmDialog: React.FC<{
               compressing ||
               phoneTail.replace(/\D/g, '').length !== 4 ||
               (needCollect && collectAction === 'pay' && !collectPaidMethod) ||
+              (needCollect && collectAction === 'pay' && !collectConfirmed) ||
               (needCollect && collectAction === 'waive' && !collectNote.trim())
             }
             className="flex-1 rounded-md bg-primary py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
           >
-            {loading ? '出库中…' : compressing ? '处理图片…' : '核验并出库'}
+            {loading
+              ? '出库中…'
+              : compressing
+                ? '处理图片…'
+                : needCollect
+                  ? collectAction === 'pay'
+                    ? '收款核验并出库'
+                    : '免收核验并出库'
+                  : '核验并出库'}
           </button>
         </>
       }
@@ -725,9 +749,9 @@ const ConfirmDialog: React.FC<{
           防冒领：请当面询问取件人「手机号后 4 位是多少」，再填写下方。勿直接照抄屏幕号码。
         </div>
         {needCollect && (
-          <div className="space-y-2 rounded-md border border-rose-200 bg-rose-50/80 px-3 py-2">
-            <p className="text-xs font-medium text-rose-800">
-              待收款 ¥{collectDue.toFixed(2)}
+          <div className="space-y-2 rounded-md border-2 border-rose-300 bg-rose-50 px-3 py-3">
+            <p className="text-sm font-semibold text-rose-900">
+              ⚠ 待收款 <span className="font-mono text-base">¥{collectDue.toFixed(2)}</span>
               {Number(item.freightCollectAmount || 0) > 0 && (
                 <span className="ml-1 font-normal text-rose-700/90">
                   （到付¥{Number(item.freightCollectAmount || 0).toFixed(2)}
@@ -749,6 +773,7 @@ const ConfirmDialog: React.FC<{
                 disabled={loading}
                 onClick={() => {
                   setCollectAction('pay');
+                  setCollectConfirmed(false);
                   setLocalError('');
                 }}
                 className={`flex-1 rounded-md border px-2 py-1.5 text-xs ${
@@ -765,6 +790,7 @@ const ConfirmDialog: React.FC<{
                 onClick={() => {
                   setCollectAction('waive');
                   setCollectPaidMethod('');
+                  setCollectConfirmed(false);
                   setLocalError('');
                 }}
                 className={`flex-1 rounded-md border px-2 py-1.5 text-xs ${
@@ -814,6 +840,29 @@ const ConfirmDialog: React.FC<{
                   disabled={loading}
                   className="w-full rounded-md border border-rose-200 bg-white px-3 py-1.5 text-xs outline-none focus:border-primary disabled:opacity-60"
                 />
+                <label className="flex cursor-pointer items-start gap-2 rounded-md border border-rose-200 bg-white px-2.5 py-2 text-xs text-rose-900">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded border-rose-300 text-primary focus:ring-primary"
+                    checked={collectConfirmed}
+                    disabled={loading}
+                    onChange={(e) => {
+                      setCollectConfirmed(e.target.checked);
+                      setLocalError('');
+                    }}
+                  />
+                  <span>
+                    已当面收妥 <strong className="font-mono">¥{collectDue.toFixed(2)}</strong>
+                    {collectPaidMethod
+                      ? `（${
+                          { cash: '现金', wechat: '微信', alipay: '支付宝', other: '其他' }[
+                            collectPaidMethod
+                          ] || collectPaidMethod
+                        }）`
+                      : ''}
+                    ，可继续核验出库
+                  </span>
+                </label>
               </>
             ) : (
               <>

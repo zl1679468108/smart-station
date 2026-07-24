@@ -2,6 +2,7 @@
 import { post } from './api';
 import type {
   BatchInboundResult,
+  CheckTrackingBatchResult,
   CheckTrackingResult,
   InboundPayload,
   InboundResult,
@@ -15,6 +16,17 @@ export function checkTracking(
     '/api/inbound/check-tracking',
     { trackingNumber },
     { successMessage: false, notifyError: false, skipLoading: true },
+  );
+}
+
+/** 批量运单预检 */
+export function checkTrackingBatch(
+  trackingNumbers: string[],
+): Promise<CheckTrackingBatchResult> {
+  return post(
+    '/api/inbound/check-tracking-batch',
+    { trackingNumbers },
+    { successMessage: false, notifyError: false },
   );
 }
 

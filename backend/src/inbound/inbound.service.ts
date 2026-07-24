@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Inject,
   Injectable,
   NotFoundException,
@@ -233,7 +234,7 @@ export class InboundService {
       } catch (err) {
         failed.push({
           index: i,
-          error: err instanceof Error ? err.message : '未知错误',
+          error: this.extractErrorMessage(err),
           item,
         });
       }
@@ -292,6 +293,21 @@ export class InboundService {
 
   // ============ 辅助 ============
 
+  private extractErrorMessage(err: unknown): string {
+    if (err instanceof HttpException) {
+      const res = err.getResponse();
+      if (typeof res === 'string') return res;
+      if (res && typeof res === 'object') {
+        const r = res as Record<string, unknown>;
+        if (Array.isArray(r.message)) return r.message.map(String).join('; ');
+        if (typeof r.message === 'string') return r.message;
+      }
+      return err.message || '请求失败';
+    }
+    if (err instanceof Error) return err.message || '未知错误';
+    return '未知错误';
+  }
+
   /** 金额规范化：空/undefined → 0，最多两位小数 */
   private normalizeMoney(v: unknown): number {
     if (v === undefined || v === null || v === '') return 0;
@@ -302,7 +318,6 @@ export class InboundService {
     return Math.round(n * 100) / 100;
   }
 
-  /** 按运单号前缀识别快递公司 */
   /**
    * 入库前运单预检：是否已在库/滞留/异常
    * 用于扫码/手动录入时提前提醒店员，避免填完资料才撞重复。
@@ -326,6 +341,98 @@ export class InboundService {
       trackingNumber,
       message: this.duplicateMessage(exist),
       parcel,
+    };
+  }
+
+  /**
+   * 批量运单预检：库内重复 + CSV 内重复
+   */
+  async checkTrackingBatch(stationId: string, trackingNumbersRaw: string[]) {
+    const list = (trackingNumbersRaw || [])
+      .map((x) => String(x || '').trim().toUpperCase())
+      .filter((x) => x.length >= 4);
+    if (list.length === 0) {
+      throw new BadRequestException('请提供至少一条运单号');
+    }
+    if (list.length > 200) {
+      throw new BadRequestException('一次最多预检 200 条运单');
+    }
+
+    // CSV 内重复计数
+    const seen = new Map<string, number>();
+    for (const tn of list) {
+      seen.set(tn, (seen.get(tn) || 0) + 1);
+    }
+
+    const unique = Array.from(seen.keys());
+    const { data, error } = await this.supabase
+      .getClient()
+      .from('ss_parcels')
+      .select(
+        `id, status, tracking_number, pickup_code, recipient_name, recipient_phone, inbound_at, shelf_layer, shelf_position,
+         shelf:ss_shelves!ss_parcels_shelf_id_fkey(id, number)`,
+      )
+      .eq('station_id', stationId)
+      .in('tracking_number', unique)
+      .in('status', ['in_stock', 'overdue', 'exception']);
+    if (error) throw new Error(`批量预检失败: ${error.message}`);
+
+    const existMap = new Map<string, any>();
+    for (const row of data || []) {
+      existMap.set(String(row.tracking_number || '').toUpperCase(), row);
+    }
+
+    const items = list.map((trackingNumber, index) => {
+      const inBatchDuplicate = (seen.get(trackingNumber) || 0) > 1;
+      const exist = existMap.get(trackingNumber);
+      if (exist) {
+        const parcel = this.mapDuplicateParcel(exist);
+        return {
+          index,
+          trackingNumber,
+          exists: true,
+          inBatchDuplicate,
+          message: this.duplicateMessage(exist),
+          parcel,
+          blocked: true,
+        };
+      }
+      if (inBatchDuplicate) {
+        return {
+          index,
+          trackingNumber,
+          exists: false,
+          inBatchDuplicate: true,
+          message: '本批 CSV 内运单号重复',
+          blocked: true,
+        };
+      }
+      return {
+        index,
+        trackingNumber,
+        exists: false,
+        inBatchDuplicate: false,
+        message: '可入库',
+        blocked: false,
+      };
+    });
+
+    const blocked = items.filter((x) => x.blocked).length;
+    const ready = items.filter((x) => !x.blocked).length;
+    const stockDup = items.filter((x) => x.exists).length;
+    const batchDup = items.filter((x) => x.inBatchDuplicate && !x.exists).length;
+
+    return {
+      total: items.length,
+      ready,
+      blocked,
+      stockDuplicate: stockDup,
+      batchDuplicate: batchDup,
+      items,
+      staffMessage:
+        blocked > 0
+          ? `预检完成：可入库 ${ready}，需处理 ${blocked}（库内重复 ${stockDup}，CSV 内重复 ${batchDup}）`
+          : `预检完成：${ready} 条均可入库`,
     };
   }
 
