@@ -155,9 +155,11 @@ const KeypadButton: React.FC<KeypadButtonProps> = ({
 
   return (
     <button
+      type="button"
+      // 避免点击按键抢走输入框焦点，便于原生可编辑框与查询框共用虚拟键盘
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={`${base} ${sizeClass} ${variantClass} w-full`}
-      type="button"
     >
       {children}
     </button>

@@ -8,9 +8,10 @@ const StaffTab = React.lazy(() => import('./tabs/StaffTab'));
 const ShelfTab = React.lazy(() => import('./tabs/ShelfTab'));
 const CourierTab = React.lazy(() => import('./tabs/CourierTab'));
 const VersionTab = React.lazy(() => import('./tabs/VersionTab'));
+const NotifyTab = React.lazy(() => import('./tabs/NotifyTab'));
 const StationLayoutTab = React.lazy(() => import('./tabs/StationLayoutTab'));
 
-type TabKey = 'station' | 'stationLayout' | 'staff' | 'shelves' | 'couriers' | 'version';
+type TabKey = 'station' | 'stationLayout' | 'staff' | 'shelves' | 'couriers' | 'notify' | 'version';
 type Role = 'admin' | 'clerk' | 'viewer';
 
 // 全部 Tab 配置；roles 字段控制可见角色：
@@ -22,6 +23,7 @@ const allTabs: { key: TabKey; label: string; icon: IconName; roles: Role[] }[] =
   { key: 'staff', label: '员工管理', icon: 'user', roles: ['admin'] },
   { key: 'shelves', label: '货架管理', icon: 'inbox', roles: ['admin', 'clerk'] },
   { key: 'couriers', label: '快递公司', icon: 'package', roles: ['admin', 'clerk'] },
+  { key: 'notify', label: '通知记录', icon: 'phone', roles: ['admin', 'clerk'] },
   { key: 'version', label: '版本说明', icon: 'settings', roles: ['admin', 'clerk'] },
 ];
 
@@ -99,6 +101,7 @@ const System: React.FC = () => {
                 {tab.key === 'staff' && <StaffTab />}
                 {tab.key === 'shelves' && <ShelfTab />}
                 {tab.key === 'couriers' && <CourierTab />}
+                {tab.key === 'notify' && <NotifyTab />}
                 {tab.key === 'version' && <VersionTab />}
               </React.Suspense>
             </div>

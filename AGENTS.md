@@ -36,7 +36,7 @@
 | 平板 PAD | 768–1200px | `/admin/*` `/query/*` | 工作人员现场操作 + 取件自助 |
 | Kiosk / 查询门户 | 768–1200px | `/query/*` | 取件自助查询（无登录，原 `/kiosk/*` 已合并） |
 | 扫描机 | 全屏 | `/scan/*` | 出库扫描（独立设备） |
-| H5 | <768px | `/m/*` | 远端查件（备用） |
+| H5 | <768px | `/query?device=h5` | 远端查件（统一门户轻量模式） |
 
 单一响应式 React 应用通过路由前缀 + CSS 媒体查询适配以上全部场景。
 
@@ -116,9 +116,8 @@ frontend/
   src/
     pages/                页面（按路由前缀分子目录：admin/ query/ scan/ m/）
       admin/              工作人员后台页面
-      query/              取件自助查询门户（原 kiosk 合并）
+      query/              取件自助查询门户（?device=h5|kiosk 控制模式）
       scan/               出库扫描机页面
-      m/                  移动 H5 页面
     components/           共享组件（ui/ 为原子组件）
     services/             API 服务层
     hooks/                共享 hooks
@@ -201,7 +200,8 @@ scripts/                  部署脚本
   - `/admin/*` — 工作人员管理后台（PC 主用，平板可访问）
   - `/query/*` — 用户自助查询门户（取件用户，无登录；原 `/kiosk/*` 已合并）
   - `/scan/*` — 出库扫描机页面（独立设备，全屏扫描）
-  - `/m/*` — 移动 H5 取件查询页（备用，远端查件状态）
+  - `/query?device=h5` — 远端 H5 轻量模式（无虚拟键盘/无空闲清空）
+  - `/query?device=kiosk` — 现场 PAD 沉浸模式（虚拟键盘 + 空闲清空，与默认 portal 同能力预留）
 - 状态管理：服务端用 `@tanstack/react-query` v5，客户端用 React Context。无 Redux / Zustand。
 - API 层：`src/services/api.ts` 导出 `request<T>()` 函数（基于原生 fetch），无 Axios。自动附加 `Authorization` 与 `x-station-id` 头。
 - 样式：SCSS + Tailwind CSS + CSS 设计令牌（`design-tokens.css`）。非 CSS Modules，所有样式为全局类名。主色调橙 `#FF6A00`。
@@ -272,7 +272,7 @@ scripts/                  部署脚本
 
 新增响应式页面：
 
-1. 确认所属路由前缀（admin/query/scan/m）。
+1. 确认所属路由前缀（admin/query/scan）；远端 H5 用 `/query?device=h5`。
 2. 移动端优先样式，向上适配平板、PC。
 3. Query 与 Scan 端需考虑全屏沉浸式、无导航栏、超时返回。
 

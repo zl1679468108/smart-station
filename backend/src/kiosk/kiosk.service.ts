@@ -213,18 +213,23 @@ export class KioskService {
       title: (c.title as string) || '取件消息通知',
       content:
         (c.content as string) ||
-        '绑定个人微信推送后，到件/滞留提醒将私信发给你（含取件码，仅本人可见）。企业微信群仅发脱敏公告，不会公示取件码。',
+        '绑定后，包裹到了会发到你的微信（含取件码，只有你能看到）。通知群只发提醒，不会公开取件码。没绑定请到店查件。',
       wecomQrUrl: (c.wecomQrUrl as string) || '',
       wecomJoinTip:
-        (c.wecomJoinTip as string) || '扫码加入驿站公告群（仅公告，不含取件码）',
+        (c.wecomJoinTip as string) || '扫码加入驿站通知群（只发提醒，不公开取件码）',
       // 兼容历史字段；主绑定通道已切到 WxPusher 扫码
       serverchanGuideUrl: (c.serverchanGuideUrl as string) || '',
       serverchanGuide: (c.serverchanGuide as string) || '',
       wxpusherGuide:
         (c.wxpusherGuide as string) ||
-        '1. 输入收件手机号并获取验证码\n2. 点击「生成关注二维码」\n3. 用微信扫码关注驿站应用\n4. 关注成功后自动绑定，到件取件码私信到你微信',
+        '1. 填写收件手机号，获取验证码\n2. 点「生成二维码」\n3. 用微信扫一扫完成绑定\n4. 之后包裹到了会发到你的微信',
+      pushplusGuide:
+        (c.pushplusGuide as string) ||
+        '适合已有其他推送工具的用户。\n1. 在网页用微信登录\n2. 复制你的专属绑定码\n3. 回到这里验证手机号并粘贴',
+      pushplusGuideUrl: (c.pushplusGuideUrl as string) || 'https://www.pushplus.plus/',
       bindEnabled,
       bindChannel: 'wxpusher' as const,
+      bindChannels: ['wxpusher', 'pushplus'] as const,
     };
   }
 
@@ -378,7 +383,7 @@ export class KioskService {
       const msg = err instanceof Error ? err.message : String(err);
       throw new BadRequestException(
         msg.includes('WXPUSHER_APP_TOKEN')
-          ? '驿站尚未配置 WxPusher，请联系管理员'
+          ? '微信通知暂未开通，请联系店员'
           : `创建关注二维码失败：${msg}`,
       );
     }
@@ -411,7 +416,7 @@ export class KioskService {
       phone: dto.phone,
       phoneMasked: this.notify.maskPhone(dto.phone),
       stationName: station?.name || null,
-      message: '请用微信扫描二维码关注，关注成功后自动完成绑定',
+      message: '请用微信扫一扫，完成后会自动绑定',
     };
   }
 
@@ -477,7 +482,7 @@ export class KioskService {
       return {
         status: 'waiting' as const,
         bound: false,
-        message: '等待扫码关注…',
+        message: '请用微信扫一扫，完成后会自动绑定…',
         pollIntervalSec: 12,
       };
     }
@@ -548,6 +553,137 @@ export class KioskService {
     };
   }
 
+  /**
+   * PushPlus 客户绑定：手机号 + 验证码 + token
+   * 完整取件码一对一推送到该 token，不进企微群。
+   */
+  async bindPushPlus(
+    dto: { phone: string; code: string; token: string },
+    stationId?: string,
+  ) {
+    const targetStationId = await this.resolveStationId(stationId);
+    await this.consumePhoneCode(dto.phone, dto.code);
+
+    const token = dto.token.trim();
+    if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) {
+      throw new BadRequestException('专属绑定码格式不正确，请重新复制粘贴');
+    }
+
+    const { data: station } = await this.supabase
+      .getClient()
+      .from('ss_stations')
+      .select('name, notify_config')
+      .eq('id', targetStationId)
+      .maybeSingle();
+    const guide = this.normalizeNotifyGuide(station?.notify_config);
+    if (!guide.bindEnabled) {
+      throw new ForbiddenException('该驿站暂未开放通知绑定');
+    }
+
+    const { data, error } = await this.supabase
+      .getClient()
+      .from('ss_notify_bindings')
+      .upsert(
+        {
+          station_id: targetStationId,
+          phone: dto.phone,
+          channel: 'pushplus',
+          target: token,
+          status: 'active',
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'station_id,phone,channel' },
+      )
+      .select('id, phone, channel, status')
+      .maybeSingle();
+
+    if (error) {
+      if (String(error.message || '').includes('ss_notify_bindings')) {
+        throw new BadRequestException(
+          '通知绑定表未初始化，请管理员在 Supabase 执行 migration-pushplus-m36.sql',
+        );
+      }
+      throw new Error(`绑定失败: ${error.message}`);
+    }
+
+    let testPushed = false;
+    try {
+      await this.notify.sendBindTest({
+        phone: dto.phone,
+        channel: 'pushplus',
+        target: token,
+        stationName: station?.name,
+      });
+      testPushed = true;
+    } catch {
+      testPushed = false;
+    }
+
+    return {
+      bound: true,
+      phone: dto.phone,
+      phoneMasked: this.notify.maskPhone(dto.phone),
+      channel: 'pushplus' as const,
+      testPushed,
+      message: testPushed
+        ? '绑定成功，已发送测试消息到你的微信'
+        : '绑定已保存，但测试消息发送失败，请检查绑定码是否正确',
+      bindingId: data?.id,
+    };
+  }
+
+  /**
+   * 查询手机号是否已绑定任意客户通知通道（不返回 target，防泄露）
+   */
+  async getNotifyBindStatus(phone: string, stationId?: string) {
+    const p = (phone || '').trim();
+    if (!/^1\d{10}$/.test(p)) {
+      throw new BadRequestException('手机号格式不正确');
+    }
+    const targetStationId = await this.resolveStationId(stationId);
+    const { data, error } = await this.supabase
+      .getClient()
+      .from('ss_notify_bindings')
+      .select('channel, status')
+      .eq('station_id', targetStationId)
+      .eq('phone', p)
+      .eq('status', 'active');
+
+    if (error) {
+      if (String(error.message || '').includes('ss_notify_bindings')) {
+        return {
+          phone: p,
+          phoneMasked: this.notify.maskPhone(p),
+          bound: false,
+          channels: [] as string[],
+          bindEnabled: true,
+          message: '绑定表未初始化',
+        };
+      }
+      throw new Error(`查询绑定状态失败: ${error.message}`);
+    }
+
+    const channels = [...new Set((data || []).map((r: any) => String(r.channel)))];
+    const { data: station } = await this.supabase
+      .getClient()
+      .from('ss_stations')
+      .select('notify_config')
+      .eq('id', targetStationId)
+      .maybeSingle();
+    const guide = this.normalizeNotifyGuide(station?.notify_config);
+
+    return {
+      phone: p,
+      phoneMasked: this.notify.maskPhone(p),
+      bound: channels.length > 0,
+      channels,
+      bindEnabled: guide.bindEnabled,
+      message: channels.length
+        ? '已绑定微信通知，包裹到了会发到你的微信'
+        : '还没绑定微信通知：包裹到了不会发到你微信，群里也不会公开取件码，请到店查件',
+    };
+  }
+
   async unbindNotify(dto: { phone: string; code: string }, stationId?: string) {
     const targetStationId = await this.resolveStationId(stationId);
     await this.consumePhoneCode(dto.phone, dto.code);
@@ -557,7 +693,7 @@ export class KioskService {
       .update({ status: 'disabled', updated_at: new Date().toISOString() })
       .eq('station_id', targetStationId)
       .eq('phone', dto.phone)
-      .in('channel', ['wxpusher', 'serverchan']);
+      .in('channel', ['wxpusher', 'pushplus', 'serverchan']);
     if (error) throw new Error(`解绑失败: ${error.message}`);
     return { unbound: true, phone: dto.phone };
   }

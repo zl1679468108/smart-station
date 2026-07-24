@@ -20,6 +20,8 @@ import {
   UnbindNotifyDto,
   StartWxPusherBindDto,
   PollWxPusherBindDto,
+  BindPushPlusDto,
+  NotifyBindStatusDto,
 } from './dto/kiosk.dto';
 import { Public } from '../common/decorators/public.decorator';
 import type { Request } from 'express';
@@ -94,7 +96,24 @@ export class KioskController {
     return this.kioskService.pollWxPusherBind(dto.qrCode, stationId);
   }
 
-  /** 解绑个人通知（wxpusher / serverchan） */
+  /** PushPlus token 绑定 */
+  @Post('notify-bind/pushplus')
+  @HttpCode(200)
+  async bindPushPlus(@Body() dto: BindPushPlusDto, @Query('stationId') stationId?: string) {
+    return this.kioskService.bindPushPlus(dto, stationId);
+  }
+
+  /** 查询手机号绑定状态（不含 target） */
+  @Post('notify-bind-status')
+  @HttpCode(200)
+  async getNotifyBindStatus(
+    @Body() dto: NotifyBindStatusDto,
+    @Query('stationId') stationId?: string,
+  ) {
+    return this.kioskService.getNotifyBindStatus(dto.phone, stationId);
+  }
+
+  /** 解绑个人通知（wxpusher / pushplus / serverchan） */
   @Post('notify-unbind')
   @HttpCode(200)
   async unbindNotify(@Body() dto: UnbindNotifyDto, @Query('stationId') stationId?: string) {

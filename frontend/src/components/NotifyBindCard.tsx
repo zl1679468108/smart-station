@@ -2,29 +2,51 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as kioskService from '@/services/kiosk';
 import type { NotifyGuide, WxPusherBindStartResult } from '@/types/kiosk';
 
+type BindChannelTab = 'wxpusher' | 'pushplus';
+
 /**
- * 取件通知公示 + WxPusher 扫码绑定
+ * 取件通知公示 + 客户绑定
  * - 企微群：仅公告（不含取件码）
- * - WxPusher：扫码关注后一对一收完整取件码
+ * - 主路径：微信扫一扫
+ * - 备选：专属绑定码
  */
 const NotifyBindCard: React.FC<{
-  /** 可从 layout 缓存传入，缺省则自行拉取 */
   guide?: NotifyGuide | null;
   stationName?: string | null;
   compact?: boolean;
-}> = ({ guide: guideProp, stationName, compact = false }) => {
+  /** 预填手机号（查件成功后引导） */
+  initialPhone?: string;
+  /** 外部强制展开绑定区 */
+  forceOpen?: boolean;
+  /** 默认通道 */
+  defaultChannel?: BindChannelTab;
+  onBound?: (channel: string) => void;
+}> = ({
+  guide: guideProp,
+  stationName,
+  compact = false,
+  initialPhone,
+  forceOpen,
+  defaultChannel = 'wxpusher',
+  onBound,
+}) => {
   const [guide, setGuide] = useState<NotifyGuide | null>(guideProp ?? null);
-  const [open, setOpen] = useState(false);
-  const [phone, setPhone] = useState('');
+  const [open, setOpen] = useState(Boolean(forceOpen));
+  const [channel, setChannel] = useState<BindChannelTab>(defaultChannel);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [phone, setPhone] = useState(initialPhone || '');
   const [code, setCode] = useState('');
+  const [token, setToken] = useState('');
   const [sending, setSending] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [binding, setBinding] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [session, setSession] = useState<WxPusherBindStartResult | null>(null);
-  const [pollHint, setPollHint] = useState<string>('');
+  const [pollHint, setPollHint] = useState('');
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stopped = useRef(false);
+  const panelRef = useRef<HTMLFormElement | null>(null);
 
   useEffect(() => {
     if (guideProp) {
@@ -37,13 +59,23 @@ const NotifyBindCard: React.FC<{
       .then((res) => {
         if (!cancelled) setGuide(res.guide);
       })
-      .catch(() => {
-        /* 引导失败不阻塞查件 */
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [guideProp]);
+
+  useEffect(() => {
+    if (initialPhone) setPhone(initialPhone);
+  }, [initialPhone]);
+
+  useEffect(() => {
+    if (forceOpen) {
+      setOpen(true);
+      // 滚动到绑定区
+      setTimeout(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+    }
+  }, [forceOpen]);
 
   useEffect(() => {
     if (countdown <= 0) return;
@@ -100,6 +132,7 @@ const NotifyBindCard: React.FC<{
           setSession(null);
           setCode('');
           clearPoll();
+          onBound?.('wxpusher');
           return;
         }
         if (res.status === 'expired') {
@@ -109,7 +142,7 @@ const NotifyBindCard: React.FC<{
           clearPoll();
           return;
         }
-        setPollHint(res.message || '等待扫码关注…');
+        setPollHint(res.message || '请用微信扫一扫，完成后会自动绑定…');
         const next = Math.max(res.pollIntervalSec || intervalSec || 12, 10);
         pollTimer.current = setTimeout(tick, next * 1000);
       } catch (err) {
@@ -117,11 +150,10 @@ const NotifyBindCard: React.FC<{
         pollTimer.current = setTimeout(tick, Math.max(intervalSec, 12) * 1000);
       }
     };
-    // 首次稍等再查，给用户扫码时间
     pollTimer.current = setTimeout(tick, Math.max(intervalSec, 12) * 1000);
   };
 
-  const handleStart = async (e: React.FormEvent) => {
+  const handleStartWx = async (e: React.FormEvent) => {
     e.preventDefault();
     if (starting) return;
     setMsg(null);
@@ -139,7 +171,7 @@ const NotifyBindCard: React.FC<{
     try {
       const res = await kioskService.startWxPusherBind({ phone, code });
       setSession(res);
-      setPollHint('请用微信扫码关注，关注成功后自动绑定');
+      setPollHint('请用微信扫一扫，完成后会自动绑定');
       setMsg({ type: 'ok', text: res.message });
       schedulePoll(res.qrCode, res.pollIntervalSec || 12);
     } catch (err) {
@@ -149,9 +181,46 @@ const NotifyBindCard: React.FC<{
     }
   };
 
-  const bindGuide =
+  const handleBindPushPlus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (binding) return;
+    setMsg(null);
+    if (!/^1\d{10}$/.test(phone)) {
+      setMsg({ type: 'err', text: '请输入正确的 11 位手机号' });
+      return;
+    }
+    if (!/^\d{6}$/.test(code)) {
+      setMsg({ type: 'err', text: '请输入 6 位验证码' });
+      return;
+    }
+    if (!/^[A-Za-z0-9_-]{16,64}$/.test(token.trim())) {
+      setMsg({ type: 'err', text: '专属绑定码格式不正确，请重新复制粘贴' });
+      return;
+    }
+    setBinding(true);
+    try {
+      const res = await kioskService.bindPushPlus({
+        phone,
+        code,
+        token: token.trim(),
+      });
+      setMsg({ type: 'ok', text: res.message });
+      setToken('');
+      setCode('');
+      onBound?.(res.channel || 'pushplus');
+    } catch (err) {
+      setMsg({ type: 'err', text: err instanceof Error ? err.message : '绑定失败' });
+    } finally {
+      setBinding(false);
+    }
+  };
+
+  const wxGuide =
     guide.wxpusherGuide ||
-    '1. 输入收件手机号并获取验证码\n2. 生成关注二维码\n3. 微信扫码关注后自动绑定';
+    '1. 填写收件手机号，获取验证码\n2. 点「生成二维码」\n3. 用微信扫一扫，按提示完成\n4. 绑定成功后，包裹到了会发到你的微信';
+  const ppGuide =
+    guide.pushplusGuide ||
+    '适合已有其他推送工具的用户。\n1. 在对应网页用微信登录\n2. 复制你的「专属绑定码」\n3. 回到这里填写手机号和验证码，粘贴绑定码即可';
 
   return (
     <section
@@ -174,9 +243,7 @@ const NotifyBindCard: React.FC<{
             type="button"
             onClick={() => {
               setOpen((v) => !v);
-              if (open) {
-                clearPoll();
-              }
+              if (open) clearPoll();
             }}
             className="min-h-[44px] shrink-0 rounded-md bg-primary px-3 py-2 text-xs font-medium text-white hover:bg-primaryHover"
           >
@@ -185,45 +252,90 @@ const NotifyBindCard: React.FC<{
         )}
       </div>
 
-      {/* 企微群公示 + 个人绑定说明 */}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="rounded-md border border-white/80 bg-white/80 p-3">
-          <p className="text-xs font-medium text-gray-700">企业微信公告群</p>
-          <p className="mt-1 text-xs text-gray-500">{guide.wecomJoinTip}</p>
+          <p className="text-xs font-medium text-gray-700">驿站通知群</p>
+          <p className="mt-1 text-xs text-gray-500">
+            {guide.wecomJoinTip || '扫码加入通知群，只发到件提醒，不公开取件码'}
+          </p>
           {guide.wecomQrUrl ? (
             <img
               src={guide.wecomQrUrl}
-              alt="企业微信群二维码"
+              alt="驿站通知群二维码"
               className="mt-2 h-28 w-28 rounded border border-gray-100 object-contain"
             />
           ) : (
-            <p className="mt-2 text-xs text-amber-700">
-              管理员尚未上传入群二维码。请到「系统管理 → 驿站信息」配置公示。
-            </p>
+            <p className="mt-2 text-xs text-amber-700">入群二维码暂未上传，可联系店员。</p>
           )}
           <p className="mt-2 text-[11px] leading-relaxed text-gray-400">
-            群消息仅含手机尾号公告，
-            <strong className="font-medium text-gray-500">不含取件码</strong>。
+            群里只会看到手机尾号提醒，
+            <strong className="font-medium text-gray-500">不会公开你的取件码</strong>。
           </p>
         </div>
 
         <div className="rounded-md border border-white/80 bg-white/80 p-3">
-          <p className="text-xs font-medium text-gray-700">个人微信私信（推荐 · WxPusher）</p>
-          <p className="mt-1 whitespace-pre-line text-xs text-gray-500">{bindGuide}</p>
-          <p className="mt-2 text-[11px] leading-relaxed text-gray-400">
-            扫码关注后，到件/滞留提醒含取件码，仅你微信可见。
+          <p className="text-xs font-medium text-gray-700">微信收通知（推荐）</p>
+          <p className="mt-1 text-xs text-gray-500">
+            绑定后，包裹到了会直接发到你的微信（含取件码，只有你能看到）。
+            没绑定的话，请到店查件或看货架。
           </p>
+          <ul className="mt-2 space-y-1 text-[11px] text-gray-500">
+            <li>· 点「绑定通知」→ 填手机号 → 微信扫一扫</li>
+            <li>· 绑定后有件自动提醒，不用反复查</li>
+          </ul>
         </div>
       </div>
 
       {open && guide.bindEnabled && (
         <form
-          onSubmit={handleStart}
+          ref={panelRef}
+          onSubmit={channel === 'wxpusher' ? handleStartWx : handleBindPushPlus}
           className="mt-3 space-y-3 rounded-md border border-primary/20 bg-white p-3"
         >
-          <p className="text-xs text-gray-500">
-            使用收件手机号验证后生成关注二维码，微信扫码即可绑定到件通知。
-          </p>
+          {/* 主路径：只讲微信扫一扫 */}
+          {channel === 'wxpusher' && (
+            <p className="whitespace-pre-line text-xs text-gray-500">{wxGuide}</p>
+          )}
+
+          {/* 次要入口：默认隐藏专业通道 */}
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const next = !showAdvanced;
+                setShowAdvanced(next);
+                setMsg(null);
+                if (!next) {
+                  setChannel('wxpusher');
+                  setToken('');
+                } else {
+                  setChannel('pushplus');
+                  clearPoll();
+                  setSession(null);
+                }
+              }}
+              className="text-[11px] text-gray-400 underline underline-offset-2 hover:text-gray-600"
+            >
+              {showAdvanced ? '返回微信扫一扫' : '其他绑定方式（可选）'}
+            </button>
+          </div>
+
+          {channel === 'pushplus' && showAdvanced && (
+            <>
+              <p className="whitespace-pre-line text-xs text-gray-500">{ppGuide}</p>
+              {guide.pushplusGuideUrl && (
+                <a
+                  href={guide.pushplusGuideUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-[36px] items-center text-xs text-primary underline"
+                >
+                  打开网页获取专属绑定码
+                </a>
+              )}
+            </>
+          )}
+
           <div className="grid gap-2 sm:grid-cols-2">
             <input
               type="tel"
@@ -253,20 +365,31 @@ const NotifyBindCard: React.FC<{
             </div>
           </div>
 
-          {session && (
+          {channel === 'pushplus' && (
+            <input
+              type="text"
+              value={token}
+              onChange={(e) => setToken(e.target.value.trim())}
+              placeholder="粘贴你的专属绑定码"
+              className="min-h-[44px] w-full rounded-md border border-gray-300 px-3 text-sm outline-none focus:border-primary"
+              autoComplete="off"
+            />
+          )}
+
+          {channel === 'wxpusher' && session && (
             <div className="flex flex-col items-center gap-2 rounded-md border border-dashed border-primary/30 bg-orange-50/40 p-3">
               <img
                 src={session.qrUrl}
-                alt="WxPusher 关注二维码"
+                alt="微信绑定二维码"
                 className="h-40 w-40 rounded border border-gray-100 bg-white object-contain"
               />
               <p className="text-center text-xs text-gray-600">
-                请用微信扫码关注
+                请用微信扫一扫
                 {session.phoneMasked ? `（${session.phoneMasked}）` : ''}
               </p>
               {pollHint && <p className="text-center text-xs text-primary">{pollHint}</p>}
               <p className="text-center text-[11px] text-gray-400">
-                二维码约 30 分钟有效 · 自动检测扫码状态
+                二维码约 30 分钟有效，扫完会自动完成绑定
               </p>
             </div>
           )}
@@ -279,10 +402,18 @@ const NotifyBindCard: React.FC<{
             )}
             <button
               type="submit"
-              disabled={starting}
+              disabled={channel === 'wxpusher' ? starting : binding}
               className="ml-auto min-h-[44px] rounded-md bg-primary px-4 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
             >
-              {starting ? '生成中...' : session ? '重新生成二维码' : '生成关注二维码'}
+              {channel === 'wxpusher'
+                ? starting
+                  ? '生成中...'
+                  : session
+                    ? '重新生成二维码'
+                    : '生成二维码'
+                : binding
+                  ? '绑定中...'
+                  : '确认绑定'}
             </button>
           </div>
         </form>

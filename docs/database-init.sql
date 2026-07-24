@@ -784,7 +784,7 @@ CREATE TABLE IF NOT EXISTS ss_notify_bindings (
   phone       VARCHAR(20) NOT NULL,
   -- 主通道 wxpusher；兼容 serverchan
   channel     VARCHAR(20) NOT NULL DEFAULT 'wxpusher'
-              CHECK (channel IN ('wxpusher', 'serverchan')),
+              CHECK (channel IN ('wxpusher', 'pushplus', 'serverchan')),
   -- wxpusher 为 UID_xxx；serverchan 为 SendKey
   target      TEXT NOT NULL,
   status      VARCHAR(20) NOT NULL DEFAULT 'active'
@@ -799,8 +799,8 @@ CREATE INDEX IF NOT EXISTS idx_ss_notify_bindings_phone
 CREATE INDEX IF NOT EXISTS idx_ss_notify_bindings_station
   ON ss_notify_bindings(station_id);
 
-COMMENT ON TABLE ss_notify_bindings IS '客户通知绑定 - 手机号一对一免费推送（主通道 WxPusher UID，兼容 Server酱 SendKey）';
-COMMENT ON COLUMN ss_notify_bindings.target IS '通道目标：wxpusher 为 UID_xxx；serverchan 为 SendKey';
+COMMENT ON TABLE ss_notify_bindings IS '客户通知绑定 - wxpusher UID / pushplus token / serverchan SendKey';
+COMMENT ON COLUMN ss_notify_bindings.target IS '通道目标：wxpusher=UID；pushplus=token；serverchan=SendKey';
 
 DROP TRIGGER IF EXISTS update_ss_notify_bindings_updated_at ON ss_notify_bindings;
 CREATE TRIGGER update_ss_notify_bindings_updated_at BEFORE UPDATE ON ss_notify_bindings

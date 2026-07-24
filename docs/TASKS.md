@@ -3,6 +3,13 @@
 > 任务状态唯一来源。产品需求和路线见 [PRD.md](./PRD.md)。
 > 数据库 schema 见 [database-init.sql](./database-init.sql)。
 
+### 2026-07-24 /m 收敛到 /query?device=h5
+
+| ID | 优先级 | 任务 | 范围 | 状态 | 说明 |
+|----|--------|------|------|------|------|
+| M-QUERY-DEVICE | P1 | 统一用户查件入口 | frontend/query + routes | done | 新增 `useQueryDevice`（portal/h5/kiosk）；`device=h5`：顶部返回、原生输入、隐藏虚拟键盘、关闭 90s 空闲清空与硬件键盘接管；删除 `pages/m` 与 `MLayout` 及 `/m` 路由；query.spec 覆盖 h5 模式；同步 PRD/AGENTS/TASKS |
+
+
 ## 状态规则
 
 | 状态 | 含义 |
@@ -361,7 +368,7 @@
 | 库存列表/详情 | 基本正常 | 多维筛选/分页/批量异常标记可用；**URL 状态深链未接通**（见 O1） |
 | 出库（人工两步 + 记录） | 基本正常 | search + manual 有角色守卫 |
 | 扫描机自助出库 `/scan` | 可用但偏弱 | `@Public` 自助出库**无限流**；运单跨站查询（单租户可接受） |
-| 查询门户 `/query` + H5 `/m` | 基本正常 | 脱敏/IP 限流/验证码小时限流已有；**查询包裹未按 station 隔离**；短信仍为 stub |
+| 查询门户 `/query`（含 `?device=h5`） | 基本正常 | 脱敏/IP 限流已有；远端模式无虚拟键盘 |
 | 工作台 Dashboard + 门店 3D | 基本可用 | 真实 stats + 3D 只读/编辑入口；WarehouseScreen 待办标题残留 `TODO` 文案；滞留/异常卡片跳库存深链失效 |
 | 滞留件 / 异常件完整流程 | **未实现** | 仅有 status 枚举与库存批量标异常；无 cron/退回/定责工作流（见 M24） |
 | 寄件 / 财务 / 独立统计报表 | **未实现** | 见 M25 / M26 |
@@ -373,7 +380,7 @@
 - `cd backend && npx tsc --noEmit` → exit 0
 - 后端已注册模块：Auth / Admin / Inbound / Inventory / Outbound / Kiosk / Stats / Notify / Health
 - 后端**未**注册：Overdue / Exception / Shipping / Finance（与 TASKS M24–M25 一致）
-- 前端路由实际前缀：`/admin/*` `/scan/*` `/m/*` `/query/*`（**无**独立 `/kiosk/*` 页面，已合并到 `/query`）
+- 前端路由实际前缀：`/admin/*` `/scan/*` `/query/*`（**无** `/m/*`、**无**独立 `/kiosk/*`）
 
 ### 已确认缺陷 / 风险（写入优化任务）
 
@@ -503,6 +510,18 @@
 | M35.2 | P0 | 扫码 start/poll API + pending 表 | backend/kiosk + SQL | done | `notify-bind/wxpusher/start|poll`；`ss_notify_bind_pending`；需执行 `migration-wxpusher-m35.sql` |
 | M35.3 | P0 | 查询端扫码绑定 UI | frontend NotifyBindCard | done | 验证码 → 展示二维码 → ≥12s 轮询；绑定成功提示 |
 | M35.4 | P1 | 文档与 env | docs + .env.example | done | PRD §4.13；TASKS；`WXPUSHER_APP_TOKEN` 模板 |
+
+---
+
+## 1.6.5 PushPlus 备选 + 查件绑定转化（2026-07-24）
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M36.1 | P1 | PushPlus 发送与绑定 | backend/notify + kiosk | done | channel=`pushplus`；`POST notify-bind/pushplus`；需执行 migration-pushplus-m36.sql |
+| M36.2 | P1 | 绑定状态查询 | backend/kiosk | done | `POST notify-bind-status` 仅返回 bound/channels |
+| M36.3 | P1 | 查件成功转化引导 | frontend/query | done | 结果区强 CTA；未绑定兜底到店查；顶部 NotifyBindCard 支持双通道 |
+| M36.4 | P2 | 客户文案去技术词 | frontend notify | done | 对外只说微信扫一扫/专属绑定码；其他方式折叠 |
+| M36.5 | P2 | 管理端通知可观测 | admin system | done | 系统管理「通知记录」：绑定列表 + 发送日志 |
 
 ---
 

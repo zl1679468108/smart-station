@@ -10,6 +10,7 @@ import { SupabaseService } from '../supabase/supabase.service';
  * - serverchan（环境变量 SendKey）：管理员个人旁路，完整内容（仅你一人微信）
  * - 客户绑定（ss_notify_bindings）：按手机号一对一推送完整内容
  *   - 主通道 wxpusher：扫码关注后 UID 推送
+ *   - 备选 pushplus：客户填写 token 一对一
  *   - 兼容 serverchan：历史 SendKey 绑定
  *
  * 失败不阻断主流程；日志写 ss_sms_logs。
@@ -210,6 +211,13 @@ export class NotifyService {
               ok: true,
               mode: 'customer_full',
             });
+          } else if (b.channel === 'pushplus') {
+            await this.sendPushPlus(payload.title, payload.content, b.target);
+            results.push({
+              channel: `binding:pushplus:${b.id.slice(0, 8)}`,
+              ok: true,
+              mode: 'customer_full',
+            });
           } else if (b.channel === 'serverchan') {
             await this.sendServerChan(payload.title, payload.content, b.target);
             results.push({
@@ -380,6 +388,38 @@ export class NotifyService {
     }
   }
 
+  /** PushPlus 一对一推送（客户 token） */
+  private async sendPushPlus(
+    title: string,
+    content: string,
+    tokenRaw?: string | null,
+  ): Promise<void> {
+    const token = (tokenRaw || '').trim();
+    if (!token) throw new Error('PushPlus token 为空');
+
+    const res = await fetch('https://www.pushplus.plus/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token,
+        title: (title || '通知').slice(0, 100),
+        content,
+        template: 'txt',
+        channel: 'wechat',
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = (await res.json().catch(() => ({}))) as {
+      code?: number;
+      msg?: string;
+      data?: unknown;
+    };
+    // 官方成功码 200
+    if (body.code !== undefined && body.code !== 200) {
+      throw new Error(body.msg || `pushplus code=${body.code}`);
+    }
+  }
+
   /** 创建带参关注二维码（扫码后可轮询 UID） */
   async createWxPusherQrcode(opts: {
     extra: string;
@@ -444,7 +484,7 @@ export class NotifyService {
   /** 绑定成功后发一条测试完整消息到客户通道 */
   async sendBindTest(opts: {
     phone: string;
-    channel: 'wxpusher' | 'serverchan';
+    channel: 'wxpusher' | 'pushplus' | 'serverchan';
     target: string;
     stationName?: string;
   }): Promise<void> {
@@ -454,6 +494,10 @@ export class NotifyService {
     )} 已绑定取件通知。后续到件/滞留提醒将私信推送到此微信，含取件码（仅你可见）。`;
     if (opts.channel === 'wxpusher') {
       await this.sendWxPusher(title, content, [opts.target]);
+      return;
+    }
+    if (opts.channel === 'pushplus') {
+      await this.sendPushPlus(title, content, opts.target);
       return;
     }
     await this.sendServerChan(title, content, opts.target);

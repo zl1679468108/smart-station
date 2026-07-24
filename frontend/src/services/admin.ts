@@ -9,6 +9,8 @@ import type {
   StationLayoutConfig,
   LayoutDoor,
   LayoutArea,
+  NotifyBindingItem,
+  NotifyLogItem,
 } from '@/types/admin';
 
 // ===== 驿站 =====
@@ -170,4 +172,20 @@ export function updateCourier(
   return put<CourierCompany>(`/api/admin/couriers/${id}`, payload, {
     successMessage: '快递公司信息已保存',
   });
+}
+
+// ===== 通知可观测 =====
+export function listNotifyBindings(limit = 50): Promise<{
+  items: NotifyBindingItem[];
+  total: number;
+  message?: string;
+}> {
+  return get(`/api/admin/notify/bindings?limit=${limit}`);
+}
+
+export function listNotifyLogs(limit = 50): Promise<{
+  items: NotifyLogItem[];
+  total: number;
+}> {
+  return get(`/api/admin/notify/logs?limit=${limit}`);
 }

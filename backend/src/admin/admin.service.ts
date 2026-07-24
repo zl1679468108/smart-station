@@ -741,4 +741,109 @@ export class AdminService {
     if (!data) throw new NotFoundException('快递公司不存在');
     return data;
   }
+
+  /** 客户通知绑定列表（target 脱敏） */
+  async listNotifyBindings(stationId: string, limit = 50) {
+    const take = Math.min(Math.max(Number(limit) || 50, 1), 200);
+    const { data, error } = await this.supabase
+      .getClient()
+      .from('ss_notify_bindings')
+      .select('id, phone, channel, target, status, created_at, updated_at')
+      .eq('station_id', stationId)
+      .order('updated_at', { ascending: false })
+      .limit(take);
+    if (error) {
+      if (String(error.message || '').includes('ss_notify_bindings')) {
+        return { items: [], total: 0, message: '绑定表未初始化' };
+      }
+      throw new Error(`查询通知绑定失败: ${error.message}`);
+    }
+    const items = (data || []).map((r: any) => ({
+      id: r.id,
+      phone: r.phone,
+      phoneMasked: this.maskPhone(r.phone),
+      channel: r.channel,
+      channelLabel: this.channelLabel(r.channel),
+      targetMasked: this.maskSecret(r.target),
+      status: r.status,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }));
+    return { items, total: items.length };
+  }
+
+  /** 通知发送日志（最近） */
+  async listNotifyLogs(stationId: string, limit = 50) {
+    const take = Math.min(Math.max(Number(limit) || 50, 1), 200);
+    const { data, error } = await this.supabase
+      .getClient()
+      .from('ss_sms_logs')
+      .select(
+        'id, template_code, recipient_phone, recipient_name, content, status, error_message, params, sent_at, created_at',
+      )
+      .eq('station_id', stationId)
+      .order('created_at', { ascending: false })
+      .limit(take);
+    if (error) throw new Error(`查询通知日志失败: ${error.message}`);
+
+    const items = (data || []).map((r: any) => {
+      const params = (r.params && typeof r.params === 'object' ? r.params : {}) as Record<
+        string,
+        unknown
+      >;
+      const channelResults = Array.isArray(params.channelResults)
+        ? (params.channelResults as Array<{ channel?: string; ok?: boolean; mode?: string }>)
+        : [];
+      return {
+        id: r.id,
+        templateCode: r.template_code,
+        templateLabel: this.templateLabel(r.template_code),
+        phone: r.recipient_phone,
+        phoneMasked: this.maskPhone(r.recipient_phone),
+        recipientName: r.recipient_name,
+        content: r.content,
+        status: r.status,
+        errorMessage: r.error_message,
+        channelSummary: channelResults
+          .map((c) => `${c.channel || '?'}:${c.ok ? '成功' : '失败'}${c.mode ? `(${c.mode})` : ''}`)
+          .join(' · '),
+        sentAt: r.sent_at,
+        createdAt: r.created_at,
+      };
+    });
+    return { items, total: items.length };
+  }
+
+  private maskPhone(phone: string): string {
+    const p = (phone || '').trim();
+    if (p.length >= 7) return `${p.slice(0, 3)}****${p.slice(-4)}`;
+    if (p.length >= 4) return `****${p.slice(-4)}`;
+    return '****';
+  }
+
+  private maskSecret(raw: string): string {
+    const s = String(raw || '');
+    if (s.length <= 8) return '****';
+    return `${s.slice(0, 4)}****${s.slice(-4)}`;
+  }
+
+  private channelLabel(channel: string): string {
+    const map: Record<string, string> = {
+      wxpusher: '微信扫一扫',
+      pushplus: '其他方式',
+      serverchan: '旧版绑定',
+    };
+    return map[channel] || channel;
+  }
+
+  private templateLabel(code: string): string {
+    const map: Record<string, string> = {
+      inbound_notice: '到件通知',
+      overdue_remind: '滞留提醒',
+      kiosk_code: '查件验证码',
+      bind_test: '绑定测试',
+    };
+    return map[code] || code;
+  }
+
 }

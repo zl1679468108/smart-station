@@ -2,11 +2,10 @@ import React, { Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import AdminLayout from '@/layouts/AdminLayout';
 import ScanLayout from '@/layouts/ScanLayout';
-import MLayout from '@/layouts/MLayout';
 import QueryLayout from '@/layouts/QueryLayout';
 import RequireRole from '@/components/RequireRole';
 
-// 四组路由前缀的页面均用 React.lazy 懒加载
+// 路由前缀页面均用 React.lazy 懒加载
 const Dashboard = React.lazy(() => import('@/pages/admin/Dashboard'));
 const Login = React.lazy(() => import('@/pages/admin/Login'));
 const Profile = React.lazy(() => import('@/pages/admin/Profile'));
@@ -22,14 +21,13 @@ const Shipping = React.lazy(() => import('@/pages/admin/shipping/Shipping'));
 const Finance = React.lazy(() => import('@/pages/admin/finance/Finance'));
 const Stats = React.lazy(() => import('@/pages/admin/stats/Stats'));
 const Scan = React.lazy(() => import('@/pages/scan/Scan'));
-const MHome = React.lazy(() => import('@/pages/m/Home'));
 const QueryHome = React.lazy(() => import('@/pages/query/Home'));
 
 const Loading: React.FC = () => (
   <div className="flex h-screen items-center justify-center text-sm text-gray-500">加载中...</div>
 );
 
-// 路由配置：/admin/* /scan/* /m/* /query/* 四组，根路径重定向到工作台
+// 路由配置：/admin/* /scan/* /query/*，根路径重定向到工作台
 // /admin/login 独立于 AdminLayout，避免被路由守卫拦截
 export const AppRoutes: React.FC = () => {
   return (
@@ -113,11 +111,6 @@ export const AppRoutes: React.FC = () => {
         {/* 出库扫描机 */}
         <Route path="/scan" element={<ScanLayout />}>
           <Route index element={<Scan />} />
-        </Route>
-
-        {/* 移动 H5 */}
-        <Route path="/m" element={<MLayout />}>
-          <Route index element={<MHome />} />
         </Route>
 
         {/* 用户自助查询门户（1.1.0 新增，三端统一入口） */}

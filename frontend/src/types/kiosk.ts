@@ -136,8 +136,11 @@ export interface NotifyGuide {
   /** @deprecated */
   serverchanGuide: string;
   wxpusherGuide?: string;
+  pushplusGuide?: string;
+  pushplusGuideUrl?: string;
   bindEnabled: boolean;
-  bindChannel: 'wxpusher' | 'serverchan' | string;
+  bindChannel: 'wxpusher' | 'pushplus' | 'serverchan' | string;
+  bindChannels?: Array<'wxpusher' | 'pushplus' | string>;
 }
 
 export interface NotifyGuideResponse {
@@ -178,5 +181,15 @@ export interface WxPusherBindPollResult {
   bindingId?: string;
   testPushed?: boolean;
   pollIntervalSec?: number;
+  message: string;
+}
+
+
+export interface NotifyBindStatusResult {
+  phone: string;
+  phoneMasked: string;
+  bound: boolean;
+  channels: string[];
+  bindEnabled: boolean;
   message: string;
 }

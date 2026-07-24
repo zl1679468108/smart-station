@@ -9,6 +9,8 @@ export interface NotifyConfig {
   serverchanGuideUrl?: string;
   serverchanGuide?: string;
   wxpusherGuide?: string;
+  pushplusGuide?: string;
+  pushplusGuideUrl?: string;
   bindEnabled?: boolean;
 }
 
@@ -135,4 +137,33 @@ export interface CourierCompany {
   status: 'active' | 'disabled';
   sort_order: number;
   created_at: string;
+}
+
+
+/** 客户通知绑定（管理端，target 已脱敏） */
+export interface NotifyBindingItem {
+  id: string;
+  phone: string;
+  phoneMasked: string;
+  channel: string;
+  channelLabel: string;
+  targetMasked: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotifyLogItem {
+  id: string;
+  templateCode: string;
+  templateLabel: string;
+  phone: string;
+  phoneMasked: string;
+  recipientName?: string | null;
+  content: string;
+  status: string;
+  errorMessage?: string | null;
+  channelSummary: string;
+  sentAt?: string | null;
+  createdAt: string;
 }

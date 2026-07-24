@@ -99,3 +99,30 @@ export class PollWxPusherBindDto {
   @IsNotEmpty({ message: 'qrCode 不能为空' })
   qrCode!: string;
 }
+
+/** PushPlus 绑定：手机号 + 验证码 + token */
+export class BindPushPlusDto {
+  @IsString()
+  @IsNotEmpty({ message: '手机号不能为空' })
+  @Matches(/^1\d{10}$/, { message: '手机号格式不正确' })
+  phone!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: '验证码不能为空' })
+  @Length(6, 6, { message: '验证码为 6 位数字' })
+  @Matches(/^\d{6}$/, { message: '验证码为 6 位数字' })
+  code!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'token 不能为空' })
+  @Matches(/^[A-Za-z0-9_-]{16,64}$/, { message: '专属绑定码格式不正确' })
+  token!: string;
+}
+
+/** 查询绑定状态（不返回 target） */
+export class NotifyBindStatusDto {
+  @IsString()
+  @IsNotEmpty({ message: '手机号不能为空' })
+  @Matches(/^1\d{10}$/, { message: '手机号格式不正确' })
+  phone!: string;
+}

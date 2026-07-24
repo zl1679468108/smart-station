@@ -52,7 +52,7 @@ select {
 
 /* PageLayout 主体内容四周间距：H5 / 平板 / PC 统一由设计 token 控制
  * 规则：
- * 1. 仅在布局层（AdminLayout / MLayout / Query 主内容区）使用本类
+ * 1. 仅在布局层（AdminLayout / Query 主内容区）使用本类
  * 2. 页面根节点用 w-full 吃满内容区，不要再叠 mx-auto + max-w 居中，避免左右“假留白”
  * 3. 表单可读性需要时，对表单区块单独 max-w-* 左对齐限宽即可
  */

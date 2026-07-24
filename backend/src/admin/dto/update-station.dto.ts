@@ -48,6 +48,16 @@ export class NotifyConfigDto {
   wxpusherGuide?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  pushplusGuide?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  pushplusGuideUrl?: string;
+
+  @IsOptional()
   @IsBoolean()
   bindEnabled?: boolean;
 }

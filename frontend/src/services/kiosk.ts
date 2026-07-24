@@ -8,6 +8,7 @@ import type {
   BindNotifyResult,
   WxPusherBindStartResult,
   WxPusherBindPollResult,
+  NotifyBindStatusResult,
 } from '@/types/kiosk';
 
 /**
@@ -116,4 +117,26 @@ export function unbindNotify(payload: {
   return post<{ unbound: boolean }>(`/api/kiosk/notify-unbind${kioskStationQuery()}`, payload, {
     successMessage: '已解绑通知',
   });
+}
+
+/** PushPlus token 绑定 */
+export function bindPushPlus(payload: {
+  phone: string;
+  code: string;
+  token: string;
+}): Promise<BindNotifyResult> {
+  return post<BindNotifyResult>(
+    `/api/kiosk/notify-bind/pushplus${kioskStationQuery()}`,
+    payload,
+    { successMessage: false },
+  );
+}
+
+/** 查询手机号是否已绑定通知（不含 token/UID） */
+export function getNotifyBindStatus(phone: string): Promise<NotifyBindStatusResult> {
+  return post<NotifyBindStatusResult>(
+    `/api/kiosk/notify-bind-status${kioskStationQuery()}`,
+    { phone },
+    { successMessage: false, skipLoading: true, errorMessage: false },
+  );
 }

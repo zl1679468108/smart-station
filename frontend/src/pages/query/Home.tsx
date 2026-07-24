@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import * as kioskService from '@/services/kiosk';
 import { useKioskLayout } from '@/hooks/useKioskLayout';
-import type { KioskParcelItem, KioskShelf, StationLayoutConfig } from '@/types/kiosk';
+import type {
+  KioskParcelItem,
+  KioskShelf,
+  StationLayoutConfig,
+  NotifyBindStatusResult,
+} from '@/types/kiosk';
 import Icon from '@/components/ui/Icon';
 import Logo from '@/components/brand/Logo';
 import EmptyState from '@/components/ui/EmptyState';
@@ -13,16 +18,25 @@ import {
 } from '@/components/warehouse3d';
 import { formatBeijingTimestamp } from '@/utils/date';
 import NotifyBindCard from '@/components/NotifyBindCard';
+import { useQueryDevice } from '@/hooks/useQueryDevice';
+import { isNativeEditableTarget } from '@/utils/keypadTarget';
 
 const Warehouse3D = React.lazy(() => import('@/components/warehouse3d'));
 
 type QueryTab = 'phone' | 'tracking' | 'code';
 
-// 用户自助查询门户：无登录，三种查询方式，常驻虚拟键盘
+// 用户自助查询门户：无登录，三种查询方式；portal/kiosk 常驻虚拟键盘，h5 用原生键盘
 const Home: React.FC = () => {
+  const device = useQueryDevice();
+  const useNativeInput = device === 'h5';
   const [tab, setTab] = useState<QueryTab>('phone');
   const [items, setItems] = useState<KioskParcelItem[] | null>(null);
   const [toast, setToast] = useState<{ type: 'error' | 'success'; msg: string } | null>(null);
+  /** 最近一次手机号查询（用于绑定转化引导） */
+  const [lastQueryPhone, setLastQueryPhone] = useState<string | null>(null);
+  /** 强制展开顶部绑定卡片 */
+  const [bindForceOpen, setBindForceOpen] = useState(false);
+  const [bindStatus, setBindStatus] = useState<NotifyBindStatusResult | null>(null);
 
   // 货架布局数据 + 驿站信息走缓存；失败不阻塞查询主流程。
   const { data: layoutData, isLoading: layoutLoading } = useKioskLayout();
@@ -42,6 +56,9 @@ const Home: React.FC = () => {
     const handleTimeout = () => {
       setItems(null);
       setTab('phone');
+      setLastQueryPhone(null);
+      setBindStatus(null);
+      setBindForceOpen(false);
       setToast({ type: 'success', msg: '长时间未操作，已清空查询结果' });
       setTimeout(() => setToast(null), 2000);
     };
@@ -54,13 +71,37 @@ const Home: React.FC = () => {
     setTimeout(() => setToast(null), 2500);
   };
 
-  const handleResult = (res: { items?: KioskParcelItem[] }) => {
+  const refreshBindStatus = async (phone: string | null) => {
+    if (!phone || !/^1\d{10}$/.test(phone)) {
+      setBindStatus(null);
+      return;
+    }
+    try {
+      const st = await kioskService.getNotifyBindStatus(phone);
+      setBindStatus(st);
+    } catch {
+      setBindStatus(null);
+    }
+  };
+
+  const handleResult = (res: { items?: KioskParcelItem[] }, meta?: { phone?: string }) => {
     setItems(res.items || []);
+    const phone = meta?.phone || null;
+    setLastQueryPhone(phone);
+    void refreshBindStatus(phone);
   };
 
   const switchTab = (t: QueryTab) => {
     setTab(t);
     setItems(null);
+    setLastQueryPhone(null);
+    setBindStatus(null);
+    setBindForceOpen(false);
+  };
+
+  const openBindPanel = () => {
+    setBindForceOpen(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -124,6 +165,12 @@ const Home: React.FC = () => {
           guide={layoutData?.station?.notifyGuide}
           stationName={stationInfo?.name}
           compact
+          initialPhone={lastQueryPhone || undefined}
+          forceOpen={bindForceOpen}
+          onBound={() => {
+            setBindForceOpen(false);
+            void refreshBindStatus(lastQueryPhone);
+          }}
         />
       </div>
 
@@ -132,11 +179,27 @@ const Home: React.FC = () => {
         {/* 左侧/上部：输入区 + 结果 */}
         <div className="page-layout-main flex-1 overflow-auto lg:order-1">
           <div className="mx-auto max-w-2xl">
-            {tab === 'phone' && <PhoneQueryView onSubmit={handleResult} showToast={showToast} />}
-            {tab === 'tracking' && (
-              <TrackingQueryView onSubmit={handleResult} showToast={showToast} />
+            {tab === 'phone' && (
+              <PhoneQueryView
+                onSubmit={handleResult}
+                showToast={showToast}
+                useNativeInput={useNativeInput}
+              />
             )}
-            {tab === 'code' && <CodeQueryView onSubmit={handleResult} showToast={showToast} />}
+            {tab === 'tracking' && (
+              <TrackingQueryView
+                onSubmit={handleResult}
+                showToast={showToast}
+                useNativeInput={useNativeInput}
+              />
+            )}
+            {tab === 'code' && (
+              <CodeQueryView
+                onSubmit={handleResult}
+                showToast={showToast}
+                useNativeInput={useNativeInput}
+              />
+            )}
 
             {/* 查询结果 */}
             {items !== null && (
@@ -145,15 +208,21 @@ const Home: React.FC = () => {
                 shelves={shelves}
                 layoutConfig={layoutConfig}
                 layoutLoading={layoutLoading}
+                lastQueryPhone={lastQueryPhone}
+                bindStatus={bindStatus}
+                bindEnabled={layoutData?.station?.notifyGuide?.bindEnabled !== false}
+                onBindClick={openBindPanel}
               />
             )}
           </div>
         </div>
 
-        {/* 右侧/下部：虚拟键盘 */}
-        <div className="page-layout-main border-t border-gray-200 bg-white lg:order-2 lg:w-[420px] lg:border-l lg:border-t-0">
-          <KeypadPanel tab={tab} />
-        </div>
+        {/* 右侧/下部：虚拟键盘（h5 远端模式隐藏，改用系统键盘） */}
+        {!useNativeInput && (
+          <div className="page-layout-main border-t border-gray-200 bg-white lg:order-2 lg:w-[420px] lg:border-l lg:border-t-0">
+            <KeypadPanel tab={tab} />
+          </div>
+        )}
       </main>
 
       {/* Toast */}
@@ -174,8 +243,42 @@ const Home: React.FC = () => {
 
 // ============ 虚拟键盘面板 ============
 const KeypadPanel: React.FC<{ tab: QueryTab }> = ({ tab }) => {
-  // 通过全局事件分发按键输入，由当前聚焦输入框监听
+  // 优先写入当前原生可编辑框（通知绑定）；否则分发给查询表单监听
   const dispatchKey = (type: string, payload?: string) => {
+    const active = document.activeElement;
+    if (isNativeEditableTarget(active) && (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) {
+      const el = active;
+      const maxLen = el.maxLength > 0 ? el.maxLength : Number.POSITIVE_INFINITY;
+      let next = el.value;
+      const start = el.selectionStart ?? next.length;
+      const end = el.selectionEnd ?? next.length;
+
+      if (type === 'input' && payload) {
+        next = `${next.slice(0, start)}${payload}${next.slice(end)}`;
+        if (next.length > maxLen) next = next.slice(0, maxLen);
+      } else if (type === 'backspace') {
+        next = start !== end ? `${next.slice(0, start)}${next.slice(end)}` : `${next.slice(0, Math.max(start - 1, 0))}${next.slice(start)}`;
+      } else if (type === 'clear') {
+        next = '';
+      } else {
+        return;
+      }
+
+      const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, 'value')?.set?.call(el, next);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      if (type === 'input' && payload) {
+        const caret = Math.min(start + payload.length, next.length);
+        try { el.setSelectionRange(caret, caret); } catch { /* ignore */ }
+      } else if (type === 'backspace') {
+        const caret = start !== end ? start : Math.max(start - 1, 0);
+        try { el.setSelectionRange(caret, caret); } catch { /* ignore */ }
+      } else if (type === 'clear') {
+        try { el.setSelectionRange(0, 0); } catch { /* ignore */ }
+      }
+      return;
+    }
+
     window.dispatchEvent(new CustomEvent('keypad-input', { detail: { type, payload } }));
   };
 
@@ -187,6 +290,8 @@ const KeypadPanel: React.FC<{ tab: QueryTab }> = ({ tab }) => {
       {enableDash && (
         <div className="mb-2 flex justify-end">
           <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => dispatchKey('clear')}
             className="min-h-[44px] rounded-md bg-gray-100 px-3 py-2 text-xs text-gray-600 hover:bg-gray-200"
           >
@@ -209,9 +314,10 @@ const KeypadPanel: React.FC<{ tab: QueryTab }> = ({ tab }) => {
 
 // ============ 手机号查询（直接查询，无需验证码） ============
 const PhoneQueryView: React.FC<{
-  onSubmit: (res: { items?: KioskParcelItem[] }) => void;
+  onSubmit: (res: { items?: KioskParcelItem[] }, meta?: { phone?: string }) => void;
   showToast: (type: 'error' | 'success', msg: string) => void;
-}> = ({ onSubmit, showToast }) => {
+  useNativeInput?: boolean;
+}> = ({ onSubmit, showToast, useNativeInput = false }) => {
   const [phone, setPhone] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const phoneRef = useRef<HTMLInputElement>(null);
@@ -223,6 +329,9 @@ const PhoneQueryView: React.FC<{
   // 监听虚拟键盘输入
   useEffect(() => {
     const handler = (e: Event) => {
+      // 焦点在其它原生可编辑输入（如通知绑定手机号/验证码）时，不写入查询框
+      if (isNativeEditableTarget(document.activeElement)) return;
+
       const detail = (e as CustomEvent).detail;
       if (detail.type === 'input' && /^\d$/.test(detail.payload)) {
         setPhone((v) => (v.length < 11 ? v + detail.payload : v));
@@ -246,7 +355,7 @@ const PhoneQueryView: React.FC<{
     setSubmitting(true);
     try {
       const res = await kioskService.queryByPhoneDirect(phone);
-      onSubmit(res);
+      onSubmit(res, { phone });
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : '查询失败');
     } finally {
@@ -270,7 +379,7 @@ const PhoneQueryView: React.FC<{
           onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
           placeholder="11 位手机号"
           className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base outline-none focus:border-primary"
-          readOnly
+          readOnly={!useNativeInput}
           autoComplete="off"
         />
       </div>
@@ -290,7 +399,8 @@ const PhoneQueryView: React.FC<{
 const TrackingQueryView: React.FC<{
   onSubmit: (res: { items?: KioskParcelItem[] }) => void;
   showToast: (type: 'error' | 'success', msg: string) => void;
-}> = ({ onSubmit, showToast }) => {
+  useNativeInput?: boolean;
+}> = ({ onSubmit, showToast, useNativeInput = false }) => {
   const [trackingNumber, setTrackingNumber] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -302,6 +412,9 @@ const TrackingQueryView: React.FC<{
   // 监听虚拟键盘输入（字母+数字）
   useEffect(() => {
     const handler = (e: Event) => {
+      // 焦点在其它原生可编辑输入（如通知绑定手机号/验证码）时，不写入查询框
+      if (isNativeEditableTarget(document.activeElement)) return;
+
       const detail = (e as CustomEvent).detail;
       if (detail.type === 'input' && /^[A-Z0-9]$/i.test(detail.payload)) {
         setTrackingNumber((v) => (v.length < 24 ? v + detail.payload.toUpperCase() : v));
@@ -348,7 +461,7 @@ const TrackingQueryView: React.FC<{
           onChange={(e) => setTrackingNumber(e.target.value.toUpperCase())}
           placeholder="请输入运单号"
           className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base outline-none focus:border-primary"
-          readOnly
+          readOnly={!useNativeInput}
           autoComplete="off"
         />
       </div>
@@ -367,7 +480,8 @@ const TrackingQueryView: React.FC<{
 const CodeQueryView: React.FC<{
   onSubmit: (res: { items?: KioskParcelItem[] }) => void;
   showToast: (type: 'error' | 'success', msg: string) => void;
-}> = ({ onSubmit, showToast }) => {
+  useNativeInput?: boolean;
+}> = ({ onSubmit, showToast, useNativeInput = false }) => {
   const [code, setCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -379,6 +493,9 @@ const CodeQueryView: React.FC<{
   // 监听虚拟键盘输入（数字 + 横杠）
   useEffect(() => {
     const handler = (e: Event) => {
+      // 焦点在其它原生可编辑输入（如通知绑定手机号/验证码）时，不写入查询框
+      if (isNativeEditableTarget(document.activeElement)) return;
+
       const detail = (e as CustomEvent).detail;
       if (detail.type === 'input') {
         const ch = detail.payload as string;
@@ -428,7 +545,7 @@ const CodeQueryView: React.FC<{
           onChange={(e) => setCode(e.target.value)}
           placeholder="如 3-2-9903"
           className="w-full rounded-lg border border-gray-300 px-4 py-3 text-base font-mono tracking-wider outline-none focus:border-primary"
-          readOnly
+          readOnly={!useNativeInput}
           autoComplete="off"
         />
       </div>
@@ -449,7 +566,20 @@ const ResultView: React.FC<{
   shelves: KioskShelf[];
   layoutConfig: StationLayoutConfig | null;
   layoutLoading: boolean;
-}> = ({ items, shelves, layoutConfig, layoutLoading }) => {
+  lastQueryPhone?: string | null;
+  bindStatus?: NotifyBindStatusResult | null;
+  bindEnabled?: boolean;
+  onBindClick?: () => void;
+}> = ({
+  items,
+  shelves,
+  layoutConfig,
+  layoutLoading,
+  lastQueryPhone,
+  bindStatus,
+  bindEnabled = true,
+  onBindClick,
+}) => {
   // 提取所有需高亮的「货架号 + 层号 + 包裹数」（按货架号去重，统计每个货架的包裹数）
   const highlights = useMemo(() => {
     const map = new Map<number, { layer: number | null; count: number }>();
@@ -470,14 +600,36 @@ const ResultView: React.FC<{
     }));
   }, [items]);
 
+  const showBindCta = bindEnabled && !bindStatus?.bound;
+  const phoneHint = lastQueryPhone
+    ? `手机号 ${lastQueryPhone.slice(0, 3)}****${lastQueryPhone.slice(-4)}`
+    : '本机收件手机号';
+
   if (items.length === 0) {
     return (
-      <div className="mt-4">
+      <div className="mt-4 space-y-3">
         <EmptyState
           title="未查询到在库包裹"
-          description="可能已出库或尚未到达"
+          description="可能已出库或尚未到达。也可到店向工作人员查询货架。"
           iconClassName="text-gray-300"
         />
+        <div className="rounded-xl border border-gray-200 bg-white p-4 text-xs leading-relaxed text-gray-600 shadow-sm">
+          <p className="font-medium text-gray-800">温馨提示</p>
+          <p className="mt-1">
+            还没绑定微信通知时，包裹到了<strong className="text-gray-700">不会发到你微信</strong>
+            ，群里也<strong className="text-gray-700">不会公开取件码</strong>。
+            有件请到店查件或看货架。
+          </p>
+          {showBindCta && (
+            <button
+              type="button"
+              onClick={onBindClick}
+              className="mt-3 min-h-[44px] w-full rounded-md bg-primary px-3 text-sm font-medium text-white hover:bg-primaryHover"
+            >
+              绑定微信，有件自动提醒（推荐）
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -486,8 +638,33 @@ const ResultView: React.FC<{
     <div className="mt-4 space-y-3">
       <div className="text-center">
         <h3 className="text-base font-bold text-gray-800">找到 {items.length} 个包裹</h3>
-        <p className="text-xs text-gray-500">请凭取件码到对应货架取件</p>
+        <p className="text-xs text-gray-500">请凭取件码到对应货架取件 · 也可到店请工作人员协助</p>
       </div>
+
+      {/* 绑定转化 / 未绑定兜底 */}
+      {bindStatus?.bound ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
+          已绑定微信通知，下次包裹到了会直接发到你的微信。
+        </div>
+      ) : (
+        <div className="rounded-xl border border-primary/25 bg-orange-50 px-4 py-3 shadow-sm">
+          <p className="text-sm font-semibold text-gray-800">绑定微信后，有件自动提醒</p>
+          <p className="mt-1 text-xs leading-relaxed text-gray-600">
+            {lastQueryPhone ? `当前查询 ${phoneHint}。` : ''}
+            现在请先凭下方取件码到店取件。绑定后，下次不用反复查，微信会直接告诉你取件码。
+            群里不会公开你的取件码。
+          </p>
+          {showBindCta && (
+            <button
+              type="button"
+              onClick={onBindClick}
+              className="mt-3 min-h-[44px] w-full rounded-md bg-primary px-3 text-sm font-medium text-white hover:bg-primaryHover sm:w-auto sm:px-5"
+            >
+              去绑定微信通知
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 3D 货架平面图（有高亮货架且布局数据就绪时展示） */}
       {highlights.length > 0 && shelves.length > 0 && (

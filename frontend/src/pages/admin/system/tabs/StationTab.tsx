@@ -33,6 +33,8 @@ const StationTab: React.FC = () => {
     serverchanGuide: '',
     serverchanGuideUrl: '',
     wxpusherGuide: '',
+    pushplusGuide: '',
+    pushplusGuideUrl: 'https://www.pushplus.plus/',
     bindEnabled: true,
   });
 
@@ -56,6 +58,8 @@ const StationTab: React.FC = () => {
       serverchanGuide: nc.serverchanGuide || '',
       serverchanGuideUrl: nc.serverchanGuideUrl || '',
       wxpusherGuide: nc.wxpusherGuide || '',
+      pushplusGuide: nc.pushplusGuide || '',
+      pushplusGuideUrl: nc.pushplusGuideUrl || 'https://www.pushplus.plus/',
       bindEnabled: nc.bindEnabled !== false,
     });
   }, [station]);
@@ -82,6 +86,8 @@ const StationTab: React.FC = () => {
           serverchanGuide: form.serverchanGuide,
           serverchanGuideUrl: form.serverchanGuideUrl,
           wxpusherGuide: form.wxpusherGuide,
+          pushplusGuide: form.pushplusGuide,
+          pushplusGuideUrl: form.pushplusGuideUrl,
           bindEnabled: form.bindEnabled,
         },
       });
@@ -216,7 +222,7 @@ const StationTab: React.FC = () => {
       <section className="rounded-lg border border-gray-200 bg-white p-5">
         <h2 className="mb-1 text-sm font-medium text-gray-700">通知公示与客户绑定</h2>
         <p className="mb-4 text-xs text-gray-400">
-          企业微信群仅发脱敏公告（不含取件码）。客户通过 WxPusher 扫码关注后，完整取件码私信到其微信。
+          企业微信群仅发脱敏公告（不含取件码）。客户侧展示用大白话（微信扫一扫/专属绑定码）。后台可分别配置扫码与「其他方式」说明。
           以下内容会展示在 /query 与 /m 查询页。
         </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -265,7 +271,7 @@ const StationTab: React.FC = () => {
             />
           </div>
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-sm text-gray-600">WxPusher 绑定步骤说明</label>
+            <label className="mb-1 block text-sm text-gray-600">扫码绑定步骤说明（客户可见）</label>
             <textarea
               value={form.wxpusherGuide}
               onChange={(e) => setForm({ ...form, wxpusherGuide: e.target.value })}
@@ -277,6 +283,28 @@ const StationTab: React.FC = () => {
             <p className="mt-1 text-xs text-gray-400">
               后端需配置环境变量 WXPUSHER_APP_TOKEN（在 WxPusher 管理后台创建应用获取）。
             </p>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm text-gray-600">其他绑定方式说明（客户可见，避免写专业名词）</label>
+            <textarea
+              value={form.pushplusGuide}
+              onChange={(e) => setForm({ ...form, pushplusGuide: e.target.value })}
+              rows={2}
+              placeholder="1. 在网页用微信登录... 2. 复制专属绑定码..."
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={inputDisabled}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">其他方式官网链接</label>
+            <input
+              type="url"
+              value={form.pushplusGuideUrl}
+              onChange={(e) => setForm({ ...form, pushplusGuideUrl: e.target.value })}
+              placeholder="https://www.pushplus.plus/"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={inputDisabled}
+            />
           </div>
           <div className="flex items-center gap-2 pt-6">
             <input

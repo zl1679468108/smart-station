@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
@@ -166,6 +167,24 @@ export class AdminController {
   @Put('couriers/:id')
   async updateCourier(@Param('id') id: string, @Body() dto: UpdateCourierCompanyDto) {
     return this.adminService.updateCourier(id, dto);
+  }
+
+  // ============ 通知可观测 ============
+
+  @Get('notify/bindings')
+  async listNotifyBindings(
+    @StationId() stationId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.adminService.listNotifyBindings(stationId, limit ? Number(limit) : 50);
+  }
+
+  @Get('notify/logs')
+  async listNotifyLogs(
+    @StationId() stationId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.adminService.listNotifyLogs(stationId, limit ? Number(limit) : 50);
   }
 
   // 当前用户在当前驿站的员工关系（供前端判断权限）

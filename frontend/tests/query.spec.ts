@@ -256,3 +256,23 @@ test.describe('Toast 提示', () => {
     await expect(page.getByText('查询失败').first()).toBeVisible({ timeout: 8000 });
   });
 });
+
+
+test.describe('H5 设备模式', () => {
+  test('device=h5 显示返回栏、隐藏虚拟键盘且可用原生输入', async ({ page }) => {
+    await page.goto('/#/query?device=h5');
+    await expect(page.getByText('远端查件')).toBeVisible();
+    await expect(page.getByRole('button', { name: '返回' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '手机号查询' })).toBeVisible();
+    // 虚拟键盘数字键不应出现
+    await expect(page.getByRole('button', { name: '1', exact: true })).toHaveCount(0);
+    const phone = page.getByPlaceholder('11 位手机号');
+    await phone.fill('13800001234');
+    await expect(phone).toHaveValue('13800001234');
+  });
+
+  test('默认 portal 模式仍显示虚拟键盘', async ({ page }) => {
+    await page.goto('/#/query');
+    await expect(page.getByRole('button', { name: '1', exact: true })).toBeVisible();
+  });
+});

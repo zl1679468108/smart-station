@@ -101,7 +101,7 @@ smart-station
 │   ├── 出库确认（标记已出库、记录出库时间、操作类型=self_service）
 │   └── 出库成功反馈
 │
-└── 移动 H5（/m/*，远端查询备用）
+└── 远端 H5（/query?device=h5）
     ├── 输入手机号查件
     └── 包裹状态查看（不可自助出库，仅查看）
 ```
@@ -656,7 +656,8 @@ smart-station
 | `console` | 默认 | 开发日志 | 完整 |
 | `wecom` | `WECOM_WEBHOOK_URL` | **共享公告群**（全员可见） | **仅脱敏摘要**（手机尾号），**永不发取件码/验证码** |
 | `serverchan`（环境变量） | `SERVERCHAN_SENDKEY` | 管理员个人旁路 | 完整（仅管理员微信） |
-| 客户绑定（主） | `WXPUSHER_APP_TOKEN` + 表 `ss_notify_bindings`（channel=`wxpusher`） | **一对一私信** | 完整取件码（客户扫码关注 WxPusher 后按 UID 推送） |
+| 客户绑定（主） | `WXPUSHER_APP_TOKEN` + 表 `ss_notify_bindings`（channel=`wxpusher`） | **一对一私信** | 完整取件码（扫码关注后 UID 推送） |
+| 客户绑定（备选） | 表 `ss_notify_bindings`（channel=`pushplus`） | **一对一私信** | 完整取件码（客户 PushPlus token） |
 | 客户绑定（兼容） | 表 `ss_notify_bindings`（channel=`serverchan`） | **一对一私信** | 完整取件码（历史 SendKey 绑定仍有效） |
 
 - 多通道逗号组合，如 `NOTIFY_CHANNELS=console,wecom,serverchan`
@@ -664,9 +665,12 @@ smart-station
   - `GET /api/kiosk/notify-guide` 公示文案与企微群二维码
   - `POST /api/kiosk/notify-bind/wxpusher/start` 手机号验证后创建关注二维码
   - `POST /api/kiosk/notify-bind/wxpusher/poll` 轮询扫码 UID（间隔 ≥12s）并完成绑定
+  - `POST /api/kiosk/notify-bind/pushplus` PushPlus token 绑定
+  - `POST /api/kiosk/notify-bind-status` 查询是否已绑定（不含 target）
   - `POST /api/kiosk/notify-unbind` 解绑
   - `POST /api/kiosk/notify-bind` 兼容旧 Server酱 SendKey 绑定
-- 驿站公示配置：`ss_stations.notify_config`（企微群二维码 URL、WxPusher 绑定步骤文案），在 `/query`、`/m` 与系统管理「驿站信息」维护
+- 查件成功页：未绑定强引导绑定；未绑定兜底文案强调到店查/看货架，群不公示取件码
+- 驿站公示配置：`ss_stations.notify_config`（企微群二维码 URL、WxPusher 绑定步骤文案），在 `/query`（含 `device=h5`）与系统管理「驿站信息」维护
 - 查件验证码：不进企微群；非 production 可返回 `devCode`
 - 驿站开关仍用 `ss_stations.sms_enabled`（语义为「是否发送到件通知」）
 
@@ -689,9 +693,9 @@ smart-station
 > **定位**：面向**任意取件用户**的统一查件门户。用户进入页面即可看到一个常驻的虚拟键盘面板，无需登录、无需选择设备形态，直接通过手机号、运单号、取件码三种方式之一查询名下在库包裹。
 >
 > **与现有端的关系**：
-> - `/kiosk`（PAD 现场）与 `/m`（H5 远端）保留为设备专属入口，本期不删除；
-> - `/query` 作为**新增的统一门户**，三端响应式自适应，长期目标是逐步替代 `/kiosk` 与 `/m` 的查询能力（本期不强制重定向，由驿站运营决定）。
-> - 后端复用 Kiosk 模块（`/api/kiosk/*`），新增「取件码查询」接口；前端为 `/query` 独立页面与组件。
+> - `/query` 为统一用户查件门户；通过 `?device=h5|kiosk` 控制远端 / 现场布局差异。
+> - 旧 `/kiosk` 页面已合并到 `/query`，无独立路由。
+> - 后端复用 Kiosk 模块（`/api/kiosk/*`）；前端仅维护 `/query` 一套页面。
 
 #### 4.14.1 页面结构
 
@@ -818,14 +822,16 @@ smart-station
 
 #### 4.14.7 与 Kiosk / H5 端的关系
 
-| 端 | 路由 | 定位 | 本期处理 |
-|----|------|------|----------|
-| Kiosk PAD | `/kiosk` | 驿站现场 PAD 沉浸式查件（无导航栏、超时返回） | 保留，不改动 |
-| H5 远端 | `/m` | 移动端远端查件（仅手机号查询） | 保留，不改动 |
-| **用户查询门户** | `/query` | **新增，三端统一入口，常驻键盘** | **本期新增** |
+| 端 | 路由 | 定位 | 处理 |
+|----|------|------|------|
+| **用户查询门户** | `/query` | 三端统一入口，常驻虚拟键盘 + 空闲清空 | **主入口（默认 portal）** |
+| 现场 PAD 沉浸 | `/query?device=kiosk` | 与 portal 同能力，预留现场沉浸扩展 | 可选参数 |
+| 远端 H5 | `/query?device=h5` | 远端手机：顶部返回、原生键盘、无虚拟键盘、无 90s 空闲清空 | **H5 入口** |
+| 旧 Kiosk | `/kiosk` | 历史现场 PAD 入口 | 已合并到 `/query`（无独立页面） |
 
-- 运营可在驿站现场 Pad 上将首页快捷方式指向 `/query`（替代 `/kiosk`），或保留 `/kiosk` 沉浸模式
-- 长期 v2.0 可考虑废弃 `/kiosk` 与 `/m`，统一收敛到 `/query`（带 `?device=kiosk\|h5` 参数控制沉浸模式）
+- 业务能力统一：手机号 / 运单号 / 取件码三种查询 + 脱敏结果 + 通知绑定，全部复用 `/api/kiosk/*`
+- 运营现场 Pad 首页快捷方式指向 `/query` 或 `/query?device=kiosk`
+- 对外分享远端查件链接使用 `/#/query?device=h5`
 
 #### 4.14.8 数据接口清单
 
