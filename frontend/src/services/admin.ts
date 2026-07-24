@@ -175,17 +175,29 @@ export function updateCourier(
 }
 
 // ===== 通知可观测 =====
-export function listNotifyBindings(limit = 50): Promise<{
+export function listNotifyBindings(opts?: {
+  limit?: number;
+  phone?: string;
+}): Promise<{
   items: NotifyBindingItem[];
   total: number;
   message?: string;
 }> {
-  return get(`/api/admin/notify/bindings?limit=${limit}`);
+  const limit = opts?.limit ?? 50;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (opts?.phone) params.set('phone', opts.phone);
+  return get(`/api/admin/notify/bindings?${params.toString()}`);
 }
 
-export function listNotifyLogs(limit = 50): Promise<{
+export function listNotifyLogs(opts?: {
+  limit?: number;
+  phone?: string;
+}): Promise<{
   items: NotifyLogItem[];
   total: number;
 }> {
-  return get(`/api/admin/notify/logs?limit=${limit}`);
+  const limit = opts?.limit ?? 50;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (opts?.phone) params.set('phone', opts.phone);
+  return get(`/api/admin/notify/logs?${params.toString()}`);
 }

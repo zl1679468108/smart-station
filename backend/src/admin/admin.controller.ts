@@ -175,16 +175,24 @@ export class AdminController {
   async listNotifyBindings(
     @StationId() stationId: string,
     @Query('limit') limit?: string,
+    @Query('phone') phone?: string,
   ) {
-    return this.adminService.listNotifyBindings(stationId, limit ? Number(limit) : 50);
+    return this.adminService.listNotifyBindings(stationId, {
+      limit: limit ? Number(limit) : 50,
+      phone,
+    });
   }
 
   @Get('notify/logs')
   async listNotifyLogs(
     @StationId() stationId: string,
     @Query('limit') limit?: string,
+    @Query('phone') phone?: string,
   ) {
-    return this.adminService.listNotifyLogs(stationId, limit ? Number(limit) : 50);
+    return this.adminService.listNotifyLogs(stationId, {
+      limit: limit ? Number(limit) : 50,
+      phone,
+    });
   }
 
   // 当前用户在当前驿站的员工关系（供前端判断权限）

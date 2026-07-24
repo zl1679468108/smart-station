@@ -742,16 +742,25 @@ export class AdminService {
     return data;
   }
 
-  /** 客户通知绑定列表（target 脱敏） */
-  async listNotifyBindings(stationId: string, limit = 50) {
-    const take = Math.min(Math.max(Number(limit) || 50, 1), 200);
-    const { data, error } = await this.supabase
+  /** 客户通知绑定列表（target 脱敏）；phone 支持完整号/尾号模糊 */
+  async listNotifyBindings(stationId: string, opts?: { limit?: number; phone?: string }) {
+    const take = Math.min(Math.max(Number(opts?.limit) || 50, 1), 200);
+    const phone = this.normalizePhoneQuery(opts?.phone);
+
+    let q = this.supabase
       .getClient()
       .from('ss_notify_bindings')
-      .select('id, phone, channel, target, status, created_at, updated_at')
+      .select('id, phone, channel, target, status, created_at, updated_at', { count: 'exact' })
       .eq('station_id', stationId)
       .order('updated_at', { ascending: false })
       .limit(take);
+
+    if (phone) {
+      if (/^1\d{10}$/.test(phone)) q = q.eq('phone', phone);
+      else q = q.like('phone', `%${phone}%`);
+    }
+
+    const { data, error, count } = await q;
     if (error) {
       if (String(error.message || '').includes('ss_notify_bindings')) {
         return { items: [], total: 0, message: '绑定表未初始化' };
@@ -766,24 +775,35 @@ export class AdminService {
       channelLabel: this.channelLabel(r.channel),
       targetMasked: this.maskSecret(r.target),
       status: r.status,
+      statusLabel: r.status === 'active' ? '有效' : r.status === 'disabled' ? '已停用' : r.status,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }));
-    return { items, total: items.length };
+    return { items, total: count ?? items.length };
   }
 
-  /** 通知发送日志（最近） */
-  async listNotifyLogs(stationId: string, limit = 50) {
-    const take = Math.min(Math.max(Number(limit) || 50, 1), 200);
-    const { data, error } = await this.supabase
+  /** 通知发送日志；phone 支持完整号/尾号模糊 */
+  async listNotifyLogs(stationId: string, opts?: { limit?: number; phone?: string }) {
+    const take = Math.min(Math.max(Number(opts?.limit) || 50, 1), 200);
+    const phone = this.normalizePhoneQuery(opts?.phone);
+
+    let q = this.supabase
       .getClient()
       .from('ss_sms_logs')
       .select(
         'id, template_code, recipient_phone, recipient_name, content, status, error_message, params, sent_at, created_at',
+        { count: 'exact' },
       )
       .eq('station_id', stationId)
       .order('created_at', { ascending: false })
       .limit(take);
+
+    if (phone) {
+      if (/^1\d{10}$/.test(phone)) q = q.eq('recipient_phone', phone);
+      else q = q.like('recipient_phone', `%${phone}%`);
+    }
+
+    const { data, error, count } = await q;
     if (error) throw new Error(`查询通知日志失败: ${error.message}`);
 
     const items = (data || []).map((r: any) => {
@@ -792,8 +812,9 @@ export class AdminService {
         unknown
       >;
       const channelResults = Array.isArray(params.channelResults)
-        ? (params.channelResults as Array<{ channel?: string; ok?: boolean; mode?: string }>)
+        ? (params.channelResults as Array<{ channel?: string; ok?: boolean; mode?: string; error?: string }>)
         : [];
+      const channels = channelResults.map((c) => this.formatChannelResult(c));
       return {
         id: r.id,
         templateCode: r.template_code,
@@ -803,15 +824,20 @@ export class AdminService {
         recipientName: r.recipient_name,
         content: r.content,
         status: r.status,
+        statusLabel:
+          r.status === 'sent' ? '已发送' : r.status === 'failed' ? '失败' : r.status === 'pending' ? '待发送' : r.status,
         errorMessage: r.error_message,
-        channelSummary: channelResults
-          .map((c) => `${c.channel || '?'}:${c.ok ? '成功' : '失败'}${c.mode ? `(${c.mode})` : ''}`)
-          .join(' · '),
+        channels,
+        channelSummary: channels.map((c) => c.label).join(' · '),
         sentAt: r.sent_at,
         createdAt: r.created_at,
       };
     });
-    return { items, total: items.length };
+    return { items, total: count ?? items.length };
+  }
+
+  private normalizePhoneQuery(raw?: string | null): string {
+    return String(raw || '').replace(/\D/g, '').slice(0, 11);
   }
 
   private maskPhone(phone: string): string {
@@ -827,11 +853,14 @@ export class AdminService {
     return `${s.slice(0, 4)}****${s.slice(-4)}`;
   }
 
+  /** 绑定通道中文名 */
   private channelLabel(channel: string): string {
     const map: Record<string, string> = {
       wxpusher: '微信扫一扫',
       pushplus: '其他方式',
       serverchan: '旧版绑定',
+      console: '开发日志',
+      wecom: '驿站通知群',
     };
     return map[channel] || channel;
   }
@@ -844,6 +873,39 @@ export class AdminService {
       bind_test: '绑定测试',
     };
     return map[code] || code;
+  }
+
+  private modeLabel(mode?: string): string {
+    const map: Record<string, string> = {
+      full: '完整内容',
+      public: '脱敏公告',
+      admin_full: '管理员完整',
+      customer_full: '客户私信',
+      skipped_private: '已跳过（隐私）',
+    };
+    return mode ? map[mode] || mode : '';
+  }
+
+  /** 将 channelResults 单项映射为中文展示 */
+  private formatChannelResult(c: {
+    channel?: string;
+    ok?: boolean;
+    mode?: string;
+    error?: string;
+  }): { key: string; ok: boolean; label: string } {
+    const raw = String(c.channel || '');
+    let name = raw;
+    if (raw.startsWith('binding:wxpusher')) name = '客户微信（扫码）';
+    else if (raw.startsWith('binding:pushplus')) name = '客户微信（其他）';
+    else if (raw.startsWith('binding:serverchan')) name = '客户微信（旧版）';
+    else if (raw === 'bindings_lookup') name = '客户绑定查询';
+    else name = this.channelLabel(raw);
+
+    const ok = Boolean(c.ok);
+    const mode = this.modeLabel(c.mode);
+    const status = ok ? '成功' : '失败';
+    const label = mode ? `${name}：${status}（${mode}）` : `${name}：${status}`;
+    return { key: raw || name, ok, label };
   }
 
 }

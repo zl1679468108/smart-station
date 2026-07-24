@@ -149,8 +149,15 @@ export interface NotifyBindingItem {
   channelLabel: string;
   targetMasked: string;
   status: string;
+  statusLabel?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface NotifyChannelResultItem {
+  key: string;
+  ok: boolean;
+  label: string;
 }
 
 export interface NotifyLogItem {
@@ -162,7 +169,9 @@ export interface NotifyLogItem {
   recipientName?: string | null;
   content: string;
   status: string;
+  statusLabel?: string;
   errorMessage?: string | null;
+  channels?: NotifyChannelResultItem[];
   channelSummary: string;
   sentAt?: string | null;
   createdAt: string;
