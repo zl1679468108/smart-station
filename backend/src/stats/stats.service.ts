@@ -103,6 +103,9 @@ export class StatsService {
     const overdue = overdueRes.count || 0;
     const exception = exceptionRes.count || 0;
 
+    // 今日到件通知触达（ss_sms_logs.inbound_notice）+ 有效绑定人数
+    const notify = await this.getNotifyReach(stationId, todayStart, todayEnd);
+
     return {
       today: {
         inbound: todayInbound,
@@ -120,7 +123,106 @@ export class StatsService {
         overdueWarn: overdue,
         exceptionUnresolved: exception,
       },
+      notify,
     };
+  }
+
+  /**
+   * 今日到件通知触达统计（运营可观测）
+   * - customerPushed：至少一条客户绑定通道发送成功
+   * - customerUnbound：无任何客户绑定通道（未绑定）
+   * - customerPushFailed：有绑定但全部失败
+   * - sendFailed：整条通知 status=failed
+   * - activeBindings：当前有效绑定人数
+   */
+  private async getNotifyReach(stationId: string, todayStart: string, todayEnd: string) {
+    const empty = {
+      inboundNotices: 0,
+      customerPushed: 0,
+      customerUnbound: 0,
+      customerPushFailed: 0,
+      sendFailed: 0,
+      activeBindings: 0,
+    };
+
+    try {
+      const [logsRes, bindRes] = await Promise.all([
+        this.supabase
+          .getClient()
+          .from('ss_sms_logs')
+          .select('status, params')
+          .eq('station_id', stationId)
+          .eq('template_code', 'inbound_notice')
+          .gte('created_at', todayStart)
+          .lt('created_at', todayEnd)
+          .limit(2000),
+        this.supabase
+          .getClient()
+          .from('ss_notify_bindings')
+          .select('id', { count: 'exact', head: true })
+          .eq('station_id', stationId)
+          .eq('status', 'active'),
+      ]);
+
+      // 表未迁移时不阻断工作台
+      if (logsRes.error) {
+        const msg = String(logsRes.error.message || '');
+        if (msg.includes('ss_sms_logs') || msg.includes('does not exist')) {
+          return empty;
+        }
+        // 其他错误：返回空统计，不抛，避免拖垮 Dashboard
+        // eslint-disable-next-line no-console
+        console.warn('[Stats] 今日通知统计查询失败:', msg);
+        return empty;
+      }
+
+      let customerPushed = 0;
+      let customerUnbound = 0;
+      let customerPushFailed = 0;
+      let sendFailed = 0;
+      const rows = (logsRes.data || []) as Array<{ status?: string; params?: unknown }>;
+
+      for (const row of rows) {
+        if (row.status === 'failed') {
+          sendFailed += 1;
+        }
+        const params =
+          row.params && typeof row.params === 'object'
+            ? (row.params as Record<string, unknown>)
+            : {};
+        const channelResults = Array.isArray(params.channelResults)
+          ? (params.channelResults as Array<{ channel?: string; ok?: boolean }>)
+          : [];
+        const customerResults = channelResults.filter((c) =>
+          String(c.channel || '').startsWith('binding:'),
+        );
+        if (customerResults.length === 0) {
+          customerUnbound += 1;
+        } else if (customerResults.some((c) => c.ok)) {
+          customerPushed += 1;
+        } else {
+          customerPushFailed += 1;
+        }
+      }
+
+      let activeBindings = 0;
+      if (!bindRes.error) {
+        activeBindings = bindRes.count || 0;
+      }
+
+      return {
+        inboundNotices: rows.length,
+        customerPushed,
+        customerUnbound,
+        customerPushFailed,
+        sendFailed,
+        activeBindings,
+      };
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[Stats] 今日通知统计异常:', err);
+      return empty;
+    }
   }
 
 

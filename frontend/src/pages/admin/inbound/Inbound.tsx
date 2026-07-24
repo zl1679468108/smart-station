@@ -164,6 +164,8 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<InboundResult | null>(null);
+  /** 本会话最近成功入库，便于连续扫码时回看取件码/通知 */
+  const [recent, setRecent] = useState<InboundResult[]>([]);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -202,6 +204,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         inboundMethod: 'scan',
       });
       setResult(res);
+      setRecent((prev) => [res, ...prev].slice(0, 5));
       invalidateShelves();
       invalidateDashboard();
       invalidateInventoryList();
@@ -210,7 +213,8 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       setRecipientName('');
       setRecipientPhone('');
       setNote('');
-      inputRef.current?.focus();
+      // 稍后再聚焦，避免与成功区重绘抢焦点
+      setTimeout(() => inputRef.current?.focus(), 30);
     } catch (err) {
       setError(err instanceof Error ? err.message : '入库失败');
     } finally {
@@ -282,6 +286,51 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       </form>
 
       {result && <InboundSuccess result={result} />}
+
+      {recent.length > 0 && (
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-medium text-gray-700">本会话最近入库</h3>
+            <span className="text-[11px] text-gray-400">最多显示 5 条</span>
+          </div>
+          <ul className="divide-y divide-gray-100">
+            {recent.map((r) => {
+              const n = r.notify;
+              let tip = '通知未知';
+              let tipClass = 'text-gray-500';
+              if (n) {
+                if (!n.enabled) {
+                  tip = '通知已关';
+                  tipClass = 'text-gray-500';
+                } else if (n.customerPushed) {
+                  tip = '已私信';
+                  tipClass = 'text-emerald-600';
+                } else if (n.customerBound) {
+                  tip = '私信失败';
+                  tipClass = 'text-amber-600';
+                } else {
+                  tip = '未绑定';
+                  tipClass = 'text-orange-600';
+                }
+              }
+              return (
+                <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
+                  <div className="min-w-0">
+                    <div className="font-mono text-sm font-semibold text-primary">{r.pickupCode}</div>
+                    <div className="truncate text-gray-500">{r.trackingNumber}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-gray-700">
+                      {r.shelfNumber}-{r.shelfLayer}-{String(r.shelfPosition).padStart(4, '0')}
+                    </div>
+                    <div className={tipClass}>{tip}</div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 };

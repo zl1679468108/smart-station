@@ -24,11 +24,22 @@ export interface DashboardTodo {
   exceptionUnresolved: number;
 }
 
+/** 今日到件通知触达（工作台运营卡片） */
+export interface DashboardNotify {
+  inboundNotices: number;
+  customerPushed: number;
+  customerUnbound: number;
+  customerPushFailed: number;
+  sendFailed: number;
+  activeBindings: number;
+}
+
 export interface DashboardData {
   today: DashboardToday;
   yesterday: DashboardYesterday;
   hourly: DashboardHourly[];
   todo: DashboardTodo;
+  notify?: DashboardNotify;
 }
 
 

@@ -27,10 +27,14 @@ const Scan: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectRef = useRef<number | null>(null);
+  /** 防连点/摄像头重复识别 */
+  const inFlightRef = useRef(false);
+  const lastScanRef = useRef<{ value: string; at: number }>({ value: '', at: 0 });
 
-  // 进入扫描态自动聚焦输入框
+  // 进入扫描态自动聚焦输入框，并释放提交锁
   useEffect(() => {
     if (phase === 'scan') {
+      inFlightRef.current = false;
       setTrackingNumber('');
       const t = setTimeout(() => inputRef.current?.focus(), 50);
       return () => clearTimeout(t);
@@ -70,7 +74,7 @@ const Scan: React.FC = () => {
               const codes = await detector.detect(videoRef.current);
               if (codes && codes.length > 0) {
                 const value = codes[0].rawValue as string;
-                if (value) {
+                if (value && !inFlightRef.current) {
                   submit(value);
                   return;
                 }
@@ -106,6 +110,14 @@ const Scan: React.FC = () => {
   const submit = useCallback(async (raw: string) => {
     const tn = raw.trim();
     if (!tn) return;
+    // 提交中 / 结果页禁止重复触发（扫码枪连扫、摄像头连帧）
+    if (inFlightRef.current) return;
+    const now = Date.now();
+    if (lastScanRef.current.value === tn && now - lastScanRef.current.at < 2500) {
+      return;
+    }
+    lastScanRef.current = { value: tn, at: now };
+    inFlightRef.current = true;
     setPhase('submitting');
     setError('');
     setResult(null);
@@ -120,7 +132,13 @@ const Scan: React.FC = () => {
       invalidateOutboundRecords();
       setPhase('success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : '出库失败');
+      const msg = err instanceof Error ? err.message : '出库失败';
+      // 常见失败原因大白话
+      let friendly = msg;
+      if (/不存在|未找到|找不到/.test(msg)) friendly = '未找到该运单，请确认是否已入库';
+      else if (/已出库|已取|out_stock/.test(msg)) friendly = '该包裹已出库，请勿重复扫描';
+      else if (/锁定|锁定中|尝试/.test(msg)) friendly = '取件码尝试过多已暂时锁定，请稍后再试或改人工出库';
+      setError(friendly);
       setPhase('error');
     }
   }, [
@@ -133,14 +151,15 @@ const Scan: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (phase === 'submitting') return;
+    if (inFlightRef.current || phase === 'submitting') return;
     submit(trackingNumber);
   };
 
   const handleScanKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // 扫码枪通常以回车结束，原生 form submit 已覆盖
+    // 扫码枪通常以回车结束；与 form submit 二选一，避免双触发
     if (e.key === 'Enter') {
       e.preventDefault();
+      if (inFlightRef.current || phase === 'submitting') return;
       submit(trackingNumber);
     }
   };

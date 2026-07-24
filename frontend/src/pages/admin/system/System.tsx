@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Icon, { IconName } from '@/components/ui/Icon';
 import PageHeader from '@/components/ui/PageHeader';
 import { useAuth } from '@/utils/auth';
@@ -32,6 +33,7 @@ const allTabs: { key: TabKey; label: string; icon: IconName; roles: Role[] }[] =
 const System: React.FC = () => {
   const { user } = useAuth();
   const role = (user?.role as Role) || null;
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // 按角色过滤可见 Tab
   const tabs = useMemo(() => {
@@ -39,16 +41,35 @@ const System: React.FC = () => {
     return allTabs.filter((t) => t.roles.includes(role));
   }, [role]);
 
-  // 默认选中第一个可见 Tab
-  const [active, setActive] = useState<TabKey>(tabs[0]?.key || 'station');
+  const tabKeys = useMemo(() => new Set(tabs.map((t) => t.key)), [tabs]);
+  const queryTab = searchParams.get('tab') as TabKey | null;
+  const initialTab: TabKey =
+    queryTab && tabKeys.has(queryTab) ? queryTab : tabs[0]?.key || 'station';
+
+  // 默认选中第一个可见 Tab；支持 ?tab=notify 深链
+  const [active, setActive] = useState<TabKey>(initialTab);
   const [visitedTabs, setVisitedTabs] = useState<Set<TabKey>>(
-    () => new Set([tabs[0]?.key || 'station']),
+    () => new Set([initialTab]),
   );
+
+  useEffect(() => {
+    if (queryTab && tabKeys.has(queryTab) && queryTab !== active) {
+      setActive(queryTab);
+    }
+  }, [queryTab, tabKeys, active]);
 
   useEffect(() => {
     if (tabs.some((t) => t.key === active)) return;
     setActive(tabs[0]?.key || 'station');
   }, [active, tabs]);
+
+  const switchTab = (key: TabKey) => {
+    setActive(key);
+    const next = new URLSearchParams(searchParams);
+    if (key === (tabs[0]?.key || 'station')) next.delete('tab');
+    else next.set('tab', key);
+    setSearchParams(next, { replace: true });
+  };
 
   useEffect(() => {
     setVisitedTabs((prev) => {
@@ -68,7 +89,7 @@ const System: React.FC = () => {
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setActive(t.key)}
+            onClick={() => switchTab(t.key)}
             className={`flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm transition-colors ${
               active === t.key
                 ? 'border-primary text-primary'

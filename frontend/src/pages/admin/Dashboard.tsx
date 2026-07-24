@@ -212,6 +212,53 @@ const Dashboard: React.FC = () => {
         })}
       </div>
 
+      {/* 今日到件触达 */}
+      {data.notify && (
+        <button
+          type="button"
+          onClick={() => navigate('/admin/system?tab=notify')}
+          className="w-full rounded-lg border border-orange-100 bg-orange-50/80 px-4 py-3 text-left transition hover:bg-orange-50"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-medium text-gray-800">今日到件触达</div>
+              <p className="mt-0.5 text-xs text-gray-600">
+                看客户有没有真正收到取件码私信（点此查看通知记录）
+              </p>
+            </div>
+            <div className="text-xs text-gray-500">
+              已绑定客户 {data.notify.activeBindings} 人
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            <span className="rounded-md bg-white px-2.5 py-1 text-emerald-700">
+              已私信 {data.notify.customerPushed}
+            </span>
+            <span className="rounded-md bg-white px-2.5 py-1 text-orange-700">
+              未绑定 {data.notify.customerUnbound}
+            </span>
+            {data.notify.customerPushFailed > 0 && (
+              <span className="rounded-md bg-white px-2.5 py-1 text-amber-700">
+                私信失败 {data.notify.customerPushFailed}
+              </span>
+            )}
+            {data.notify.sendFailed > 0 && (
+              <span className="rounded-md bg-white px-2.5 py-1 text-red-700">
+                发送失败 {data.notify.sendFailed}
+              </span>
+            )}
+            <span className="rounded-md bg-white px-2.5 py-1 text-gray-600">
+              到件通知 {data.notify.inboundNotices} 次
+            </span>
+          </div>
+          {data.notify.customerUnbound > 0 && (
+            <p className="mt-2 text-[11px] text-orange-800/80">
+              未绑定客户不会收到微信私信，可提醒到店查件或扫码绑定；绑定后可在通知记录重发。
+            </p>
+          )}
+        </button>
+      )}
+
       {/* 今日小时趋势 + 待办 */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-gray-200 bg-white p-5 lg:col-span-2">
@@ -233,7 +280,7 @@ const Dashboard: React.FC = () => {
               </div>
               {todo.overdueWarn === 0 && (
                 <span className="mt-1 text-xs text-gray-400">
-                  暂无滞留（自动扫描将在 1.3 滞留件模块提供）
+                  暂无滞留件，可在滞留页手动扫描提醒
                 </span>
               )}
             </button>

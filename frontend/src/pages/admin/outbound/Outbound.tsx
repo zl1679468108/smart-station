@@ -60,6 +60,7 @@ const ManualOutbound: React.FC = () => {
   const [queryTab, setQueryTab] = useState<QueryTab>('phone');
   const [items, setItems] = useState<OutboundSearchItem[] | null>(null);
   const [confirming, setConfirming] = useState<OutboundSearchItem | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
   const handleResult = (res: { items?: OutboundSearchItem[] }) => {
     setItems(res.items || []);
@@ -70,8 +71,10 @@ const ManualOutbound: React.FC = () => {
     setItems(null);
   };
 
-  // 确认出库
+  // 确认出库（防连点）
   const handleConfirmOutbound = async (item: OutboundSearchItem) => {
+    if (confirmLoading) return;
+    setConfirmLoading(true);
     try {
       await outboundService.manualOutbound({
         trackingNumber: item.trackingNumber,
@@ -86,8 +89,9 @@ const ManualOutbound: React.FC = () => {
       setItems((prev) => (prev ? prev.filter((i) => i.id !== item.id) : prev));
       setConfirming(null);
     } catch {
-      // 接口错误已由全局 notification 统一提示
-      setConfirming(null);
+      // 接口错误已由全局 notification 统一提示；保留弹窗便于重试
+    } finally {
+      setConfirmLoading(false);
     }
   };
 
@@ -131,8 +135,11 @@ const ManualOutbound: React.FC = () => {
       {confirming && (
         <ConfirmDialog
           item={confirming}
+          loading={confirmLoading}
           onConfirm={() => handleConfirmOutbound(confirming)}
-          onCancel={() => setConfirming(null)}
+          onCancel={() => {
+            if (!confirmLoading) setConfirming(null);
+          }}
         />
       )}
 
@@ -352,9 +359,10 @@ const SearchResultList: React.FC<{
 // ============ 二次确认弹窗 ============
 const ConfirmDialog: React.FC<{
   item: OutboundSearchItem;
+  loading?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
-}> = ({ item, onConfirm, onCancel }) => (
+}> = ({ item, loading, onConfirm, onCancel }) => (
   <Modal
     open
     onClose={onCancel}
@@ -370,16 +378,20 @@ const ConfirmDialog: React.FC<{
     footer={
       <>
         <button
+          type="button"
           onClick={onCancel}
-          className="flex-1 rounded-md border border-gray-300 py-2 text-sm text-gray-600 hover:bg-gray-50"
+          disabled={loading}
+          className="flex-1 rounded-md border border-gray-300 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-60"
         >
           取消
         </button>
         <button
+          type="button"
           onClick={onConfirm}
-          className="flex-1 rounded-md bg-primary py-2 text-sm font-medium text-white hover:bg-primaryHover"
+          disabled={loading}
+          className="flex-1 rounded-md bg-primary py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
         >
-          确认出库
+          {loading ? '出库中…' : '确认出库'}
         </button>
       </>
     }
