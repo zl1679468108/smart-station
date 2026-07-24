@@ -187,6 +187,7 @@ export class AdminController {
   async listNotifyLogs(
     @StationId() stationId: string,
     @Query('limit') limit?: string,
+    @Query('page') page?: string,
     @Query('phone') phone?: string,
     @Query('status') status?: string,
     @Query('templateCode') templateCode?: string,
@@ -195,6 +196,7 @@ export class AdminController {
   ) {
     return this.adminService.listNotifyLogs(stationId, {
       limit: limit ? Number(limit) : 50,
+      page: page ? Number(page) : 1,
       phone,
       status,
       templateCode,

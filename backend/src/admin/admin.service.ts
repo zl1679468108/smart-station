@@ -790,6 +790,7 @@ export class AdminService {
     stationId: string,
     opts?: {
       limit?: number;
+      page?: number;
       phone?: string;
       status?: string;
       templateCode?: string;
@@ -799,10 +800,15 @@ export class AdminService {
     },
   ) {
     const reach = this.normalizeReach(opts?.reach);
+    const page = Math.max(Number(opts?.page) || 1, 1);
     // reach 需内存过滤，适当放宽抓取量
     const baseLimit = Number(opts?.limit) || 50;
-    const take = Math.min(Math.max(reach ? Math.max(baseLimit, 200) : baseLimit, 1), 500);
+    const pageSize = Math.min(Math.max(baseLimit, 1), 100);
+    // 触达筛选先抓更大窗口再分页；普通筛选走 DB range
+    const fetchSize = reach ? Math.min(Math.max(pageSize * page, 200), 500) : pageSize;
     const phone = this.normalizePhoneQuery(opts?.phone);
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
     let q = this.supabase
       .getClient()
@@ -812,8 +818,13 @@ export class AdminService {
         { count: 'exact' },
       )
       .eq('station_id', stationId)
-      .order('created_at', { ascending: false })
-      .limit(take);
+      .order('created_at', { ascending: false });
+
+    if (reach) {
+      q = q.limit(fetchSize);
+    } else {
+      q = q.range(from, to);
+    }
 
     if (phone) {
       if (/^1\d{10}$/.test(phone)) q = q.eq('recipient_phone', phone);
@@ -874,11 +885,13 @@ export class AdminService {
     });
 
     if (reach) {
-      items = items.filter((it) => it.customerReach === reach);
-      return { items, total: items.length };
+      const filtered = items.filter((it) => it.customerReach === reach);
+      const total = filtered.length;
+      const pageItems = filtered.slice(from, from + pageSize);
+      return { items: pageItems, total, page, pageSize };
     }
 
-    return { items, total: count ?? items.length };
+    return { items, total: count ?? items.length, page, pageSize };
   }
 
   /**

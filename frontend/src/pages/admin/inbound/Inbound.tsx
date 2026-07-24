@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as inboundService from '@/services/inbound';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import {
@@ -22,6 +23,7 @@ import Icon from '@/components/ui/Icon';
 import PageHeader from '@/components/ui/PageHeader';
 import WaybillOcrUploader from '@/components/ui/WaybillOcrUploader';
 import NotifyBindHint from '@/components/NotifyBindHint';
+import * as shiftService from '@/services/shift';
 
 type Mode = 'scan' | 'manual' | 'batch';
 
@@ -62,13 +64,45 @@ function maskPhone(phone: string): string {
 
 // 入库管理页：扫码入库（主）/ 手动录入 / 批量导入（入口）
 const Inbound: React.FC = () => {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>('scan');
   // 货架列表走 React Query 缓存（staleTime: Infinity），跨页面共享
   const { data: shelves = [] } = useShelves();
+  const [shiftOpen, setShiftOpen] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const s = await shiftService.fetchCurrentShift();
+        if (!cancelled) setShiftOpen(Boolean(s));
+      } catch {
+        if (!cancelled) setShiftOpen(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="w-full">
       <PageHeader title="入库管理" className="mb-4" />
+
+      {shiftOpen === false && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2.5">
+          <p className="text-xs text-amber-900">
+            你还没开班。建议先开班再入库，交班时才能汇总本班入库/收款。
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/admin/shifts')}
+            className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+          >
+            去开班
+          </button>
+        </div>
+      )}
 
       {/* 模式切换 */}
       <div className="mb-4 flex gap-1 border-b border-gray-200">

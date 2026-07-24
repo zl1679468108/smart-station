@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { DashboardData, DashboardHourly } from '@/types/stats';
 import type { Shelf } from '@/types/admin';
@@ -10,6 +10,8 @@ import PageHeader from '@/components/ui/PageHeader';
 import { buildBindGuideScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 import { notifyError, notifySuccess } from '@/utils/notification';
+import * as shiftService from '@/services/shift';
+import type { ShiftItem } from '@/types/shift';
 
 const WarehouseScreen = React.lazy(() =>
   import('@/components/warehouse3d').then((m) => ({ default: m.WarehouseScreen })),
@@ -37,6 +39,23 @@ const Dashboard: React.FC = () => {
   const { data: layoutRes, isLoading: layoutQueryLoading } = useLayoutConfig();
   const layoutConfig = layoutRes?.layoutConfig ?? null;
   const layoutLoading = layoutQueryLoading && !layoutRes;
+  const [currentShift, setCurrentShift] = useState<ShiftItem | null | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const s = await shiftService.fetchCurrentShift();
+        if (!cancelled) setCurrentShift(s);
+      } catch {
+        if (!cancelled) setCurrentShift(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentStationId]);
+
 
   if (isLoading && !data) {
     return <div className="py-10 text-center text-sm text-gray-500">加载中...</div>;
@@ -214,6 +233,37 @@ const Dashboard: React.FC = () => {
           );
         })}
       </div>
+
+      {/* 班次状态条 */}
+      {currentShift !== undefined && (
+        <div
+          className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-4 py-3 ${
+            currentShift
+              ? 'border-emerald-100 bg-emerald-50/80'
+              : 'border-amber-100 bg-amber-50/80'
+          }`}
+        >
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-gray-800">
+              {currentShift ? '当前已开班' : '尚未开班'}
+            </div>
+            <p className="mt-0.5 text-xs text-gray-600">
+              {currentShift
+                ? `本班入库 ${currentShift.inboundCount} · 出库 ${currentShift.outboundCount} · 收款 ${currentShift.collectPaidCount} 笔 / ¥${Number(currentShift.collectPaidTotal || 0).toFixed(2)}`
+                : '开班后系统会按班次汇总入库、出库和收款，交班时更好对账。'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/admin/shifts')}
+            className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-white ${
+              currentShift ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'
+            }`}
+          >
+            {currentShift ? '去交班' : '去开班'}
+          </button>
+        </div>
+      )}
 
       {/* 今日到件触达：整卡看今日，标签深链到触达筛选 */}
       {data.notify && (
@@ -420,13 +470,36 @@ const Dashboard: React.FC = () => {
             <button
               type="button"
               onClick={() => navigate('/admin/shifts')}
-              className="flex w-full flex-col rounded-md bg-slate-50 px-3 py-3 text-left hover:bg-slate-100/80"
+              className={`flex w-full flex-col rounded-md px-3 py-3 text-left ${
+                currentShift
+                  ? 'bg-emerald-50 hover:bg-emerald-100/80'
+                  : 'bg-amber-50 hover:bg-amber-100/80'
+              }`}
             >
               <div className="flex w-full items-center justify-between">
                 <span className="text-sm text-gray-600">交接班</span>
-                <span className="text-lg font-bold text-slate-700">→</span>
+                <span
+                  className={`text-sm font-bold ${
+                    currentShift ? 'text-emerald-700' : 'text-amber-700'
+                  }`}
+                >
+                  {currentShift === undefined
+                    ? '…'
+                    : currentShift
+                      ? '已开班'
+                      : '未开班'}
+                </span>
               </div>
-              <span className="mt-1 text-xs text-slate-600/80">开班上岗 / 交班盘点 / 员工绩效</span>
+              {currentShift ? (
+                <span className="mt-1 text-xs text-emerald-800/80">
+                  本班入库 {currentShift.inboundCount} · 出库 {currentShift.outboundCount} · 收款 ¥
+                  {Number(currentShift.collectPaidTotal || 0).toFixed(2)}（点此交班）
+                </span>
+              ) : (
+                <span className="mt-1 text-xs text-amber-800/80">
+                  建议先开班再入库/出库，便于交班汇总收款
+                </span>
+              )}
             </button>
             <button
               type="button"

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as outboundService from '@/services/outbound';
 import { useInvalidateShelves } from '@/hooks/useDictionary';
 import { useInvalidateDashboard } from '@/hooks/useDashboardData';
@@ -13,17 +14,50 @@ import Icon from '@/components/ui/Icon';
 import EmptyState from '@/components/ui/EmptyState';
 import Modal from '@/components/ui/Modal';
 import PageHeader from '@/components/ui/PageHeader';
+import * as shiftService from '@/services/shift';
 
 type Tab = 'manual' | 'records';
 type QueryTab = 'phone' | 'tracking' | 'code';
 
 // 出库管理页：人工辅助出库（查询+确认两步流程）/ 出库记录列表
 const Outbound: React.FC = () => {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('manual');
+  const [shiftOpen, setShiftOpen] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const s = await shiftService.fetchCurrentShift();
+        if (!cancelled) setShiftOpen(Boolean(s));
+      } catch {
+        if (!cancelled) setShiftOpen(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="w-full">
       <PageHeader title="出库管理" className="mb-4" />
+
+      {shiftOpen === false && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2.5">
+          <p className="text-xs text-amber-900">
+            你还没开班。待收款出库会计入本班收款，建议先开班再操作。
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/admin/shifts')}
+            className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+          >
+            去开班
+          </button>
+        </div>
+      )}
 
       <div className="mb-4 flex gap-1 border-b border-gray-200">
         {([

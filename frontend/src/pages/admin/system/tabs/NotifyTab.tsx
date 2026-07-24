@@ -4,6 +4,7 @@ import * as adminService from '@/services/admin';
 import type { NotifyBindingItem, NotifyLogItem } from '@/types/admin';
 import { formatBeijingTimestamp } from '@/utils/date';
 import EmptyState from '@/components/ui/EmptyState';
+import Pagination from '@/components/ui/Pagination';
 import { buildBindGuideScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 import { notifyError, notifySuccess } from '@/utils/notification';
@@ -57,6 +58,8 @@ const NotifyTab: React.FC = () => {
   const [logFilter, setLogFilter] = useState<LogFilter>(
     isLogFilter(initialFilter) ? initialFilter : '',
   );
+  const [logPage, setLogPage] = useState(1);
+  const logPageSize = 40;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,7 +67,8 @@ const NotifyTab: React.FC = () => {
     try {
       const phone = phoneQuery || undefined;
       const logOpts: Parameters<typeof adminService.listNotifyLogs>[0] = {
-        limit: 80,
+        limit: logPageSize,
+        page: logPage,
         phone,
       };
 
@@ -78,7 +82,6 @@ const NotifyTab: React.FC = () => {
         logOpts.reach = logFilter;
         logOpts.todayOnly = true;
         logOpts.templateCode = 'inbound_notice';
-        logOpts.limit = 200;
       }
 
       // 发送失败可叠加今日
@@ -99,7 +102,7 @@ const NotifyTab: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [phoneQuery, logFilter, searchParams]);
+  }, [phoneQuery, logFilter, logPage, searchParams]);
 
   useEffect(() => {
     void load();
@@ -120,6 +123,7 @@ const NotifyTab: React.FC = () => {
 
   const applyLogFilter = (f: LogFilter) => {
     setLogFilter(f);
+    setLogPage(1);
     const next = new URLSearchParams(searchParams);
     if (f) next.set('filter', f);
     else next.delete('filter');
@@ -129,12 +133,14 @@ const NotifyTab: React.FC = () => {
 
   const onSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    setLogPage(1);
     setPhoneQuery(phoneInput.replace(/\D/g, '').slice(0, 11));
   };
 
   const onClearSearch = () => {
     setPhoneInput('');
     setPhoneQuery('');
+    setLogPage(1);
   };
 
   const onResend = async (log: NotifyLogItem) => {
@@ -192,7 +198,46 @@ const NotifyTab: React.FC = () => {
     await load();
   };
 
-  const filterChips: { key: LogFilter; label: string }[] = [
+  const exportLogsCsv = () => {
+    if (logs.length === 0) {
+      notifyError('当前没有可导出的记录');
+      return;
+    }
+    const header = [
+      '时间',
+      '类型',
+      '手机号',
+      '状态',
+      '客户触达',
+      '通道摘要',
+      '内容',
+      '错误',
+    ];
+    const rows = logs.map((log) => [
+      log.createdAt || '',
+      log.templateLabel || log.templateCode || '',
+      log.phoneMasked || log.phone || '',
+      log.statusLabel || log.status || '',
+      log.customerReachLabel || log.customerReach || '',
+      log.channelSummary || '',
+      (log.content || '').replace(/\r?\n/g, ' '),
+      (log.errorMessage || '').replace(/\r?\n/g, ' '),
+    ]);
+    const escape = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+    const csv = [header, ...rows].map((r) => r.map(escape).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `通知记录-第${logPage}页.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    notifySuccess(`已导出本页 ${logs.length} 条`);
+  };
+
+    const filterChips: { key: LogFilter; label: string }[] = [
     { key: '', label: '全部' },
     { key: 'today', label: '今日' },
     { key: 'failed', label: '发送失败' },
@@ -209,13 +254,23 @@ const NotifyTab: React.FC = () => {
         <p className="text-xs text-gray-500">
           查看客户是否已绑定微信通知，以及到件/提醒是否发送成功。敏感内容已脱敏。
         </p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="min-h-[40px] rounded-md border border-gray-200 bg-white px-3 text-xs text-gray-700 hover:bg-gray-50"
-        >
-          刷新
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => exportLogsCsv()}
+            disabled={logs.length === 0}
+            className="min-h-[40px] rounded-md border border-gray-200 bg-white px-3 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            导出本页 CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="min-h-[40px] rounded-md border border-gray-200 bg-white px-3 text-xs text-gray-700 hover:bg-gray-50"
+          >
+            刷新
+          </button>
+        </div>
       </div>
 
       {/* 手机号查询 */}
@@ -500,6 +555,16 @@ const NotifyTab: React.FC = () => {
                 )}
               </div>
             ))
+          )}
+          {logTotal > logPageSize && (
+            <Pagination
+              page={logPage}
+              totalPages={Math.max(1, Math.ceil(logTotal / logPageSize))}
+              total={logTotal}
+              pageSize={logPageSize}
+              onChange={setLogPage}
+              disabled={loading}
+            />
           )}
         </div>
       )}

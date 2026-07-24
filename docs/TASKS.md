@@ -877,3 +877,15 @@
 | M59.3 | P1 | 工作台/通知记录复制绑定话术 | Dashboard + NotifyTab | done | 一键复制 |
 | M59.4 | P1 | 滞留本页批量发提醒 | overdue | done | POST /api/overdue/remind-batch 最多30 |
 | M59.5 | P2 | 库存详情/滞留/批量入库话术入口 | inventory+overdue+batch | done | 当面话术+绑定话术 |
+
+
+---
+
+## M60 交接班/待收款提示 + 通知记录分页导出（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M60.1 | P1 | 工作台班次状态条 + 待办动态 | Dashboard | done | 未开班/已开班本班汇总 |
+| M60.2 | P1 | 入库/出库未开班软提示 | inbound+outbound | done | 引导去开班，不阻断 |
+| M60.3 | P1 | 通知记录分页 | admin notify API | done | page + pageSize |
+| M60.4 | P2 | 通知记录导出本页 CSV | NotifyTab | done | 含触达/状态中文 |
