@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import * as adminService from '@/services/admin';
 import type { NotifyBindingItem, NotifyLogItem } from '@/types/admin';
 import { formatBeijingTimestamp } from '@/utils/date';
@@ -21,15 +22,39 @@ const NotifyTab: React.FC = () => {
   const [phoneQuery, setPhoneQuery] = useState('');
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [resendTip, setResendTip] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialFilter = searchParams.get('filter') || '';
+  const [logFilter, setLogFilter] = useState<
+    '' | 'today' | 'failed' | 'inbound' | 'overdue'
+  >(
+    initialFilter === 'today' ||
+      initialFilter === 'failed' ||
+      initialFilter === 'inbound' ||
+      initialFilter === 'overdue'
+      ? initialFilter
+      : '',
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       const phone = phoneQuery || undefined;
+      const logOpts: Parameters<typeof adminService.listNotifyLogs>[0] = {
+        limit: 80,
+        phone,
+      };
+      if (logFilter === 'today') logOpts.todayOnly = true;
+      if (logFilter === 'failed') logOpts.status = 'failed';
+      if (logFilter === 'inbound') logOpts.templateCode = 'inbound_notice';
+      if (logFilter === 'overdue') logOpts.templateCode = 'overdue_remind';
+      // 今日失败：组合
+      if (logFilter === 'failed' && searchParams.get('today') === '1') {
+        logOpts.todayOnly = true;
+      }
       const [b, l] = await Promise.all([
         adminService.listNotifyBindings({ limit: 80, phone }),
-        adminService.listNotifyLogs({ limit: 80, phone }),
+        adminService.listNotifyLogs(logOpts),
       ]);
       setBindings(b.items || []);
       setBindingTotal(b.total ?? b.items?.length ?? 0);
@@ -40,11 +65,24 @@ const NotifyTab: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [phoneQuery]);
+  }, [phoneQuery, logFilter, searchParams]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (logFilter) setSub('logs');
+  }, [logFilter]);
+
+  const applyLogFilter = (f: '' | 'today' | 'failed' | 'inbound' | 'overdue') => {
+    setLogFilter(f);
+    const next = new URLSearchParams(searchParams);
+    if (f) next.set('filter', f);
+    else next.delete('filter');
+    setSearchParams(next, { replace: true });
+  };
+
 
   const onSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,6 +156,34 @@ const NotifyTab: React.FC = () => {
           <span className="text-xs text-gray-400">当前筛选：{phoneQuery}</span>
         )}
       </form>
+
+
+      {/* 发送记录快捷筛选（运营复盘） */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-gray-500">记录筛选：</span>
+        {(
+          [
+            { key: '' as const, label: '全部' },
+            { key: 'today' as const, label: '今日' },
+            { key: 'failed' as const, label: '失败' },
+            { key: 'inbound' as const, label: '到件' },
+            { key: 'overdue' as const, label: '滞留' },
+          ] as const
+        ).map((f) => (
+          <button
+            key={f.key || 'all'}
+            type="button"
+            onClick={() => applyLogFilter(f.key)}
+            className={`rounded-full px-3 py-1 text-xs ${
+              logFilter === f.key
+                ? 'bg-primary text-white'
+                : 'bg-white text-gray-600 ring-1 ring-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
 
       {resendTip && (
         <div className="rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-xs text-sky-800">

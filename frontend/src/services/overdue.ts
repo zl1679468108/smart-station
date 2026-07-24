@@ -29,3 +29,19 @@ export function returnOverdue(
     successMessage: action === 'start' ? '已标记退回中' : '已完成退回',
   });
 }
+
+/** 单件补发滞留提醒 */
+export function remindOverdue(id: string): Promise<{
+  id: string;
+  days: number;
+  trackingNumber?: string;
+  pickupCode?: string;
+  customerBound: boolean;
+  customerPushed: boolean;
+  staffMessage: string;
+}> {
+  return post(`/api/overdue/${id}/remind`, undefined, {
+    successMessage: false,
+  });
+}
+

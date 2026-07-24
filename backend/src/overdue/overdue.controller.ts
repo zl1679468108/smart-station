@@ -24,6 +24,13 @@ export class OverdueController {
     return this.overdueService.scan(stationId);
   }
 
+  /** 单件补发滞留提醒 */
+  @Roles('admin', 'clerk')
+  @Post(':id([0-9a-fA-F-]{36})/remind')
+  async remindOne(@StationId() stationId: string, @Param('id') id: string) {
+    return this.overdueService.remindOne(stationId, id);
+  }
+
   @Roles('admin', 'clerk')
   @Post(':id([0-9a-fA-F-]{36})/return')
   async returnAction(

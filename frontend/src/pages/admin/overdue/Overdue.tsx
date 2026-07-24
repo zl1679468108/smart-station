@@ -48,6 +48,7 @@ const OverduePage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [submittedKeyword, setSubmittedKeyword] = useState(searchParams.get('keyword') || '');
   const [scanning, setScanning] = useState(false);
+  const [remindingId, setRemindingId] = useState<string | null>(null);
   const pageSize = 20;
 
   const { data, isLoading, refetch } = useOverdueList({
@@ -98,6 +99,24 @@ const OverduePage: React.FC = () => {
       await invalidateOverdue();
     } catch (e: any) {
       notifyError(e?.message || '操作失败');
+    }
+  };
+
+  const onRemind = async (id: string) => {
+    if (remindingId) return;
+    const ok = window.confirm(
+      '向该客户补发滞留提醒？\n\n已绑定微信会私信取件码；未绑定仅通知群/管理员旁路（不含取件码）。',
+    );
+    if (!ok) return;
+    setRemindingId(id);
+    try {
+      const r = await overdueService.remindOverdue(id);
+      notifySuccess(r.staffMessage || '提醒已发送');
+      await invalidateOverdue();
+    } catch (e: any) {
+      notifyError(e?.message || '发送失败');
+    } finally {
+      setRemindingId(null);
     }
   };
 
@@ -209,7 +228,17 @@ const OverduePage: React.FC = () => {
                   <div className="mt-0.5 text-xs text-gray-400">入库 {item.inboundAt}</div>
                 </div>
                 {writable && (
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {item.returnStage !== 'returned' && (
+                      <button
+                        type="button"
+                        disabled={remindingId === item.id}
+                        className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-700 disabled:opacity-60"
+                        onClick={() => void onRemind(item.id)}
+                      >
+                        {remindingId === item.id ? '发送中…' : '发提醒'}
+                      </button>
+                    )}
                     {item.returnStage !== 'returning' && item.returnStage !== 'returned' && (
                       <button
                         type="button"

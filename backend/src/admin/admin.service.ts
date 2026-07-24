@@ -786,7 +786,16 @@ export class AdminService {
   }
 
   /** 通知发送日志；phone 支持完整号/尾号模糊 */
-  async listNotifyLogs(stationId: string, opts?: { limit?: number; phone?: string }) {
+  async listNotifyLogs(
+    stationId: string,
+    opts?: {
+      limit?: number;
+      phone?: string;
+      status?: string;
+      templateCode?: string;
+      todayOnly?: boolean;
+    },
+  ) {
     const take = Math.min(Math.max(Number(opts?.limit) || 50, 1), 200);
     const phone = this.normalizePhoneQuery(opts?.phone);
 
@@ -804,6 +813,21 @@ export class AdminService {
     if (phone) {
       if (/^1\d{10}$/.test(phone)) q = q.eq('recipient_phone', phone);
       else q = q.like('recipient_phone', `%${phone}%`);
+    }
+    if (opts?.status) {
+      q = q.eq('status', opts.status);
+    }
+    if (opts?.templateCode) {
+      q = q.eq('template_code', opts.templateCode);
+    }
+    if (opts?.todayOnly) {
+      const now = new Date(Date.now() + 8 * 3600 * 1000);
+      const y = now.getUTCFullYear();
+      const m = String(now.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(now.getUTCDate()).padStart(2, '0');
+      // 北京时间当天 00:00 = UTC 前一天 16:00
+      const start = new Date(`${y}-${m}-${d}T00:00:00+08:00`).toISOString();
+      q = q.gte('created_at', start);
     }
 
     const { data, error, count } = await q;

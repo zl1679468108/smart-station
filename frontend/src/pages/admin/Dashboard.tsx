@@ -216,7 +216,7 @@ const Dashboard: React.FC = () => {
       {data.notify && (
         <button
           type="button"
-          onClick={() => navigate('/admin/system?tab=notify')}
+          onClick={() => navigate('/admin/system?tab=notify&filter=today')}
           className="w-full rounded-lg border border-orange-100 bg-orange-50/80 px-4 py-3 text-left transition hover:bg-orange-50"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">

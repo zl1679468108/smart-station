@@ -193,6 +193,9 @@ export function listNotifyBindings(opts?: {
 export function listNotifyLogs(opts?: {
   limit?: number;
   phone?: string;
+  status?: string;
+  templateCode?: string;
+  todayOnly?: boolean;
 }): Promise<{
   items: NotifyLogItem[];
   total: number;
@@ -200,6 +203,9 @@ export function listNotifyLogs(opts?: {
   const limit = opts?.limit ?? 50;
   const params = new URLSearchParams({ limit: String(limit) });
   if (opts?.phone) params.set('phone', opts.phone);
+  if (opts?.status) params.set('status', opts.status);
+  if (opts?.templateCode) params.set('templateCode', opts.templateCode);
+  if (opts?.todayOnly) params.set('todayOnly', '1');
   return get(`/api/admin/notify/logs?${params.toString()}`);
 }
 

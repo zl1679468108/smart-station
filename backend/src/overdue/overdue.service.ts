@@ -138,6 +138,71 @@ export class OverdueService {
     return this.scanStation(stationId);
   }
 
+  /**
+   * 单件补发滞留提醒（运营打磨）
+   * - 不依赖是否已扫过「二次提醒」事件，店员可随时补发
+   * - 失败不抛业务外错误；返回 staffMessage 白话
+   */
+  async remindOne(stationId: string, parcelId: string) {
+    const client = this.supabase.getClient();
+    const { data: parcel, error } = await client
+      .from('ss_parcels')
+      .select(
+        'id, status, inbound_at, recipient_phone, recipient_name, pickup_code, tracking_number, station_id',
+      )
+      .eq('id', parcelId)
+      .eq('station_id', stationId)
+      .maybeSingle();
+    if (error) throw new Error(`查询包裹失败: ${error.message}`);
+    if (!parcel) throw new NotFoundException('包裹不存在');
+    if (!['in_stock', 'overdue'].includes(String(parcel.status))) {
+      throw new BadRequestException('仅在库/滞留包裹可发提醒');
+    }
+    if (!parcel.recipient_phone) {
+      throw new BadRequestException('包裹无收件手机号，无法发提醒');
+    }
+
+    const station = await this.getStationThresholds(stationId);
+    const days = parcel.inbound_at ? this.daysSince(parcel.inbound_at) : 0;
+    if (days < station.warnDays) {
+      throw new BadRequestException(
+        `入库未满 ${station.warnDays} 天，尚未进入滞留预警，无需发滞留提醒`,
+      );
+    }
+
+    // 可选：标记为 overdue
+    if (parcel.status === 'in_stock') {
+      await client.from('ss_parcels').update({ status: 'overdue' }).eq('id', parcelId);
+    }
+
+    await this.insertEvent(
+      stationId,
+      parcelId,
+      'overdue_remind',
+      `店员补发滞留提醒（已到 ${days} 天）`,
+    );
+
+    const nr = await this.notify.sendOverdueRemind({
+      phone: String(parcel.recipient_phone),
+      recipientName: parcel.recipient_name as string | null,
+      days,
+      pickupCode: parcel.pickup_code as string | undefined,
+      parcelId,
+      stationId,
+      stationName: station.name,
+    });
+
+    return {
+      id: parcelId,
+      days,
+      trackingNumber: parcel.tracking_number,
+      pickupCode: parcel.pickup_code,
+      customerBound: nr.customerBound,
+      customerPushed: nr.customerPushed,
+      staffMessage: nr.staffMessage,
+    };
+  }
+
   async returnAction(stationId: string, parcelId: string, dto: ReturnActionDto, operatorId: string) {
     const client = this.supabase.getClient();
     const { data: parcel, error } = await client
