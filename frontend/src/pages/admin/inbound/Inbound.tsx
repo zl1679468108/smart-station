@@ -895,17 +895,34 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setSessionStats({ success: 0, unbound: 0, unpaid: 0 });
-                setRecent([]);
-                setResult(null);
-              }}
-              className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
-            >
-              清零本会话
-            </button>
+            <div className="flex flex-wrap gap-1.5">
+              {sessionStats.unbound > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void (async () => {
+                      const ok = await copyText(buildBindGuideScript());
+                      if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                      else notifyError('复制失败');
+                    })();
+                  }}
+                  className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] text-orange-800 hover:bg-orange-50"
+                >
+                  复制绑定话术
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setSessionStats({ success: 0, unbound: 0, unpaid: 0 });
+                  setRecent([]);
+                  setResult(null);
+                }}
+                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+              >
+                清零本会话
+              </button>
+            </div>
           </div>
           <p className="mt-1 text-[11px] text-gray-500">
             只统计当前页面未刷新期间的入库，方便连续扫码时心里有数
@@ -1372,16 +1389,33 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setSessionStats({ success: 0, unbound: 0, unpaid: 0 });
-                setResult(null);
-              }}
-              className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
-            >
-              清零本会话
-            </button>
+            <div className="flex flex-wrap gap-1.5">
+              {sessionStats.unbound > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void (async () => {
+                      const ok = await copyText(buildBindGuideScript());
+                      if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                      else notifyError('复制失败');
+                    })();
+                  }}
+                  className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] text-orange-800 hover:bg-orange-50"
+                >
+                  复制绑定话术
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setSessionStats({ success: 0, unbound: 0, unpaid: 0 });
+                  setResult(null);
+                }}
+                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+              >
+                清零本会话
+              </button>
+            </div>
           </div>
           <p className="mt-1 text-[11px] text-gray-500">
             只统计当前页面未刷新期间的入库

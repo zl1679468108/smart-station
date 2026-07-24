@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as inventoryService from '@/services/inventory';
 import * as overdueService from '@/services/overdue';
+import * as inboundService from '@/services/inbound';
 import { useCouriers, useShelves } from '@/hooks/useDictionary';
 import { useInvalidateDashboard } from '@/hooks/useDashboardData';
 import {
@@ -116,6 +117,7 @@ const Inventory: React.FC = () => {
   // 只读角色（viewer）不显示选择框 / 批量操作栏 / 批量标记异常弹窗
   const writable = canWrite(user.role);
   const [remindingId, setRemindingId] = useState<string | null>(null);
+  const [resendingNoticeId, setResendingNoticeId] = useState<string | null>(null);
   const [batchReminding, setBatchReminding] = useState(false);
   const [lastBatchRemind, setLastBatchRemind] = useState<string | null>(null);
 
@@ -124,7 +126,7 @@ const Inventory: React.FC = () => {
     (item.status === 'in_stock' && (item.daysInStock ?? 0) >= 3);
 
   const onRemindOverdue = async (item: ParcelListItem) => {
-    if (!writable || remindingId || batchReminding) return;
+    if (!writable || remindingId || batchReminding || resendingNoticeId) return;
     if (!isRemindable(item)) {
       notifyError('仅滞留件或在库满 3 天可发提醒');
       return;
@@ -145,8 +147,34 @@ const Inventory: React.FC = () => {
     }
   };
 
-  const onBatchRemindOverdue = async () => {
-    if (!writable || batchReminding || remindingId || !data?.items?.length) return;
+  
+  const canResendInboundNotice = (item: ParcelListItem) =>
+    item.status === 'in_stock' || item.status === 'overdue';
+
+  const onResendInboundNotice = async (item: ParcelListItem) => {
+    if (!writable || resendingNoticeId || batchReminding || remindingId) return;
+    if (!canResendInboundNotice(item)) {
+      notifyError('仅在库/滞留件可补发到件通知');
+      return;
+    }
+    const ok = window.confirm(
+      `补发到件通知？\n运单 ${item.trackingNumber}\n\n已绑定微信会私信取件码；未绑定请当面报码或引导绑定后再试。`,
+    );
+    if (!ok) return;
+    setResendingNoticeId(item.id);
+    try {
+      const r = await inboundService.resendInboundNotice(item.id);
+      notifySuccess(r.staffMessage || '已尝试补发');
+      setLastBatchRemind(r.staffMessage || '已尝试补发');
+    } catch (e: any) {
+      notifyError(e?.message || '补发失败');
+    } finally {
+      setResendingNoticeId(null);
+    }
+  };
+
+const onBatchRemindOverdue = async () => {
+    if (!writable || batchReminding || remindingId || resendingNoticeId || !data?.items?.length) return;
     const ids = data.items
       .filter((it) => selected.has(it.id) && isRemindable(it))
       .map((it) => it.id)
@@ -418,7 +446,7 @@ const Inventory: React.FC = () => {
 
       {lastBatchRemind && (
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          <p>提醒回执：{lastBatchRemind}</p>
+          <p>通知回执：{lastBatchRemind}</p>
           <button
             type="button"
             className="underline"
@@ -526,10 +554,28 @@ const Inventory: React.FC = () => {
                             收款出库
                           </button>
                         )}
+                      {writable && canResendInboundNotice(item) && (
+                          <button
+                            type="button"
+                            disabled={
+                              resendingNoticeId === item.id ||
+                              !!remindingId ||
+                              batchReminding
+                            }
+                            onClick={() => void onResendInboundNotice(item)}
+                            className="text-xs font-medium text-primary hover:underline disabled:opacity-60"
+                          >
+                            {resendingNoticeId === item.id ? '补发中…' : '补发到件'}
+                          </button>
+                        )}
                       {writable && isRemindable(item) && (
                           <button
                             type="button"
-                            disabled={remindingId === item.id || batchReminding}
+                            disabled={
+                              remindingId === item.id ||
+                              batchReminding ||
+                              !!resendingNoticeId
+                            }
                             onClick={() => void onRemindOverdue(item)}
                             className="text-xs font-medium text-amber-700 hover:underline disabled:opacity-60"
                           >

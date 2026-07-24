@@ -1087,3 +1087,10 @@
 | M80.1 | P1 | 通知记录支持 ?phone= 深链 | NotifyTab | done | 库存详情跳转 |
 | M80.2 | P1 | 库存详情「看通知记录」+ 到件回执 | inventory detail | done | |
 | M80.3 | P2 | 批量预检已在库可「看包裹」 | inbound batch | done | |
+
+## M81 绑定预检醒目 + 库存补发到件（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M81.1 | P1 | 入库绑定预检未绑定高亮+复制话术 | NotifyBindHint | done | |
+| M81.2 | P1 | 会话未绑定时快捷复制绑定话术 | inbound scan/manual | done | |
+| M81.3 | P1 | 库存列表快捷「补发到件」 | inventory list | done | 在库/滞留 |
