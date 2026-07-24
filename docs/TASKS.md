@@ -1272,3 +1272,11 @@
 | M106.3 | P1 | 手机号预检与批量结果强化 | NotifyBindHint/batch | done | |
 | M106.4 | P2 | 成功 toast 区分私信/未绑定 | scan+manual | done | |
 
+## M107 查件结果页绑定后自动收码转化（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M107.1 | P0 | 结果页两步取件 + 强 CTA | query ResultView | done | 绑定后马上收码 |
+| M107.2 | P1 | 全端底部绑定条 | query Home | done | 含有件/无件文案 |
+| M107.3 | P1 | 绑定成功回执含补发件数 | NotifyBindCard | done | toast + 绿条 |
+| M107.4 | P2 | 包裹卡「绑定后可微信收此码」 | query parcels | done | |
+

@@ -10,6 +10,12 @@ type BindChannelTab = 'wxpusher' | 'pushplus';
  * - 主路径：微信扫一扫
  * - 备选：专属绑定码
  */
+export type NotifyBindSuccessInfo = {
+  channel: string;
+  catchupPushed?: number;
+  catchupInStock?: number;
+};
+
 const NotifyBindCard: React.FC<{
   guide?: NotifyGuide | null;
   stationName?: string | null;
@@ -18,15 +24,18 @@ const NotifyBindCard: React.FC<{
   initialPhone?: string;
   /** 外部强制展开绑定区 */
   forceOpen?: boolean;
+  /** 当前查到有在库件：文案强调「马上补发」 */
+  hasInStockParcels?: boolean;
   /** 默认通道 */
   defaultChannel?: BindChannelTab;
-  onBound?: (channel: string) => void;
+  onBound?: (info: NotifyBindSuccessInfo) => void;
 }> = ({
   guide: guideProp,
   stationName,
   compact = false,
   initialPhone,
   forceOpen,
+  hasInStockParcels = false,
   defaultChannel = 'wxpusher',
   onBound,
 }) => {
@@ -43,6 +52,7 @@ const NotifyBindCard: React.FC<{
   const [countdown, setCountdown] = useState(0);
   const [session, setSession] = useState<WxPusherBindStartResult | null>(null);
   const [pollHint, setPollHint] = useState('');
+  const [boundSuccess, setBoundSuccess] = useState<NotifyBindSuccessInfo | null>(null);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stopped = useRef(false);
@@ -127,18 +137,24 @@ const NotifyBindCard: React.FC<{
       try {
         const res = await kioskService.pollWxPusherBind({ qrCode });
         if (res.status === 'done') {
+          const info: NotifyBindSuccessInfo = {
+            channel: res.channel || 'wxpusher',
+            catchupPushed: res.catchupPushed || 0,
+            catchupInStock: res.catchupInStock || 0,
+          };
           setMsg({ type: 'ok', text: res.message || '绑定成功' });
-          if (res.catchupPushed && res.catchupPushed > 0) {
-            setPollHint(`已为你补发 ${res.catchupPushed} 件在库取件码，请打开微信查看`);
-          } else if (res.catchupInStock && res.catchupInStock > 0) {
+          if (info.catchupPushed && info.catchupPushed > 0) {
+            setPollHint(`已为你补发 ${info.catchupPushed} 件在库取件码，请打开微信查看`);
+          } else if (info.catchupInStock && info.catchupInStock > 0) {
             setPollHint('有在库包裹，请到店凭取件码取件或再查一次');
           } else {
-            setPollHint('');
+            setPollHint('绑定成功：下次有件会微信提醒你');
           }
+          setBoundSuccess(info);
           setSession(null);
           setCode('');
           clearPoll();
-          onBound?.(res.channel || 'wxpusher');
+          onBound?.(info);
           return;
         }
         if (res.status === 'expired') {
@@ -210,15 +226,21 @@ const NotifyBindCard: React.FC<{
         code,
         token: token.trim(),
       });
+      const info: NotifyBindSuccessInfo = {
+        channel: res.channel || 'pushplus',
+        catchupPushed: res.catchupPushed || 0,
+        catchupInStock: res.catchupInStock || 0,
+      };
       setMsg({ type: 'ok', text: res.message });
-      if (res.catchupPushed && res.catchupPushed > 0) {
-        setPollHint(`已为你补发 ${res.catchupPushed} 件在库取件码，请打开微信查看`);
+      if (info.catchupPushed && info.catchupPushed > 0) {
+        setPollHint(`已为你补发 ${info.catchupPushed} 件在库取件码，请打开微信查看`);
       } else {
-        setPollHint('');
+        setPollHint('绑定成功：下次有件会微信提醒你');
       }
+      setBoundSuccess(info);
       setToken('');
       setCode('');
-      onBound?.(res.channel || 'pushplus');
+      onBound?.(info);
     } catch (err) {
       setMsg({ type: 'err', text: err instanceof Error ? err.message : '绑定失败' });
     } finally {
@@ -228,7 +250,9 @@ const NotifyBindCard: React.FC<{
 
   const wxGuide =
     guide.wxpusherGuide ||
-    '1. 填收件手机号，点「验证码」\n2. 点「生成二维码」\n3. 微信扫一扫完成\n4. 以后有件，微信直接收码';
+    (hasInStockParcels
+      ? '1. 填收件手机号，点「验证码」\n2. 点「生成二维码」\n3. 微信扫一扫完成\n4. 在库取件码会尽量马上补发到微信'
+      : '1. 填收件手机号，点「验证码」\n2. 点「生成二维码」\n3. 微信扫一扫完成\n4. 以后有件，微信直接收码')
   const ppGuide =
     guide.pushplusGuide ||
     '适合已有其他推送工具的用户。\n1. 在对应网页用微信登录\n2. 复制你的「专属绑定码」\n3. 回到这里填写手机号和验证码，粘贴绑定码即可';
@@ -258,10 +282,24 @@ const NotifyBindCard: React.FC<{
             }}
             className="min-h-[44px] shrink-0 rounded-md bg-primary px-3 py-2 text-xs font-medium text-white hover:bg-primaryHover"
           >
-            {open ? '收起' : '扫一扫收码'}
+            {open ? '收起' : hasInStockParcels ? '绑定后马上收码' : '扫一扫收码'}
           </button>
         )}
       </div>
+
+      {boundSuccess && (
+        <div className="mt-3 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2.5 text-xs text-emerald-900">
+          <p className="font-semibold">绑定成功，以后有件微信会提醒你</p>
+          <p className="mt-1 leading-relaxed">
+            {boundSuccess.catchupPushed && boundSuccess.catchupPushed > 0
+              ? `已补发 ${boundSuccess.catchupPushed} 件在库取件码到微信，请打开微信查看。`
+              : hasInStockParcels
+                ? '若下方还有在库件，请凭取件码到店取件；也可再查一次。'
+                : '还没有在库件时，到件后会第一时间微信通知你。'}
+          </p>
+          {pollHint && <p className="mt-1 text-emerald-800">{pollHint}</p>}
+        </div>
+      )}
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="rounded-md border border-white/80 bg-white/80 p-3">
@@ -284,15 +322,17 @@ const NotifyBindCard: React.FC<{
           </p>
         </div>
 
-        <div className="rounded-md border border-white/80 bg-white/80 p-3">
-          <p className="text-xs font-medium text-gray-700">微信自动收码（推荐）</p>
-          <p className="mt-1 text-xs text-gray-500">
-            绑定后，包裹到了会直接发到你的微信（只有你能看到取件码）。
-            没绑定就到店查件或看货架。
+        <div className="rounded-md border border-primary/20 bg-orange-50/70 p-3 ring-1 ring-primary/10">
+          <p className="text-xs font-semibold text-gray-800">微信自动收码（推荐）</p>
+          <p className="mt-1 text-xs text-gray-600">
+            {hasInStockParcels
+              ? '绑定后：下方在库件会马上微信补发取件码；以后到件也会提醒。只有你自己能看到码。'
+              : '绑定后：包裹到了会直接发到你的微信（只有你能看到取件码）。没绑定就到店查件或看货架。'}
           </p>
-          <ul className="mt-2 space-y-1 text-[11px] text-gray-500">
-            <li>· 点「扫一扫收码」→ 填手机号 → 微信扫一扫</li>
-            <li>· 下次有件不用反复查，微信直接告诉你</li>
+          <ul className="mt-2 space-y-1 text-[11px] text-gray-600">
+            <li>· 点「{hasInStockParcels ? '绑定后马上收码' : '扫一扫收码'}」→ 填手机号验证 → 微信扫一扫</li>
+            <li>· {hasInStockParcels ? '扫完约几秒，在库取件码会发到微信' : '下次有件不用反复查，微信直接告诉你'}</li>
+            <li>· 通知群里不会公开你的取件码</li>
           </ul>
         </div>
       </div>
@@ -304,6 +344,14 @@ const NotifyBindCard: React.FC<{
           className="mt-3 space-y-3 rounded-md border border-primary/20 bg-white p-3"
         >
           {/* 主路径：只讲微信扫一扫 */}
+          {hasInStockParcels && (
+            <div className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-[11px] leading-relaxed text-orange-950">
+              <p className="font-semibold">你查到了在库包裹</p>
+              <p className="mt-0.5">
+                先记下下方取件码也能取件；完成绑定后，系统会尽量把在库取件码补发到微信。
+              </p>
+            </div>
+          )}
           {channel === 'wxpusher' && (
             <p className="whitespace-pre-line text-xs text-gray-500">{wxGuide}</p>
           )}
