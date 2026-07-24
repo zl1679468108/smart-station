@@ -18,6 +18,8 @@ import {
   saveLastParcelSize,
   isSuccessBeepEnabled,
   setSuccessBeepEnabled,
+  isAutoPrintSlipEnabled,
+  setAutoPrintSlipEnabled,
 } from '@/utils/inboundOps';
 import { printPickupSlip, printPickupSlips } from '@/utils/printPickupSlip';
 import { useAuth } from '@/utils/auth';
@@ -39,6 +41,26 @@ import WaybillOcrUploader from '@/components/ui/WaybillOcrUploader';
 import NotifyBindHint from '@/components/NotifyBindHint';
 import NotifyReachBar from '@/components/NotifyReachBar';
 import * as shiftService from '@/services/shift';
+
+function maybeAutoPrintInboundResult(result: InboundResult, stationName?: string): void {
+  if (!isAutoPrintSlipEnabled()) return;
+  if (!result?.pickupCode) return;
+  const ok = printPickupSlip({
+    stationName,
+    pickupCode: result.pickupCode,
+    trackingNumber: result.trackingNumber,
+    shelfNumber: result.shelfNumber,
+    shelfLayer: result.shelfLayer,
+    shelfPosition: result.shelfPosition,
+    recipientPhone: result.recipientPhone,
+    courierCompanyName: result.courierCompanyName,
+    inboundAt: result.inboundAt,
+    collectDueAmount: result.collectDueAmount,
+  });
+  if (!ok) {
+    notifyError('自动打印失败：浏览器可能拦截了弹窗，请手动点「打印小票」');
+  }
+}
 
 type Mode = 'scan' | 'manual' | 'batch';
 
@@ -653,6 +675,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const [recipientPhone, setRecipientPhone] = useState('');
   const [size, setSize] = useState<ParcelSize>(() => loadLastParcelSize('small'));
   const [beepOn, setBeepOn] = useState(() => isSuccessBeepEnabled());
+  const [autoPrintOn, setAutoPrintOn] = useState(() => isAutoPrintSlipEnabled());
   const [note, setNote] = useState('');
   const [freightCollectAmount, setFreightCollectAmount] = useState('');
   const [codAmount, setCodAmount] = useState('');
@@ -802,6 +825,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       }));
       saveLastParcelSize(size);
       playInboundSuccessBeep();
+      maybeAutoPrintInboundResult(res, stationName);
       if (res.notify?.enabled && !res.notify?.customerBound) {
         notifySuccess('入库成功 · 客户未绑定，请当面报取件码');
       } else if (res.notify?.customerPushed) {
@@ -957,6 +981,19 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
           />
           入库成功提示音（短哔一声）
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={autoPrintOn}
+            onChange={(e) => {
+              const on = e.target.checked;
+              setAutoPrintOn(on);
+              setAutoPrintSlipEnabled(on);
+            }}
+            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+          />
+          入库成功自动打印小票
         </label>
         {keepRecipient && recipientName && recipientPhone && (
           <p className="text-[11px] text-emerald-700">
@@ -1331,6 +1368,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const { stations, currentStationId } = useAuth();
   const stationName =
     stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
+  const [autoPrintOn, setAutoPrintOn] = useState(() => isAutoPrintSlipEnabled());
   const navigate = useNavigate();
   const invalidateShelves = useInvalidateShelves();
   const invalidateDashboard = useInvalidateDashboard();
@@ -1429,6 +1467,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       }));
       saveLastParcelSize(form.size);
       playInboundSuccessBeep();
+      maybeAutoPrintInboundResult(res, stationName);
       if (res.notify?.enabled && !res.notify?.customerBound) {
         notifySuccess('入库成功 · 客户未绑定，请当面报取件码');
       } else if (res.notify?.customerPushed) {
@@ -1629,7 +1668,21 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
 
         {error && <div className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
 
-        <button
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={autoPrintOn}
+            onChange={(e) => {
+              const on = e.target.checked;
+              setAutoPrintOn(on);
+              setAutoPrintSlipEnabled(on);
+            }}
+            disabled={submitting}
+            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+          />
+          入库成功自动打印小票
+        </label>
+<button
           type="submit"
           disabled={submitting || Boolean(dup)}
           className="rounded-md bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
@@ -1735,6 +1788,7 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const { stations, currentStationId } = useAuth();
   const stationName =
     stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
+  const [autoPrintOn, setAutoPrintOn] = useState(() => isAutoPrintSlipEnabled());
   const navigate = useNavigate();
   const invalidateShelves = useInvalidateShelves();
   const invalidateDashboard = useInvalidateDashboard();
@@ -2208,6 +2262,29 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         setCsvText('');
         saveLastParcelSize(defaultSize);
         playInboundSuccessBeep();
+        if (isAutoPrintSlipEnabled()) {
+          const slips = (res.results || [])
+            .map((row) => row.result)
+            .filter((r): r is InboundResult => Boolean(r?.pickupCode))
+            .map((r) => ({
+              stationName,
+              pickupCode: r.pickupCode,
+              trackingNumber: r.trackingNumber,
+              shelfNumber: r.shelfNumber,
+              shelfLayer: r.shelfLayer,
+              shelfPosition: r.shelfPosition,
+              recipientPhone: r.recipientPhone,
+              courierCompanyName: r.courierCompanyName,
+              inboundAt: r.inboundAt,
+              collectDueAmount: r.collectDueAmount,
+            }));
+          if (slips.length > 0) {
+            const ok = printPickupSlips(slips);
+            if (!ok) {
+              notifyError('自动打印失败：浏览器可能拦截了弹窗，请用「打印成功小票」');
+            }
+          }
+        }
         invalidateShelves();
         invalidateDashboard();
         invalidateInventoryList();
@@ -2270,6 +2347,20 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             shelves={shelves}
           />
         </div>
+        <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={autoPrintOn}
+            onChange={(e) => {
+              const on = e.target.checked;
+              setAutoPrintOn(on);
+              setAutoPrintSlipEnabled(on);
+            }}
+            disabled={submitting}
+            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+          />
+          入库成功自动打印小票（按成功件数批量打开预览）
+        </label>
         <textarea
           value={csvText}
           onChange={(e) => {

@@ -2,6 +2,7 @@ import type { ParcelSize } from '@/types/inbound';
 
 const SIZE_KEY = 'ss_inbound_last_size';
 const BEEP_KEY = 'ss_inbound_success_beep';
+const AUTO_PRINT_KEY = 'ss_inbound_auto_print_slip';
 
 const SIZES: ParcelSize[] = ['small', 'medium', 'large'];
 
@@ -65,5 +66,23 @@ export function playInboundSuccessBeep(): void {
     };
   } catch {
     /* 静默失败，不影响入库 */
+  }
+}
+
+export function isAutoPrintSlipEnabled(): boolean {
+  try {
+    const v = localStorage.getItem(AUTO_PRINT_KEY);
+    if (v === '1' || v === 'true') return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+export function setAutoPrintSlipEnabled(on: boolean): void {
+  try {
+    localStorage.setItem(AUTO_PRINT_KEY, on ? '1' : '0');
+  } catch {
+    /* ignore */
   }
 }

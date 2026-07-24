@@ -1322,3 +1322,9 @@
 | M113.1 | P0 | 列表行内打印小票 | inventory | done | 有取件码可打 |
 | M113.2 | P0 | 勾选批量打印小票 | inventory bulk | done | 复用 printPickupSlips |
 
+## M114 入库成功自动打印小票（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M114.1 | P0 | localStorage 自动打印开关 | inboundOps | done | 默认关 |
+| M114.2 | P0 | 扫码/手动/批量成功自动打印 | inbound | done | 可勾选 |
+
