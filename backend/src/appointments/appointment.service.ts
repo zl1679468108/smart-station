@@ -386,21 +386,17 @@ export class AppointmentService {
     if (uErr) throw new Error(`更新预约失败: ${uErr.message}`);
     if (!data) throw new Error('更新预约失败：未返回数据');
     const mapped = this.mapRow(data, false);
+    let notifyHint: string | null = null;
     if (dto.status === 'confirmed') {
       // 失败不阻断状态更新
-      try {
-        await this.notifyAppointmentConfirmed(stationId, {
-          recipientPhone: String(data.recipient_phone || mapped.recipientPhone),
-          recipientName: mapped.recipientName,
-          slotDate: mapped.slotDate,
-          slotLabel: mapped.slotLabel,
-        });
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('[Appointment] 确认通知失败:', e instanceof Error ? e.message : e);
-      }
+      notifyHint = await this.notifyAppointmentConfirmed(stationId, {
+        recipientPhone: String(data.recipient_phone || mapped.recipientPhone),
+        recipientName: mapped.recipientName,
+        slotDate: mapped.slotDate,
+        slotLabel: mapped.slotLabel,
+      });
     }
-    return mapped;
+    return { ...mapped, notifyHint };
   }
 
   // ---------- helpers ----------
@@ -463,16 +459,25 @@ export class AppointmentService {
       slotDate: string;
       slotLabel: string;
     },
-  ): Promise<void> {
-    const stationName = await this.getStationName(stationId);
-    await this.notify.sendAppointmentConfirmed({
-      stationName,
-      phone: item.recipientPhone,
-      recipientName: item.recipientName,
-      slotDate: item.slotDate,
-      slotLabel: item.slotLabel,
-      stationId,
-    });
+  ): Promise<string> {
+    try {
+      const stationName = await this.getStationName(stationId);
+      const res = await this.notify.sendAppointmentConfirmed({
+        stationName,
+        phone: item.recipientPhone,
+        recipientName: item.recipientName,
+        slotDate: item.slotDate,
+        slotLabel: item.slotLabel,
+        stationId,
+      });
+      if (res.customerPushed) return '已确认，并私信客户微信';
+      if (!res.customerBound) return '已确认；客户未绑定微信，请当面/电话告知';
+      return '已确认；微信提醒发送失败，请口头告知客户';
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[Appointment] 确认通知失败:', e instanceof Error ? e.message : e);
+      return '已确认（提醒通道暂不可用，请口头告知客户）';
+    }
   }
 
   private async assertValidSlot(

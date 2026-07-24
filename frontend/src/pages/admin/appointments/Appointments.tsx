@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import * as appointmentService from '@/services/appointment';
 import type {
   AppointmentItem,
@@ -37,14 +38,41 @@ const statusTone: Record<string, string> = {
 };
 
 const AppointmentsPage: React.FC = () => {
-  const [slotDate, setSlotDate] = useState(todayBeijing());
-  const [status, setStatus] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialStatus = searchParams.get('status') || '';
+  const initialDate = searchParams.get('date');
+  const [slotDate, setSlotDate] = useState(
+    initialDate === 'today' || !initialDate ? todayBeijing() : initialDate,
+  );
+  const [status, setStatus] = useState(
+    ['pending', 'confirmed', 'completed', 'cancelled', 'no_show'].includes(initialStatus)
+      ? initialStatus
+      : '',
+  );
   const [phone, setPhone] = useState('');
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<AppointmentItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  /** 最近一次预约通知回执（创建/确认） */
+  const [lastNotify, setLastNotify] = useState<string | null>(null);
+
+  // URL 深链变化时同步（工作台 → 今日待确认）
+  useEffect(() => {
+    const s = searchParams.get('status') || '';
+    const d = searchParams.get('date');
+    if (['pending', 'confirmed', 'completed', 'cancelled', 'no_show', ''].includes(s)) {
+      setStatus(s);
+    }
+    if (d === 'today' || !d) {
+      setSlotDate(todayBeijing());
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      setSlotDate(d);
+    }
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // 代客预约
   const [createOpen, setCreateOpen] = useState(false);
@@ -120,7 +148,9 @@ const AppointmentsPage: React.FC = () => {
         slotEnd: cSlot.end,
         note: cNote.trim() || undefined,
       });
-      notifySuccess(item.notifyHint || '代客预约已登记');
+      const hint = item.notifyHint || '代客预约已登记';
+      setLastNotify(hint);
+      notifySuccess(hint);
       setCreateOpen(false);
       setCPhone('');
       setCName('');
@@ -140,13 +170,33 @@ const AppointmentsPage: React.FC = () => {
   const updateStatus = async (id: string, next: AppointmentStatus) => {
     setBusyId(id);
     try {
-      await appointmentService.updateAppointmentStatus(id, next);
+      const item = await appointmentService.updateAppointmentStatus(id, next);
+      if (item?.notifyHint) {
+        setLastNotify(item.notifyHint);
+        notifySuccess(item.notifyHint);
+      } else if (next === 'confirmed') {
+        notifySuccess('已确认预约');
+      } else if (next === 'completed') {
+        notifySuccess('已标记完成');
+      } else if (next === 'cancelled') {
+        notifySuccess('已取消预约');
+      } else if (next === 'no_show') {
+        notifySuccess('已标记未到店');
+      }
       await load();
     } catch (e: any) {
       notifyError(e?.message || '更新失败');
     } finally {
       setBusyId(null);
     }
+  };
+
+  const syncQueryToUrl = (nextStatus: string, nextDate: string) => {
+    const p = new URLSearchParams();
+    if (nextStatus) p.set('status', nextStatus);
+    if (nextDate === todayBeijing()) p.set('date', 'today');
+    else if (nextDate) p.set('date', nextDate);
+    setSearchParams(p, { replace: true });
   };
 
   const day = slotsData?.days[cDayIdx];
@@ -176,6 +226,7 @@ const AppointmentsPage: React.FC = () => {
             onChange={(e) => {
               setPage(1);
               setSlotDate(e.target.value);
+              syncQueryToUrl(status, e.target.value);
             }}
             className="mt-1 block rounded-lg border border-gray-200 px-3 py-2 text-sm"
           />
@@ -187,6 +238,7 @@ const AppointmentsPage: React.FC = () => {
             onChange={(e) => {
               setPage(1);
               setStatus(e.target.value);
+              syncQueryToUrl(e.target.value, slotDate);
             }}
             className="mt-1 block rounded-lg border border-gray-200 px-3 py-2 text-sm"
           >
@@ -230,6 +282,7 @@ const AppointmentsPage: React.FC = () => {
             setStatus('pending');
             setPhone('');
             setPage(1);
+            syncQueryToUrl('pending', todayBeijing());
           }}
           className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700"
         >

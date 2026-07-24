@@ -62,6 +62,7 @@ const OverduePage: React.FC = () => {
     staffMessage: string;
   } | null>(null);
   const pageSize = 20;
+  const fromDashboard = searchParams.get('from') === 'dashboard';
 
   const { data, isLoading, refetch } = useOverdueList({
     level: level || undefined,
@@ -211,7 +212,15 @@ const OverduePage: React.FC = () => {
       />
 
 
-      {lastReach && (
+      
+      {fromDashboard && (
+        <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
+          来自工作台待办：可先点右上角「立即扫描」更新滞留，再对本页点「本页发提醒」。
+          发完后会显示客户是否收到微信私信。
+        </div>
+      )}
+
+{lastReach && (
         <div className="rounded-lg border border-sky-100 bg-sky-50 px-3 py-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>

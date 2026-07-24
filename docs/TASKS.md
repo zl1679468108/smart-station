@@ -1027,3 +1027,14 @@
 | M73.2 | P1 | 批量粘贴支持 Tab/中文逗号/表头 | inbound batch | done | Excel 友好 |
 | M73.3 | P2 | 手机号 +86 规范化 | inbound batch | done | normalizePhone |
 | M73.4 | P2 | 粘贴实时行数预览 + 示例 | inbound batch | done | pastePreview |
+
+---
+
+## M74 工作台滞留/预约深链 + 预约通知回执（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M74.1 | P1 | 工作台滞留/预约待办深链 | dashboard | done | overdue?from=dashboard；预约 status/date |
+| M74.2 | P1 | 预约页 URL 筛选同步 | appointments | done | status + date=today |
+| M74.3 | P1 | 确认预约返回通知回执 | backend+frontend | done | notifyHint on confirm |
+| M74.4 | P2 | 代客预约/确认触达面板 | appointments UI | done | lastNotify 白话 |

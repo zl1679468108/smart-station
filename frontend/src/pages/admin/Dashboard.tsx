@@ -94,7 +94,7 @@ const Dashboard: React.FC = () => {
           layoutConfig={layoutConfig}
           layoutLoading={layoutLoading}
           onExit={() => setSearchParams({})}
-          onTodoClick={(type) => navigate(type === 'overdue' ? '/admin/overdue' : '/admin/exception')}
+          onTodoClick={(type) => navigate(type === 'overdue' ? '/admin/overdue?from=dashboard' : '/admin/exception')}
         />
       </React.Suspense>
     );
@@ -422,16 +422,26 @@ const Dashboard: React.FC = () => {
           <div className="space-y-3">
             <button
               type="button"
-              onClick={() => navigate('/admin/overdue')}
+              onClick={() =>
+                navigate(
+                  todo.overdueWarn > 0
+                    ? '/admin/overdue?from=dashboard'
+                    : '/admin/overdue',
+                )
+              }
               className="flex w-full flex-col rounded-md bg-warning/5 px-3 py-3 text-left hover:bg-warning/10"
             >
               <div className="flex w-full items-center justify-between">
                 <span className="text-sm text-gray-600">超期待提醒</span>
                 <span className="text-lg font-bold text-warning">{todo.overdueWarn}</span>
               </div>
-              {todo.overdueWarn === 0 && (
+              {todo.overdueWarn === 0 ? (
                 <span className="mt-1 text-xs text-gray-400">
                   暂无滞留件，可在滞留页手动扫描提醒
+                </span>
+              ) : (
+                <span className="mt-1 text-xs text-warning/90">
+                  点击去滞留页扫描/发提醒
                 </span>
               )}
             </button>
@@ -488,7 +498,16 @@ const Dashboard: React.FC = () => {
             </button>
             <button
               type="button"
-              onClick={() => navigate('/admin/appointments')}
+              onClick={() => {
+                const pending = todo.appointmentPending ?? 0;
+                if (pending > 0) {
+                  navigate('/admin/appointments?status=pending&date=today');
+                } else if ((todo.appointmentToday ?? 0) > 0) {
+                  navigate('/admin/appointments?date=today');
+                } else {
+                  navigate('/admin/appointments?date=today');
+                }
+              }}
               className="flex w-full flex-col rounded-md bg-violet-50 px-3 py-3 text-left hover:bg-violet-100/80"
             >
               <div className="flex w-full items-center justify-between">
