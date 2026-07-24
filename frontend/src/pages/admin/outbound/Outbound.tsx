@@ -71,14 +71,24 @@ const ManualOutbound: React.FC = () => {
     setItems(null);
   };
 
-  // 确认出库（防连点）
-  const handleConfirmOutbound = async (item: OutboundSearchItem) => {
+  // 确认出库（防连点 + 手机后4位身份核验）
+  const handleConfirmOutbound = async (
+    item: OutboundSearchItem,
+    verify: { phoneTail: string; verifyNote?: string },
+  ) => {
     if (confirmLoading) return;
+    const tail = verify.phoneTail.replace(/\D/g, '');
+    if (!/^\d{4}$/.test(tail)) {
+      notifyError('请输入 4 位数字手机后 4 位');
+      return;
+    }
     setConfirmLoading(true);
     try {
       await outboundService.manualOutbound({
         trackingNumber: item.trackingNumber,
         pickupCode: item.pickupCode || undefined,
+        phoneTail: tail,
+        verifyNote: verify.verifyNote,
       });
       invalidateShelves();
       invalidateDashboard();
@@ -136,7 +146,7 @@ const ManualOutbound: React.FC = () => {
         <ConfirmDialog
           item={confirming}
           loading={confirmLoading}
-          onConfirm={() => handleConfirmOutbound(confirming)}
+          onConfirm={(verify) => handleConfirmOutbound(confirming, verify)}
           onCancel={() => {
             if (!confirmLoading) setConfirming(null);
           }}
@@ -360,48 +370,127 @@ const SearchResultList: React.FC<{
 const ConfirmDialog: React.FC<{
   item: OutboundSearchItem;
   loading?: boolean;
-  onConfirm: () => void;
+  onConfirm: (verify: { phoneTail: string; verifyNote?: string }) => void;
   onCancel: () => void;
-}> = ({ item, loading, onConfirm, onCancel }) => (
-  <Modal
-    open
-    onClose={onCancel}
-    widthClassName="max-w-sm"
-    title={
-      <span className="flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primaryLight text-primary">
-          <Icon name="outbound" size={18} />
+}> = ({ item, loading, onConfirm, onCancel }) => {
+  const [phoneTail, setPhoneTail] = useState('');
+  const [verifyNote, setVerifyNote] = useState('');
+  const [localError, setLocalError] = useState('');
+
+  // 确认弹窗内不展示完整后4位，要求当面询问取件人
+  // 确认弹窗故意不展示后 4 位，避免店员照抄屏幕
+  const phoneMasked = (() => {
+    const p = String(item.recipientPhone || '').replace(/\D/g, '');
+    if (p.length >= 7) return `${p.slice(0, 3)}********`;
+    return '***********';
+  })();
+
+  const submit = () => {
+    const tail = phoneTail.replace(/\D/g, '');
+    if (!/^\d{4}$/.test(tail)) {
+      setLocalError('请输入 4 位数字');
+      return;
+    }
+    setLocalError('');
+    onConfirm({
+      phoneTail: tail,
+      verifyNote: verifyNote.trim() || undefined,
+    });
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onCancel}
+      widthClassName="max-w-sm"
+      title={
+        <span className="flex items-center gap-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primaryLight text-primary">
+            <Icon name="outbound" size={18} />
+          </span>
+          确认出库 · 身份核验
         </span>
-        确认出库
-      </span>
-    }
-    footer={
-      <>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={loading}
-          className="flex-1 rounded-md border border-gray-300 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-60"
-        >
-          取消
-        </button>
-        <button
-          type="button"
-          onClick={onConfirm}
-          disabled={loading}
-          className="flex-1 rounded-md bg-primary py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
-        >
-          {loading ? '出库中…' : '确认出库'}
-        </button>
-      </>
-    }
-  >
-    <p className="text-sm text-gray-600">
-      确认将运单号 <span className="font-medium text-gray-800">{item.trackingNumber}</span>{' '}
-      （收件人：{item.recipientName}）的包裹标记为已出库？
-    </p>
-  </Modal>
-);
+      }
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="flex-1 rounded-md border border-gray-300 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={loading || phoneTail.replace(/\D/g, '').length !== 4}
+            className="flex-1 rounded-md bg-primary py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
+          >
+            {loading ? '出库中…' : '核验并出库'}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-3 text-sm text-gray-600">
+        <p>
+          运单 <span className="font-medium text-gray-800">{item.trackingNumber}</span>
+          {item.pickupCode && (
+            <>
+              {' '}
+              · 取件码 <span className="font-mono font-medium text-primary">{item.pickupCode}</span>
+            </>
+          )}
+        </p>
+        <p>
+          收件人 <span className="font-medium text-gray-800">{item.recipientName}</span>
+          <span className="ml-2 font-mono text-gray-500">{phoneMasked}</span>
+        </p>
+        <div className="rounded-md border border-orange-100 bg-orange-50/80 px-3 py-2 text-xs text-orange-900">
+          防冒领：请当面询问取件人「手机号后 4 位是多少」，再填写下方。勿直接照抄屏幕号码。
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-gray-500">
+            <span className="mr-0.5 text-danger">*</span>手机号后 4 位
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={4}
+            value={phoneTail}
+            onChange={(e) => {
+              setPhoneTail(e.target.value.replace(/\D/g, '').slice(0, 4));
+              setLocalError('');
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            placeholder="向取件人询问后填写"
+            disabled={loading}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-base tracking-widest outline-none focus:border-primary disabled:opacity-60"
+            autoFocus
+          />
+          {localError && <p className="mt-1 text-xs text-danger">{localError}</p>}
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-gray-500">核验备注（可选）</label>
+          <input
+            type="text"
+            value={verifyNote}
+            onChange={(e) => setVerifyNote(e.target.value.slice(0, 100))}
+            placeholder="如：本人领取 / 代取已看证件"
+            disabled={loading}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
+          />
+        </div>
+      </div>
+    </Modal>
+  );
+};
 
 // ============ 出库记录列表 ============
 const OutboundRecords: React.FC = () => {

@@ -123,12 +123,27 @@ export class OutboundService {
       throw new BadRequestException('取件码不匹配');
     }
 
+    // 取件人身份核验：手机号后 4 位（防冒领）
+    const expectedTail = String(parcel.recipient_phone || '').replace(/\D/g, '').slice(-4);
+    const givenTail = String(dto.phoneTail || '').replace(/\D/g, '');
+    if (!expectedTail || expectedTail.length !== 4) {
+      throw new BadRequestException('包裹手机号异常，无法核验，请联系管理员');
+    }
+    if (givenTail !== expectedTail) {
+      throw new BadRequestException('手机号后 4 位不正确，请向取件人重新确认');
+    }
+
     // 执行出库
     return this.executeOutbound(parcel, {
       stationId: ctx.stationId,
       operatorId: ctx.operatorId,
       method: 'manual',
       pickupCode: dto.pickupCode,
+      verify: {
+        type: 'phone_tail',
+        phoneTail: givenTail,
+        note: (dto.verifyNote || '').trim() || undefined,
+      },
     });
   }
 
@@ -223,6 +238,11 @@ export class OutboundService {
       operatorId: string | null;
       method: 'manual' | 'self_service';
       pickupCode?: string;
+      verify?: {
+        type: 'phone_tail' | 'none';
+        phoneTail?: string;
+        note?: string;
+      };
     },
   ) {
     const { error } = await this.supabase
@@ -237,14 +257,31 @@ export class OutboundService {
       .eq('id', parcel.id);
     if (error) throw new Error(`出库失败: ${error.message}`);
 
-    // 写事件轨迹
+    // 写事件轨迹（含身份核验留证，便于纠纷回溯）
+    const methodLabel = opts.method === 'manual' ? '人工辅助' : '自助扫描';
+    let description = `${methodLabel}出库`;
+    if (opts.verify?.type === 'phone_tail') {
+      description += '（已核验手机后4位）';
+      if (opts.verify.note) description += `：${opts.verify.note}`;
+    }
     await this.supabase.getClient().from('ss_parcel_events').insert({
       parcel_id: parcel.id,
       event_type: 'outbound',
       operator_id: opts.operatorId,
       operator_type: opts.method === 'manual' ? 'staff' : 'self_service',
-      description: `${opts.method === 'manual' ? '人工辅助' : '自助扫描'}出库`,
-      metadata: { method: opts.method },
+      description,
+      metadata: {
+        method: opts.method,
+        verify: opts.verify
+          ? {
+              type: opts.verify.type,
+              // 仅存后4位，不落完整手机号
+              phoneTail: opts.verify.phoneTail || null,
+              note: opts.verify.note || null,
+              verifiedAt: new Date().toISOString(),
+            }
+          : { type: 'none' },
+      },
     });
 
     // 取件码成功后清零错误计数

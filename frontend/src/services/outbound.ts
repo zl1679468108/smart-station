@@ -17,6 +17,10 @@ export function searchParcels(params: OutboundSearchParams): Promise<OutboundSea
 export function manualOutbound(payload: {
   trackingNumber?: string;
   pickupCode?: string;
+  /** 收件人手机号后 4 位（取件人当面核验） */
+  phoneTail: string;
+  /** 可选核验备注 */
+  verifyNote?: string;
 }): Promise<OutboundResult> {
   return post<OutboundResult>('/api/outbound/manual', payload, { successMessage: '包裹已出库' });
 }

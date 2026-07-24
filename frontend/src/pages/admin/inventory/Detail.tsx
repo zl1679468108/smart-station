@@ -153,6 +153,21 @@ const ParcelDetailPage: React.FC = () => {
                 {ev.description && (
                   <p className="mt-0.5 text-sm text-gray-600">{ev.description}</p>
                 )}
+                {ev.eventType === 'outbound' &&
+                  ev.metadata &&
+                  typeof ev.metadata === 'object' &&
+                  (ev.metadata as { verify?: { type?: string; phoneTail?: string; note?: string } })
+                    .verify?.type === 'phone_tail' && (
+                    <p className="mt-1 inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
+                      身份核验：手机后4位
+                      {(ev.metadata as { verify?: { phoneTail?: string } }).verify?.phoneTail
+                        ? ` · **${(ev.metadata as { verify?: { phoneTail?: string } }).verify?.phoneTail}`
+                        : ''}
+                      {(ev.metadata as { verify?: { note?: string } }).verify?.note
+                        ? ` · ${(ev.metadata as { verify?: { note?: string } }).verify?.note}`
+                        : ''}
+                    </p>
+                  )}
                 {ev.operatorName && (
                   <p className="mt-0.5 text-xs text-gray-400">
                     操作人：{ev.operatorName}

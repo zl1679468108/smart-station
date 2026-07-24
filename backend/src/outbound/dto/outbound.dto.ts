@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 
 /** 取件码正则：货架号-层号-件号，如 3-2-9903 */
 const PICKUP_CODE_REGEX = /^\d{1,3}-\d{1,2}-\d{1,6}$/;
@@ -17,6 +17,21 @@ export class ManualOutboundDto {
   @IsString()
   @Matches(PICKUP_CODE_REGEX, { message: PICKUP_CODE_MSG })
   pickupCode?: string;
+
+  /**
+   * 取件人身份核验：收件人手机号后 4 位（向取件人当面询问后填写）
+   * 防止仅凭取件码冒领
+   */
+  @IsString()
+  @IsNotEmpty({ message: '请填写收件人手机号后 4 位以核验取件人身份' })
+  @Matches(/^\d{4}$/, { message: '手机号后 4 位须为 4 位数字' })
+  phoneTail!: string;
+
+  /** 可选核验备注（如：代取、已看身份证） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100, { message: '核验备注最长 100 字' })
+  verifyNote?: string;
 }
 
 /**
