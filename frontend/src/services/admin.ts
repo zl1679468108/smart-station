@@ -13,6 +13,7 @@ import type {
   NotifyLogItem,
   NotifyPhoneSummaryItem,
   NotifyResendResult,
+  NotifyResendBatchResult,
 } from '@/types/admin';
 
 // ===== 驿站 =====
@@ -256,4 +257,15 @@ export function resendNotifyLog(id: string): Promise<NotifyResendResult> {
   return post(`/api/admin/notify/logs/${encodeURIComponent(id)}/resend`, undefined, {
     successMessage: '已重新发送通知',
   });
+}
+
+/** 批量重发到件/滞留通知（本页/按手机号一键补发） */
+export function resendNotifyLogsBatch(ids: string[]): Promise<NotifyResendBatchResult> {
+  return post(
+    '/api/admin/notify/logs/resend-batch',
+    { ids },
+    {
+      successMessage: false,
+    },
+  );
 }

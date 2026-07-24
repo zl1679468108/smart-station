@@ -157,7 +157,7 @@ const NotifyReachBar: React.FC<{
         {notify.sendFailed > 0 && (
           <button
             type="button"
-            onClick={() => navigate('/admin/system?tab=notify&filter=failed&today=1')}
+            onClick={() => navigate('/admin/system?tab=notify&filter=failed&today=1&days=1')}
             className="rounded-full bg-white px-2.5 py-1 font-medium text-red-700 ring-1 ring-red-100 hover:bg-red-50"
           >
             发送失败 {notify.sendFailed}

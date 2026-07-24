@@ -1175,6 +1175,65 @@ export class AdminService {
     };
   }
 
+  /**
+   * 批量重发到件/滞留通知。
+   * 前端本页/按手机号一键补发走此接口，避免串行多次 HTTP。
+   */
+  async resendNotifyLogsBatch(stationId: string, ids: string[]) {
+    const unique = Array.from(
+      new Set((ids || []).map((x) => String(x || '').trim()).filter(Boolean)),
+    );
+    if (unique.length === 0) {
+      throw new BadRequestException('请选择要补发的通知记录');
+    }
+    if (unique.length > 40) {
+      throw new BadRequestException('一次最多补发 40 条');
+    }
+
+    const results: Array<{
+      logId: string;
+      ok: boolean;
+      customerBound?: boolean;
+      customerPushed?: boolean;
+      phoneMasked?: string;
+      staffMessage: string;
+    }> = [];
+
+    let pushed = 0;
+    let failed = 0;
+
+    for (const id of unique) {
+      try {
+        const r = await this.resendNotifyLog(stationId, id);
+        results.push({
+          logId: id,
+          ok: true,
+          customerBound: r.customerBound,
+          customerPushed: r.customerPushed,
+          phoneMasked: r.phoneMasked,
+          staffMessage: r.staffMessage,
+        });
+        if (r.customerPushed) pushed += 1;
+        else failed += 1;
+      } catch (e: any) {
+        failed += 1;
+        results.push({
+          logId: id,
+          ok: false,
+          staffMessage: e?.message || '重发失败',
+        });
+      }
+    }
+
+    return {
+      total: unique.length,
+      pushed,
+      failed,
+      staffMessage: `一键补发完成：成功私信 ${pushed} 条，仍未私信/失败 ${failed} 条（共 ${unique.length} 条）`,
+      results,
+    };
+  }
+
   /** 北京时间「含今天共 days 天」的起点 ISO（days=1 即今日 00:00） */
   private beijingDayStartIso(days: number): string {
     const safeDays = Math.min(Math.max(Math.floor(days) || 1, 1), 14);

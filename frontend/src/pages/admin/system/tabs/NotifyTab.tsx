@@ -374,22 +374,15 @@ const NotifyTab: React.FC = () => {
     if (!ok) return;
     setBatchResending(true);
     setResendTip('');
-    let pushed = 0;
-    let failed = 0;
-    for (const log of resendableOnPage) {
-      try {
-        const r = await adminService.resendNotifyLog(log.id);
-        if (r.customerPushed) pushed += 1;
-        else failed += 1;
-      } catch {
-        failed += 1;
-      }
+    try {
+      const r = await adminService.resendNotifyLogsBatch(resendableOnPage.map((l) => l.id));
+      setResendTip(r.staffMessage);
+    } catch (err) {
+      setResendTip(err instanceof Error ? err.message : '一键补发失败');
+    } finally {
+      setBatchResending(false);
+      await load();
     }
-    setResendTip(
-      `一键补发完成：成功私信 ${pushed} 条，仍未私信/失败 ${failed} 条（共 ${resendableOnPage.length} 条）`,
-    );
-    setBatchResending(false);
-    await load();
   };
 
 
@@ -405,21 +398,16 @@ const NotifyTab: React.FC = () => {
     if (phoneKey) setPhoneResending(phoneKey);
     else setPhoneBatchResending(true);
     setResendTip('');
-    let pushed = 0;
-    let failed = 0;
-    for (const id of ids) {
-      try {
-        const r = await adminService.resendNotifyLog(id);
-        if (r.customerPushed) pushed += 1;
-        else failed += 1;
-      } catch {
-        failed += 1;
-      }
+    try {
+      const r = await adminService.resendNotifyLogsBatch(ids.slice(0, 40));
+      setResendTip(r.staffMessage);
+    } catch (err) {
+      setResendTip(err instanceof Error ? err.message : '补发失败');
+    } finally {
+      if (phoneKey) setPhoneResending(null);
+      else setPhoneBatchResending(false);
+      await load();
     }
-    setResendTip(`补发完成：成功私信 ${pushed}，仍未私信/失败 ${failed}（共 ${ids.length}）`);
-    if (phoneKey) setPhoneResending(null);
-    else setPhoneBatchResending(false);
-    await load();
   };
 
 

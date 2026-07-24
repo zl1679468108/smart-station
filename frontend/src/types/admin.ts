@@ -216,3 +216,18 @@ export interface NotifyResendResult {
   staffMessage: string;
   channelResults: NotifyChannelResultItem[];
 }
+
+export interface NotifyResendBatchResult {
+  total: number;
+  pushed: number;
+  failed: number;
+  staffMessage: string;
+  results: Array<{
+    logId: string;
+    ok: boolean;
+    customerBound?: boolean;
+    customerPushed?: boolean;
+    phoneMasked?: string;
+    staffMessage: string;
+  }>;
+}

@@ -908,7 +908,7 @@ function eventDeepLink(ev: DashboardEvent) {
     return '/admin/system?tab=notify&filter=unbound&view=byPhone';
   }
   if (ev.customerReach === 'push_failed') {
-    return '/admin/system?tab=notify&filter=push_failed';
+    return '/admin/system?tab=notify&filter=push_failed&days=1';
   }
   if (ev.eventType?.startsWith('exception')) return '/admin/exception';
   if (ev.eventType?.startsWith('overdue')) return '/admin/overdue?from=dashboard';

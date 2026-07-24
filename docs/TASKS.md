@@ -1452,3 +1452,10 @@
 | M133.2 | P0 | 通知聚合返回 resendLogIds | admin by-phone | done | 每号最多5条 |
 | M133.3 | P0 | 按手机号补发该客户/本页客户 | NotifyTab | done | |
 
+## M134 失败深链统一 + 批量补发 API（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M134.1 | P0 | 工作台/统计/触达条失败深链统一 days=1 | Dashboard/Stats/NotifyReachBar | done | |
+| M134.2 | P0 | POST notify/logs/resend-batch 批量补发 | admin | done | 最多40条 |
+| M134.3 | P0 | 通知本页/按手机号走批量 API | NotifyTab | done | 不再串行 HTTP |
+

@@ -227,7 +227,7 @@ const StatsPage: React.FC = () => {
               {notifyToday.customerPushFailed > 0 && (
                 <button
                   type="button"
-                  onClick={() => navigate('/admin/system?tab=notify&filter=push_failed')}
+                  onClick={() => navigate('/admin/system?tab=notify&filter=push_failed&days=1')}
                   className="rounded-full bg-white px-2.5 py-1 text-amber-800 ring-1 ring-amber-100 hover:bg-amber-50"
                 >
                   私信失败 {notifyToday.customerPushFailed}
@@ -237,7 +237,7 @@ const StatsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() =>
-                    navigate('/admin/system?tab=notify&filter=failed&today=1')
+                    navigate('/admin/system?tab=notify&filter=failed&today=1&days=1')
                   }
                   className="rounded-full bg-white px-2.5 py-1 text-red-700 ring-1 ring-red-100 hover:bg-red-50"
                 >

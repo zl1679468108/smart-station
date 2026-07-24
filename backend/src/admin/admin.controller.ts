@@ -21,6 +21,7 @@ import {
   UpdateShelfPositionDto,
 } from './dto/shelf-courier.dto';
 import { UpdateLayoutConfigDto, SaveStationLayoutDto } from './dto/layout-config.dto';
+import { ResendNotifyBatchDto } from './dto/resend-notify-batch.dto';
 import { TokenAuthGuard } from '../common/guards/token-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -232,6 +233,16 @@ export class AdminController {
       days: Number.isFinite(daysNum) && daysNum > 0 ? daysNum : undefined,
       reach,
     });
+  }
+
+  /** 批量重新发送到件/滞留通知（本页/按手机号一键补发） */
+  @Post('notify/logs/resend-batch')
+  @HttpCode(200)
+  async resendNotifyLogsBatch(
+    @StationId() stationId: string,
+    @Body() dto: ResendNotifyBatchDto,
+  ) {
+    return this.adminService.resendNotifyLogsBatch(stationId, dto.ids || []);
   }
 
   /** 重新发送到件/滞留通知（失败补发或客户绑定后再推） */
