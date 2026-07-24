@@ -163,38 +163,57 @@ const PickupAppointmentCard: React.FC<Props> = ({ defaultPhone, onBindClick }) =
                 {success.notifyHint ||
                   '请按预约时段到店；取件码仍以查件结果 / 货架标签为准。'}
               </p>
-              <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[11px] text-emerald-800/90">
+              <ol className="mt-2 list-decimal space-y-0.5 pl-4 text-[11px] text-emerald-800/90">
                 <li>到店报手机号或取件码即可</li>
                 <li>群里不会公开你的取件码</li>
-              </ul>
+              </ol>
+              {(() => {
+                const hint = success.notifyHint || '';
+                // 仅未绑定场景强引导；已私信成功文案里也会出现「绑定」字样，不能误匹配
+                const needsBind =
+                  hint.includes('未绑定') || hint.includes('绑定微信通知后');
+                if (!needsBind || !onBindClick) return null;
+                return (
+                  <div className="mt-2 rounded-md border border-orange-200 bg-orange-50 px-2.5 py-2 text-[11px] text-orange-950">
+                    <p className="font-semibold">到店前先绑定，更省心</p>
+                    <p className="mt-0.5 leading-relaxed opacity-95">
+                      绑定后：在库件可微信收码，预约/到件也会提醒你。没绑定也能按预约到店取件。
+                    </p>
+                    <button
+                      type="button"
+                      onClick={onBindClick}
+                      className="mt-2 min-h-[44px] w-full rounded-md bg-primary px-3 text-xs font-semibold text-white hover:bg-primaryHover"
+                    >
+                      现在绑定，到店前自动收码
+                    </button>
+                  </div>
+                );
+              })()}
               <div className="mt-2 flex flex-wrap gap-2">
-                {onBindClick && (
-                  <button
-                    type="button"
-                    onClick={onBindClick}
-                    className="min-h-[40px] rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primaryHover"
-                  >
-                    {(success.notifyHint || '').includes('未绑定') ||
-                    (success.notifyHint || '').includes('绑定')
-                      ? '去绑定微信收提醒'
-                      : '管理微信提醒'}
-                  </button>
-                )}
+                {onBindClick &&
+                  !(
+                    (success.notifyHint || '').includes('未绑定') ||
+                    (success.notifyHint || '').includes('绑定微信通知后')
+                  ) && (
+                    <button
+                      type="button"
+                      onClick={onBindClick}
+                      className="min-h-[40px] rounded-md border border-emerald-200 bg-white px-3 text-xs font-medium text-emerald-900 hover:bg-emerald-100/50"
+                    >
+                      管理微信提醒
+                    </button>
+                  )}
                 <button
                   type="button"
                   onClick={() => {
                     void (async () => {
-                      const ok = await copyText(
+                      await copyText(
                         buildAppointmentFaceScript({
                           slotDate: success.slotDate,
                           slotLabel: success.slotLabel,
                           recipientName: success.recipientName,
                         }),
                       );
-                      // 查件页无 toast 全局时用 alert 太重；静默失败即可，成功靠按钮文案
-                      if (!ok) {
-                        // keep silent on kiosk; clipboard may be restricted
-                      }
                     })();
                   }}
                   className="min-h-[40px] rounded-md border border-emerald-200 bg-white px-3 text-xs text-emerald-900 hover:bg-emerald-100/50"

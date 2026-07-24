@@ -439,7 +439,7 @@ export class AppointmentService {
       }
       if (res.customerPushed) return '预约提醒已发到您绑定的微信，请注意查收';
       if (!res.customerBound) {
-        return '预约已登记。绑定微信通知后可自动收提醒；也可在本页「查我的预约」查看';
+        return '预约已登记，您还未绑定微信。绑定后可自动收提醒；也可在本页「查我的预约」查看';
       }
       return '预约已登记，微信提醒发送失败，请以本页预约记录为准';
     } catch (e) {

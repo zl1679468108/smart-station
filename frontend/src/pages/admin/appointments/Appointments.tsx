@@ -17,6 +17,7 @@ import {
   buildAppointmentFaceScript,
   buildBindGuideScript,
 } from '@/utils/staffScripts';
+import OutboundBindNudge from '@/components/OutboundBindNudge';
 import { copyText } from '@/utils/stationVisit';
 
 function todayBeijing(): string {
@@ -240,52 +241,114 @@ const AppointmentsPage: React.FC = () => {
       <NotifyReachBar className="mb-3" context="appointments" />
 
       {lastNotify && (
-        <div className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-violet-100 bg-violet-50 px-3 py-2.5">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-violet-900">预约通知回执</p>
-            <p className="mt-0.5 text-xs text-violet-900/90">{lastNotify}</p>
-            <p className="mt-1 text-[11px] text-violet-800/80">
-              未绑定微信的客户请口头告知时段；可引导对方在查件页扫一扫收码。
+        <div
+          className={`flex flex-wrap items-start justify-between gap-2 rounded-lg border px-3 py-2.5 ${
+            lastNotify.includes('未绑定')
+              ? 'border-orange-200 bg-orange-50'
+              : 'border-violet-100 bg-violet-50'
+          }`}
+        >
+          <div className="min-w-0 flex-1">
+            <p
+              className={`text-sm font-medium ${
+                lastNotify.includes('未绑定') ? 'text-orange-950' : 'text-violet-900'
+              }`}
+            >
+              预约通知回执
             </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                className="rounded-md border border-violet-200 bg-white px-2 py-1 text-[11px] font-medium text-violet-800 hover:bg-violet-100"
-                onClick={() => {
-                  void (async () => {
-                    const ok = await copyText(buildBindGuideScript());
-                    if (ok) notifySuccess('已复制绑定引导（不含取件码）');
-                    else notifyError('复制失败');
-                  })();
-                }}
-              >
-                复制绑定话术
-              </button>
-              {lastNotifyPhone && (
-                <button
-                  type="button"
-                  className="rounded-md border border-violet-200 bg-white px-2 py-1 text-[11px] font-medium text-violet-800 hover:bg-violet-100"
-                  onClick={() =>
-                    navigate(
-                      `/admin/system?tab=notify&phone=${encodeURIComponent(lastNotifyPhone)}`,
-                    )
-                  }
-                >
-                  看该手机通知
-                </button>
-              )}
-              {(lastNotify.includes('未绑定') || lastNotify.includes('绑定')) && (
-                <button
-                  type="button"
-                  className="rounded-md border border-violet-200 bg-white px-2 py-1 text-[11px] font-medium text-violet-800 hover:bg-violet-100"
-                  onClick={() =>
-                    navigate('/admin/system?tab=notify&filter=unbound&view=byPhone')
-                  }
-                >
-                  按手机号跟进
-                </button>
-              )}
-            </div>
+            <p
+              className={`mt-0.5 text-xs ${
+                lastNotify.includes('未绑定') ? 'text-orange-900/90' : 'text-violet-900/90'
+              }`}
+            >
+              {lastNotify}
+            </p>
+            {lastNotify.includes('未绑定') ? (
+              <div className="mt-2 space-y-2">
+                <p className="text-[11px] font-semibold text-orange-950">
+                  到店前先引导绑定（电话/当面都可）
+                </p>
+                <ol className="list-decimal space-y-0.5 pl-4 text-[11px] leading-relaxed text-orange-900">
+                  <li>口头告知预约时段</li>
+                  <li>复制绑定话术发给客户（不含取件码）</li>
+                  <li>客户查件页扫一扫后，到件/在库码可微信收</li>
+                </ol>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    className="min-h-[36px] rounded-md bg-orange-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-orange-700"
+                    onClick={() => {
+                      void (async () => {
+                        const ok = await copyText(buildBindGuideScript());
+                        if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                        else notifyError('复制失败');
+                      })();
+                    }}
+                  >
+                    复制绑定话术
+                  </button>
+                  {lastNotifyPhone && (
+                    <button
+                      type="button"
+                      className="min-h-[36px] rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-100"
+                      onClick={() =>
+                        navigate(
+                          `/admin/system?tab=notify&phone=${encodeURIComponent(lastNotifyPhone)}&view=byPhone`,
+                        )
+                      }
+                    >
+                      看该手机通知
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="min-h-[36px] rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-100"
+                    onClick={() =>
+                      navigate('/admin/system?tab=notify&filter=unbound&view=byPhone&days=3')
+                    }
+                  >
+                    近3日未绑定
+                  </button>
+                </div>
+                {lastNotifyPhone && (
+                  <OutboundBindNudge phone={lastNotifyPhone} variant="admin" />
+                )}
+              </div>
+            ) : (
+              <div className="mt-2 space-y-1.5">
+                <p className="text-[11px] text-violet-800/80">
+                  客户多半已能微信收提醒；仍可复制话术或查看通知记录。
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    className="rounded-md border border-violet-200 bg-white px-2 py-1 text-[11px] font-medium text-violet-800 hover:bg-violet-100"
+                    onClick={() => {
+                      void (async () => {
+                        const ok = await copyText(buildBindGuideScript());
+                        if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                        else notifyError('复制失败');
+                      })();
+                    }}
+                  >
+                    复制绑定话术
+                  </button>
+                  {lastNotifyPhone && (
+                    <button
+                      type="button"
+                      className="rounded-md border border-violet-200 bg-white px-2 py-1 text-[11px] font-medium text-violet-800 hover:bg-violet-100"
+                      onClick={() =>
+                        navigate(
+                          `/admin/system?tab=notify&phone=${encodeURIComponent(lastNotifyPhone)}`,
+                        )
+                      }
+                    >
+                      看该手机通知
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <button
             type="button"
@@ -293,7 +356,9 @@ const AppointmentsPage: React.FC = () => {
               setLastNotify(null);
               setLastNotifyPhone(null);
             }}
-            className="text-[11px] text-violet-700 underline"
+            className={`text-[11px] underline ${
+              lastNotify.includes('未绑定') ? 'text-orange-800' : 'text-violet-700'
+            }`}
           >
             关闭
           </button>

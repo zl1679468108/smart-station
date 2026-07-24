@@ -1294,3 +1294,10 @@
 | M109.2 | P1 | 单件回执带手机号绑定组件 | overdue single | done | OutboundBindNudge |
 | M109.3 | P1 | 库存批量/详情提醒回执 | inventory | done | |
 
+## M110 预约成功绑定引导（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M110.1 | P0 | 查件页预约成功强引导绑定 | PickupAppointmentCard | done | 到店前先绑定 |
+| M110.2 | P1 | 后台预约回执分未绑定/已绑定 | appointments | done | OutboundBindNudge |
+| M110.3 | P2 | 未绑定近3日深链 | appointments | done | |
+
