@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { DashboardData, DashboardHourly } from '@/types/stats';
 import type { Shelf } from '@/types/admin';
 import { useShelves } from '@/hooks/useDictionary';
-import { useDashboard } from '@/hooks/useDashboardData';
+import { useDashboard, useDashboardEvents } from '@/hooks/useDashboardData';
+import type { DashboardEvent } from '@/types/stats';
 import { useLayoutConfig } from '@/hooks/useSystemAdmin';
 import { useAuth } from '@/utils/auth';
 import PageHeader from '@/components/ui/PageHeader';
@@ -38,6 +39,11 @@ const Dashboard: React.FC = () => {
     stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const { data: shelves = [] } = useShelves();
   const { data, isLoading, error } = useDashboard();
+  const {
+    data: recentEvents = [],
+    isLoading: eventsLoading,
+    error: eventsError,
+  } = useDashboardEvents(8, { refetchInterval: 30000 });
   const { data: layoutRes, isLoading: layoutQueryLoading } = useLayoutConfig();
   const layoutConfig = layoutRes?.layoutConfig ?? null;
   const layoutLoading = layoutQueryLoading && !layoutRes;
@@ -94,7 +100,31 @@ const Dashboard: React.FC = () => {
           layoutConfig={layoutConfig}
           layoutLoading={layoutLoading}
           onExit={() => setSearchParams({})}
-          onTodoClick={(type) => navigate(type === 'overdue' ? '/admin/overdue?from=dashboard' : '/admin/exception')}
+          onTodoClick={(type) => {
+            // 退出大屏后再跳业务页，避免深链被全屏态挡住
+            setSearchParams({});
+            if (type === 'overdue') {
+              navigate('/admin/overdue?from=dashboard');
+              return;
+            }
+            if (type === 'exception') {
+              navigate('/admin/exception');
+              return;
+            }
+            if (type === 'notify_unbound') {
+              navigate('/admin/system?tab=notify&filter=unbound&view=byPhone');
+              return;
+            }
+            if (type === 'notify_failed') {
+              navigate('/admin/system?tab=notify&filter=push_failed');
+              return;
+            }
+            if (type === 'notify_pushed') {
+              navigate('/admin/system?tab=notify&filter=pushed');
+              return;
+            }
+            navigate('/admin/system?tab=notify&filter=today');
+          }}
         />
       </React.Suspense>
     );
@@ -343,7 +373,7 @@ const Dashboard: React.FC = () => {
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                navigate('/admin/system?tab=notify&filter=unbound');
+                navigate('/admin/system?tab=notify&filter=unbound&view=byPhone');
               }}
               className="rounded-md bg-white px-2.5 py-1 text-orange-700 ring-1 ring-transparent hover:ring-orange-200"
             >
@@ -419,6 +449,107 @@ const Dashboard: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* 最近业务动态：可点进库存/通知跟进 */}
+      <div className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-medium text-gray-700">最近业务动态</h2>
+            <p className="mt-0.5 text-[11px] text-gray-400">
+              入库/出库/异常等实时动态；未绑定会单独提示，点进去可跟进
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {data.notify && data.notify.customerUnbound > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  navigate('/admin/system?tab=notify&filter=unbound&view=byPhone')
+                }
+                className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-100"
+              >
+                未绑定 {data.notify.customerUnbound} · 去跟进
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setSearchParams({ view: 'screen' })}
+              className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+            >
+              打开大屏
+            </button>
+          </div>
+        </div>
+        {eventsError ? (
+          <p className="text-xs text-danger">
+            {eventsError instanceof Error ? eventsError.message : '动态加载失败'}
+          </p>
+        ) : eventsLoading && recentEvents.length === 0 ? (
+          <p className="text-xs text-gray-400">加载中…</p>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {data.notify &&
+              (data.notify.customerUnbound > 0 || data.notify.customerPushFailed > 0) && (
+                <li className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0">
+                  <div className="min-w-0">
+                    <p className="text-sm text-orange-900">
+                      {data.notify.customerUnbound > 0
+                        ? `今日有 ${data.notify.customerUnbound} 次到件未绑定，客户收不到微信私信`
+                        : `今日有 ${data.notify.customerPushFailed} 次私信失败`}
+                      {data.notify.customerUnbound > 0 &&
+                      data.notify.customerPushFailed > 0
+                        ? `，另有 ${data.notify.customerPushFailed} 次私信失败`
+                        : ''}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-gray-400">
+                      当面报码或引导绑定后，可在通知记录补发
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        data.notify!.customerUnbound > 0
+                          ? '/admin/system?tab=notify&filter=unbound&view=byPhone'
+                          : '/admin/system?tab=notify&filter=push_failed',
+                      )
+                    }
+                    className="shrink-0 rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+                  >
+                    去处理
+                  </button>
+                </li>
+              )}
+            {recentEvents.length === 0 ? (
+              <li className="py-3 text-xs text-gray-400">暂无业务动态</li>
+            ) : (
+              recentEvents.map((ev) => (
+                <li key={ev.id}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(eventDeepLink(ev))}
+                    className="flex w-full items-start justify-between gap-3 py-2 text-left hover:bg-gray-50"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-gray-800">{ev.text}</p>
+                      <p className="mt-0.5 text-[11px] text-gray-400">
+                        {formatEventClock(ev.createdAt)}
+                        {ev.trackingNumber ? ` · 运单 ${ev.trackingNumber}` : ''}
+                        {ev.pickupCode ? ` · 取件码 ${ev.pickupCode}` : ''}
+                      </p>
+                    </div>
+                    <span
+                      className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] ${eventToneClass(ev.tone)}`}
+                    >
+                      {eventToneLabel(ev)}
+                    </span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        )}
+      </div>
 
       {/* 今日小时趋势 + 待办 */}
       <div className="grid gap-4 lg:grid-cols-3">
@@ -644,6 +775,45 @@ const Dashboard: React.FC = () => {
     </div>
   );
 };
+
+
+function formatEventClock(iso: string) {
+  if (!iso) return '--:--';
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(iso)) return iso.slice(11, 16);
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '--:--';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function eventDeepLink(ev: DashboardEvent) {
+  if (ev.eventType?.startsWith('exception')) return '/admin/exception';
+  if (ev.eventType?.startsWith('overdue')) return '/admin/overdue?from=dashboard';
+  if (ev.trackingNumber) {
+    return `/admin/inventory?trackingNumber=${encodeURIComponent(ev.trackingNumber)}`;
+  }
+  if (ev.pickupCode) {
+    return `/admin/inventory?pickupCode=${encodeURIComponent(ev.pickupCode)}`;
+  }
+  return '/admin/inventory';
+}
+
+function eventToneLabel(ev: DashboardEvent) {
+  if (ev.eventType === 'inbound') return '入库';
+  if (ev.eventType === 'outbound') return '出库';
+  if (ev.eventType?.startsWith('overdue')) return '滞留';
+  if (ev.eventType?.startsWith('exception')) return '异常';
+  if (ev.tone === 'warn') return '关注';
+  if (ev.tone === 'danger') return '处理';
+  if (ev.tone === 'ok') return '正常';
+  return '动态';
+}
+
+function eventToneClass(tone: DashboardEvent['tone']) {
+  if (tone === 'warn') return 'bg-amber-50 text-amber-800';
+  if (tone === 'danger') return 'bg-red-50 text-red-700';
+  if (tone === 'ok') return 'bg-emerald-50 text-emerald-700';
+  return 'bg-sky-50 text-sky-700';
+}
 
 function toWarehouseShelf(shelf: Shelf) {
   return {

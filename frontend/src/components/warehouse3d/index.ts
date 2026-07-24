@@ -10,7 +10,7 @@
 export { default } from './Warehouse3D';
 export { default as Warehouse3D } from './Warehouse3D';
 export { default as WarehouseScreen } from './WarehouseScreen';
-export type { WarehouseScreenProps } from './WarehouseScreen';
+export type { WarehouseScreenProps, WarehouseScreenTodoType } from './WarehouseScreen';
 
 export { MODEL_LIBRARY, findModelByType } from './modelLibrary';
 export type { ModelLibraryItem } from './modelLibrary';
