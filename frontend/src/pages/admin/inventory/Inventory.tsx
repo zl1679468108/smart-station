@@ -116,9 +116,19 @@ const Inventory: React.FC = () => {
   // 只读角色（viewer）不显示选择框 / 批量操作栏 / 批量标记异常弹窗
   const writable = canWrite(user.role);
   const [remindingId, setRemindingId] = useState<string | null>(null);
+  const [batchReminding, setBatchReminding] = useState(false);
+  const [lastBatchRemind, setLastBatchRemind] = useState<string | null>(null);
+
+  const isRemindable = (item: ParcelListItem) =>
+    item.status === 'overdue' ||
+    (item.status === 'in_stock' && (item.daysInStock ?? 0) >= 3);
 
   const onRemindOverdue = async (item: ParcelListItem) => {
-    if (!writable || remindingId) return;
+    if (!writable || remindingId || batchReminding) return;
+    if (!isRemindable(item)) {
+      notifyError('仅滞留件或在库满 3 天可发提醒');
+      return;
+    }
     const ok = window.confirm(
       `向客户补发滞留提醒？\n运单 ${item.trackingNumber}\n\n已绑定微信会私信取件码；未绑定仅旁路通知（不含取件码）。`,
     );
@@ -127,10 +137,38 @@ const Inventory: React.FC = () => {
     try {
       const r = await overdueService.remindOverdue(item.id);
       notifySuccess(r.staffMessage || '提醒已发送');
+      setLastBatchRemind(r.staffMessage || '提醒已发送');
     } catch (e: any) {
       notifyError(e?.message || '发送失败');
     } finally {
       setRemindingId(null);
+    }
+  };
+
+  const onBatchRemindOverdue = async () => {
+    if (!writable || batchReminding || remindingId || !data?.items?.length) return;
+    const ids = data.items
+      .filter((it) => selected.has(it.id) && isRemindable(it))
+      .map((it) => it.id)
+      .slice(0, 30);
+    if (ids.length === 0) {
+      notifyError('所选包裹中没有可提醒的（需滞留或在库满 3 天）');
+      return;
+    }
+    const ok = window.confirm(
+      `对已选 ${ids.length} 件批量发滞留提醒？\n\n已绑定会私信取件码；未绑定仅旁路通知（不含取件码）。最多 30 件。`,
+    );
+    if (!ok) return;
+    setBatchReminding(true);
+    try {
+      const r = await overdueService.remindOverdueBatch(ids);
+      notifySuccess(r.staffMessage || '批量提醒完成');
+      setLastBatchRemind(r.staffMessage || '批量提醒完成');
+      setSelected(new Set());
+    } catch (e: any) {
+      notifyError(e?.message || '批量提醒失败');
+    } finally {
+      setBatchReminding(false);
     }
   };
 
@@ -350,19 +388,43 @@ const Inventory: React.FC = () => {
 
       {/* 批量操作栏（仅 admin/clerk 可见，viewer 只读） */}
       {writable && selected.size > 0 && (
-        <div className="mb-3 flex items-center gap-3 rounded-md bg-primaryLight px-3 py-2 text-sm">
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md bg-primaryLight px-3 py-2 text-sm">
           <span className="text-primary">已选 {selected.size} 项</span>
           <button
+            type="button"
+            onClick={() => void onBatchRemindOverdue()}
+            disabled={batchReminding || Boolean(remindingId)}
+            className="rounded bg-amber-600 px-3 py-1 text-xs text-white hover:bg-amber-700 disabled:opacity-60"
+          >
+            {batchReminding ? '批量提醒中…' : '批量发滞留提醒'}
+          </button>
+          <button
+            type="button"
             onClick={() => setShowBatch(true)}
-            className="rounded bg-warning px-3 py-1 text-xs text-white hover:bg-warning/90"
+            disabled={batchReminding}
+            className="rounded bg-warning px-3 py-1 text-xs text-white hover:bg-warning/90 disabled:opacity-60"
           >
             批量标记异常
           </button>
           <button
+            type="button"
             onClick={() => setSelected(new Set())}
             className="text-xs text-gray-500 hover:underline"
           >
             清除选择
+          </button>
+        </div>
+      )}
+
+      {lastBatchRemind && (
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-2 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <p>提醒回执：{lastBatchRemind}</p>
+          <button
+            type="button"
+            className="underline"
+            onClick={() => setLastBatchRemind(null)}
+          >
+            关闭
           </button>
         </div>
       )}
@@ -464,12 +526,10 @@ const Inventory: React.FC = () => {
                             收款出库
                           </button>
                         )}
-                      {writable &&
-                        (item.status === 'overdue' ||
-                          (item.status === 'in_stock' && (item.daysInStock ?? 0) >= 3)) && (
+                      {writable && isRemindable(item) && (
                           <button
                             type="button"
-                            disabled={remindingId === item.id}
+                            disabled={remindingId === item.id || batchReminding}
                             onClick={() => void onRemindOverdue(item)}
                             className="text-xs font-medium text-amber-700 hover:underline disabled:opacity-60"
                           >

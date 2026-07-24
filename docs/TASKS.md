@@ -1048,3 +1048,14 @@
 | M75.1 | P1 | 查件预约成功触达面板 | query appointment | done | 未绑定引导绑定 |
 | M75.2 | P1 | 库存列表快捷发提醒 | inventory list | done | overdue/在库≥3天 |
 | M75.3 | P1 | 库存详情发滞留提醒+回执 | inventory detail | done | remindOverdue |
+
+---
+
+## M76 库存批量滞留提醒 + 查件我的预约（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M76.1 | P1 | 库存勾选批量发滞留提醒 | inventory | done | remind-batch 最多30 |
+| M76.2 | P2 | 批量/单件提醒回执条 | inventory | done | lastBatchRemind |
+| M76.3 | P1 | 查件「我的预约」状态白话 | query appointment | done | 色标+说明+空态 |
+| M76.4 | P2 | 展开自动查预约 | query appointment | done | 有手机号时 |

@@ -31,6 +31,7 @@ const PickupAppointmentCard: React.FC<Props> = ({ defaultPhone, onBindClick }) =
   const [success, setSuccess] = useState<AppointmentItem | null>(null);
   const [mine, setMine] = useState<AppointmentItem[]>([]);
   const [mineLoading, setMineLoading] = useState(false);
+  const [mineQueried, setMineQueried] = useState(false);
 
   useEffect(() => {
     if (defaultPhone && /^1\d{10}$/.test(defaultPhone)) {
@@ -70,15 +71,26 @@ const PickupAppointmentCard: React.FC<Props> = ({ defaultPhone, onBindClick }) =
     }
     setMineLoading(true);
     setError(null);
+    setMineQueried(true);
     try {
       const res = await kioskService.myAppointments(phone);
       setMine(res.items || []);
     } catch (e: any) {
       setError(e?.message || '查询预约失败');
+      setMine([]);
     } finally {
       setMineLoading(false);
     }
   };
+
+
+  // 展开且已有手机号时，自动拉一次「我的预约」
+  useEffect(() => {
+    if (!open) return;
+    if (!/^1\d{10}$/.test(phone)) return;
+    void loadMine();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在展开/手机号齐时自动查
+  }, [open, phone]);
 
   const submit = async () => {
     if (!day || !selected) {
@@ -303,31 +315,76 @@ const PickupAppointmentCard: React.FC<Props> = ({ defaultPhone, onBindClick }) =
             </button>
           </div>
 
+          {mineQueried && !mineLoading && mine.length === 0 && (
+            <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+              这个手机号暂无有效预约。可在上方选时段提交，或换个手机号再查。
+            </div>
+          )}
+
           {mine.length > 0 && (
             <div className="space-y-2">
-              <div className="text-xs font-medium text-gray-600">我的预约</div>
-              {mine.map((m) => (
-                <div
-                  key={m.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm"
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-medium text-gray-600">我的预约（{mine.length}）</div>
+                <button
+                  type="button"
+                  disabled={mineLoading}
+                  onClick={() => void loadMine()}
+                  className="text-[11px] text-primary hover:underline disabled:opacity-60"
                 >
-                  <div>
-                    <div className="font-medium text-gray-800">
-                      {m.slotDate} {m.slotLabel}
+                  刷新
+                </button>
+              </div>
+              {mine.map((m) => {
+                const tone =
+                  m.status === 'confirmed'
+                    ? 'bg-blue-50 text-blue-700'
+                    : m.status === 'pending'
+                      ? 'bg-amber-50 text-amber-700'
+                      : m.status === 'completed'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : m.status === 'cancelled' || m.status === 'no_show'
+                          ? 'bg-gray-100 text-gray-500'
+                          : 'bg-gray-50 text-gray-600';
+                const tip =
+                  m.status === 'pending'
+                    ? '待店员确认，请留意微信或到店报手机号'
+                    : m.status === 'confirmed'
+                      ? '已确认，请按时到店取件'
+                      : m.status === 'completed'
+                        ? '已完成取件'
+                        : m.status === 'cancelled'
+                          ? '已取消'
+                          : m.status === 'no_show'
+                            ? '未到店'
+                            : m.statusLabel;
+                return (
+                  <div
+                    key={m.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium text-gray-800">
+                        {m.slotDate} {m.slotLabel}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${tone}`}>
+                          {m.statusLabel}
+                        </span>
+                        <span className="text-[11px] text-gray-500">{tip}</span>
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500">{m.statusLabel}</div>
+                    {['pending', 'confirmed'].includes(m.status) && (
+                      <button
+                        type="button"
+                        onClick={() => void cancel(m.id)}
+                        className="shrink-0 text-xs text-gray-500 underline hover:text-danger"
+                      >
+                        取消预约
+                      </button>
+                    )}
                   </div>
-                  {['pending', 'confirmed'].includes(m.status) && (
-                    <button
-                      type="button"
-                      onClick={() => void cancel(m.id)}
-                      className="text-xs text-danger hover:underline"
-                    >
-                      取消
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
