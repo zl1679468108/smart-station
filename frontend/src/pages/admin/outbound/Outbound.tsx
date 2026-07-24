@@ -100,6 +100,7 @@ const ManualOutbound: React.FC = () => {
   const [confirming, setConfirming] = useState<OutboundSearchItem | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const unpaidAutoLoadKey = searchParams.get('unpaid');
+  const trackingAutoKey = (searchParams.get('tracking') || '').trim();
 
   const handleResult = (res: { items?: OutboundSearchItem[] }) => {
     setItems(res.items || []);
@@ -153,15 +154,50 @@ const ManualOutbound: React.FC = () => {
     }
   };
 
-  // 工作台「待收款包裹」深链：/admin/outbound?unpaid=1 自动加载在库待收款
+  // 库存详情/列表深链：/admin/outbound?tracking=运单号 自动按运单查询
   useEffect(() => {
+    if (!trackingAutoKey) return;
+    let cancelled = false;
+    setQueryTab('tracking');
+    void (async () => {
+      try {
+        const res = await outboundService.searchParcels({
+          trackingNumber: trackingAutoKey,
+        });
+        if (cancelled) return;
+        setItems(res.items || []);
+        setResultFilter('all');
+        if (!(res.items || []).length) {
+          notifyError('未找到可出库的包裹');
+        }
+      } catch (e) {
+        if (!cancelled) {
+          notifyError(e instanceof Error ? e.message : '查询失败');
+        }
+      } finally {
+        if (!cancelled) {
+          const next = new URLSearchParams(searchParams);
+          next.delete('tracking');
+          setSearchParams(next, { replace: true });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅响应 tracking 深链
+  }, [trackingAutoKey]);
+
+  // 工作台/交班「待收款」深链：/admin/outbound?unpaid=1 自动加载在库待收款
+  useEffect(() => {
+    if (trackingAutoKey) return; // 运单深链优先
     if (unpaidAutoLoadKey !== '1') return;
     void loadUnpaidParcels();
     const next = new URLSearchParams(searchParams);
     next.delete('unpaid');
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅响应 unpaid=1 深链
-  }, [unpaidAutoLoadKey]);
+  }, [unpaidAutoLoadKey, trackingAutoKey]);
 
   const displayItems = (items || []).filter((it) => {
     if (resultFilter !== 'unpaid') return true;
@@ -259,7 +295,9 @@ const ManualOutbound: React.FC = () => {
 
       {/* 查询表单 */}
       {queryTab === 'phone' && <PhoneSearchView onSubmit={handleResult} />}
-      {queryTab === 'tracking' && <TrackingSearchView onSubmit={handleResult} />}
+      {queryTab === 'tracking' && (
+        <TrackingSearchView onSubmit={handleResult} initialTracking={trackingAutoKey || undefined} />
+      )}
       {queryTab === 'code' && <CodeSearchView onSubmit={handleResult} />}
 
       {/* 查询结果 */}
@@ -373,9 +411,14 @@ const PhoneSearchView: React.FC<{
 // ============ 运单号查询 ============
 const TrackingSearchView: React.FC<{
   onSubmit: (res: { items?: OutboundSearchItem[] }) => void;
-}> = ({ onSubmit }) => {
-  const [trackingNumber, setTrackingNumber] = useState('');
+  initialTracking?: string;
+}> = ({ onSubmit, initialTracking }) => {
+  const [trackingNumber, setTrackingNumber] = useState(initialTracking || '');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (initialTracking) setTrackingNumber(initialTracking);
+  }, [initialTracking]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

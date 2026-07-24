@@ -944,3 +944,13 @@
 | M65.1 | P1 | 工作台待收款深链出库页 | dashboard | done | /admin/outbound?unpaid=1 |
 | M65.2 | P1 | 出库页 URL 自动加载待收款 | outbound | done | unpaid=1 触发 loadUnpaidParcels |
 | M65.3 | P2 | 批量预检结果导出 CSV | inbound batch | done | 运单/拦截/取件码/说明 |
+
+---
+
+## M66 待收款深链闭环（交班/库存 → 出库）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M66.1 | P1 | 交班待收款跳转出库 | shifts | done | unpaid=1 与工作台一致 |
+| M66.2 | P1 | 库存详情/列表去出库收款 | inventory | done | tracking 深链 |
+| M66.3 | P1 | 出库页运单号 URL 自动查询 | outbound | done | ?tracking= 优先于 unpaid |

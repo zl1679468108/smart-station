@@ -291,10 +291,10 @@ const ShiftsPage: React.FC = () => {
                   </p>
                   <button
                     type="button"
-                    onClick={() => navigate('/admin/inventory?collectStatus=unpaid')}
+                    onClick={() => navigate('/admin/outbound?unpaid=1')}
                     className="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-medium text-rose-800 hover:bg-rose-50"
                   >
-                    去查看
+                    去出库收款
                   </button>
                 </div>
               )}
@@ -554,10 +554,10 @@ const ShiftsPage: React.FC = () => {
                 className="mt-2 rounded-md border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-medium text-rose-800 hover:bg-rose-50"
                 onClick={() => {
                   setCloseOpen(false);
-                  navigate('/admin/inventory?collectStatus=unpaid');
+                  navigate('/admin/outbound?unpaid=1');
                 }}
               >
-                查看待收款包裹
+                去出库收款
               </button>
             </div>
           )}

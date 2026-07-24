@@ -428,12 +428,30 @@ const Inventory: React.FC = () => {
                     {item.inboundAt ? new Date(item.inboundAt).toLocaleString('zh-CN') : '-'}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <button
-                      onClick={() => navigate(`/admin/inventory/${item.id}`)}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      详情
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      {item.collectStatus === 'unpaid' &&
+                        Number(item.collectDueAmount || 0) > 0 &&
+                        (item.status === 'in_stock' || item.status === 'overdue') && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              navigate(
+                                `/admin/outbound?tracking=${encodeURIComponent(item.trackingNumber)}`,
+                              )
+                            }
+                            className="text-xs font-medium text-rose-700 hover:underline"
+                          >
+                            收款出库
+                          </button>
+                        )}
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/admin/inventory/${item.id}`)}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        详情
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

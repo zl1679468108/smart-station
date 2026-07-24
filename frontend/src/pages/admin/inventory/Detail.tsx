@@ -265,6 +265,26 @@ const ParcelDetailPage: React.FC = () => {
             />
           )}
         </div>
+        {detail.collectStatus === 'unpaid' &&
+          Number(detail.collectDueAmount || 0) > 0 &&
+          (detail.status === 'in_stock' || detail.status === 'overdue') && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-rose-100 bg-rose-50 px-3 py-2.5">
+              <p className="text-xs text-rose-800">
+                待收款 ¥{Number(detail.collectDueAmount || 0).toFixed(2)}，取件时需当面收妥
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    `/admin/outbound?tracking=${encodeURIComponent(detail.trackingNumber)}`,
+                  )
+                }
+                className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700"
+              >
+                去出库收款
+              </button>
+            </div>
+          )}
         {detail.note && (
           <div className="mt-3 border-t border-gray-100 pt-3">
             <div className="mb-1 text-xs text-gray-500">备注</div>
