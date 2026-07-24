@@ -32,6 +32,10 @@ export interface DashboardTodo {
   financeMonth?: string;
   /** 在库待收款（到付/代收货款）件数 */
   collectUnpaid?: number;
+  /** 今日预约（待确认+已确认） */
+  appointmentToday?: number;
+  /** 今日待确认预约 */
+  appointmentPending?: number;
 }
 
 /** 今日到件通知触达（工作台运营卡片） */

@@ -142,7 +142,8 @@ const PickupAppointmentCard: React.FC<Props> = ({ defaultPhone }) => {
               预约成功：{success.slotDate} {success.slotLabel}（{success.statusLabel}）
               <br />
               <span className="text-xs text-emerald-700">
-                请带手机号到店；取件码仍以查件/货架为准。
+                {success.notifyHint ||
+                  '请带手机号到店；取件码仍以查件/货架为准。'}
               </span>
             </div>
           )}

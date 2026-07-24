@@ -104,12 +104,14 @@ export class StatsService {
     const exception = exceptionRes.count || 0;
 
     // 寄件待办 + 财务未对账 + 今日到件通知触达（并行，失败不拖垮工作台）
-    const [shippingTodo, financeTodo, notify, collectUnpaid] = await Promise.all([
-      this.getShippingTodo(stationId),
-      this.getFinanceTodo(stationId),
-      this.getNotifyReach(stationId, todayStart, todayEnd),
-      this.getCollectUnpaid(stationId),
-    ]);
+    const [shippingTodo, financeTodo, notify, collectUnpaid, appointmentTodo] =
+      await Promise.all([
+        this.getShippingTodo(stationId),
+        this.getFinanceTodo(stationId),
+        this.getNotifyReach(stationId, todayStart, todayEnd),
+        this.getCollectUnpaid(stationId),
+        this.getAppointmentTodo(stationId),
+      ]);
 
     return {
       today: {
@@ -132,6 +134,8 @@ export class StatsService {
         financeUnreconciled: financeTodo.unreconciled,
         financeMonth: financeTodo.month,
         collectUnpaid,
+        appointmentToday: appointmentTodo.today,
+        appointmentPending: appointmentTodo.pending,
       },
       notify,
     };
@@ -167,6 +171,48 @@ export class StatsService {
   }
 
   /** 在库待收款件数（到付/代收货款） */
+
+
+  private beijingToday(): string {
+    const now = new Date(Date.now() + 8 * 3600 * 1000);
+    return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(
+      now.getUTCDate(),
+    ).padStart(2, '0')}`;
+  }
+
+  /** 今日预约：总数 + 待确认/已确认（店员待接待） */
+  private async getAppointmentTodo(stationId: string) {
+    const empty = { today: 0, pending: 0 };
+    try {
+      const today = this.beijingToday();
+      const { data, error } = await this.supabase
+        .getClient()
+        .from('ss_pickup_appointments')
+        .select('id, status')
+        .eq('station_id', stationId)
+        .eq('slot_date', today)
+        .in('status', ['pending', 'confirmed']);
+      if (error) {
+        const msg = String(error.message || '');
+        if (msg.includes('ss_pickup_appointments') || msg.includes('does not exist')) {
+          return empty;
+        }
+        // eslint-disable-next-line no-console
+        console.warn('[Stats] 预约待办查询失败:', msg);
+        return empty;
+      }
+      const rows = data || [];
+      return {
+        today: rows.length,
+        pending: rows.filter((r: any) => r.status === 'pending').length,
+      };
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[Stats] 预约待办异常:', e instanceof Error ? e.message : e);
+      return empty;
+    }
+  }
+
   private async getCollectUnpaid(stationId: string): Promise<number> {
     try {
       const { count, error } = await this.supabase

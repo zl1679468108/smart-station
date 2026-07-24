@@ -337,6 +337,25 @@ const Dashboard: React.FC = () => {
             </button>
             <button
               type="button"
+              onClick={() => navigate('/admin/appointments')}
+              className="flex w-full flex-col rounded-md bg-violet-50 px-3 py-3 text-left hover:bg-violet-100/80"
+            >
+              <div className="flex w-full items-center justify-between">
+                <span className="text-sm text-gray-600">今日预约到店</span>
+                <span className="text-lg font-bold text-violet-700">
+                  {todo.appointmentToday ?? 0}
+                </span>
+              </div>
+              {(todo.appointmentToday ?? 0) === 0 ? (
+                <span className="mt-1 text-xs text-gray-400">今日暂无待接待预约</span>
+              ) : (
+                <span className="mt-1 text-xs text-violet-700/80">
+                  待确认 {todo.appointmentPending ?? 0} 条，点击处理
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
               onClick={() => navigate('/admin/shifts')}
               className="flex w-full flex-col rounded-md bg-slate-50 px-3 py-3 text-left hover:bg-slate-100/80"
             >

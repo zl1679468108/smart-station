@@ -983,6 +983,8 @@ export class AdminService {
       overdue_remind: '滞留提醒',
       kiosk_code: '查件验证码',
       bind_test: '绑定测试',
+      appointment_created: '预约到店',
+      appointment_confirmed: '预约确认',
     };
     return map[code] || code;
   }

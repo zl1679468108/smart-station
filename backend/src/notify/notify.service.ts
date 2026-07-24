@@ -179,6 +179,64 @@ export class NotifyService {
     });
   }
 
+  /** 客户提交预约到店 */
+  async sendAppointmentCreated(opts: {
+    stationName: string;
+    phone: string;
+    recipientName?: string | null;
+    slotDate: string;
+    slotLabel: string;
+    stationId?: string;
+  }): Promise<NotifyDispatchResult> {
+    const content = `【${opts.stationName}】您已预约 ${opts.slotDate} ${opts.slotLabel} 到店取件。请按时带手机号到店；取件码请在查件页或货架查看。`;
+    const publicContent = `【${opts.stationName}·预约到店】收件人 ${this.maskPhone(
+      opts.phone,
+    )} 预约 ${opts.slotDate} ${opts.slotLabel} 到店。取件码不在本群公示。`;
+    return this.dispatch({
+      phone: opts.phone,
+      recipientName: opts.recipientName,
+      title: `预约到店 · ${opts.stationName}`,
+      content,
+      publicContent,
+      templateCode: 'appointment_created',
+      stationId: opts.stationId,
+      params: {
+        slotDate: opts.slotDate,
+        slotLabel: opts.slotLabel,
+        stationName: opts.stationName,
+      },
+    });
+  }
+
+  /** 店员确认预约 */
+  async sendAppointmentConfirmed(opts: {
+    stationName: string;
+    phone: string;
+    recipientName?: string | null;
+    slotDate: string;
+    slotLabel: string;
+    stationId?: string;
+  }): Promise<NotifyDispatchResult> {
+    const content = `【${opts.stationName}】您的预约已确认：${opts.slotDate} ${opts.slotLabel}，请按时到店取件。取件码仍以查件/货架为准。`;
+    const publicContent = `【${opts.stationName}·预约确认】收件人 ${this.maskPhone(
+      opts.phone,
+    )} 的 ${opts.slotDate} ${opts.slotLabel} 到店预约已确认。`;
+    return this.dispatch({
+      phone: opts.phone,
+      recipientName: opts.recipientName,
+      title: `预约确认 · ${opts.stationName}`,
+      content,
+      publicContent,
+      templateCode: 'appointment_confirmed',
+      stationId: opts.stationId,
+      params: {
+        slotDate: opts.slotDate,
+        slotLabel: opts.slotLabel,
+        stationName: opts.stationName,
+      },
+    });
+  }
+
   /**
    * 扇出：
    * 1) ops console → 完整
@@ -309,6 +367,7 @@ export class NotifyService {
       customerPushed,
       channelResults: results,
       staffMessage: this.buildStaffMessage({
+        templateCode: payload.templateCode,
         customerBound,
         customerPushed,
         customerChannels,
@@ -318,6 +377,7 @@ export class NotifyService {
   }
 
   private buildStaffMessage(opts: {
+    templateCode?: string;
     customerBound: boolean;
     customerPushed: boolean;
     customerChannels: string[];
@@ -329,12 +389,24 @@ export class NotifyService {
     if (wecom?.ok && wecom.mode === 'skipped_private') parts.push('验证码未进群');
     if (wecom && !wecom.ok) parts.push('通知群发送失败');
 
+    const isAppt =
+      opts.templateCode === 'appointment_created' ||
+      opts.templateCode === 'appointment_confirmed';
+
     if (!opts.customerBound) {
-      parts.push('客户未绑定微信，取件码未私信（请提醒到店查件或绑定通知）');
+      parts.push(
+        isAppt
+          ? '客户未绑定微信，预约提醒未私信（客户可在查件页自查预约）'
+          : '客户未绑定微信，取件码未私信（请提醒到店查件或绑定通知）',
+      );
     } else if (opts.customerPushed) {
-      parts.push('取件码已私信到客户微信');
+      parts.push(isAppt ? '预约提醒已私信到客户微信' : '取件码已私信到客户微信');
     } else {
-      parts.push('客户已绑定但私信发送失败，请核对绑定或让客户现场查码');
+      parts.push(
+        isAppt
+          ? '客户已绑定但预约提醒发送失败，请核对绑定'
+          : '客户已绑定但私信发送失败，请核对绑定或让客户现场查码',
+      );
     }
     return parts.join('；');
   }

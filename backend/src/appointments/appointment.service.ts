@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
+import { NotifyService } from '../notify/notify.service';
 import {
   AppointmentListQueryDto,
   CreateAppointmentDto,
@@ -34,7 +35,10 @@ const DAYS_AHEAD = 3;
  */
 @Injectable()
 export class AppointmentService {
-  constructor(@Inject(SupabaseService) private readonly supabase: SupabaseService) {}
+  constructor(
+    @Inject(SupabaseService) private readonly supabase: SupabaseService,
+    @Inject(NotifyService) private readonly notify: NotifyService,
+  ) {}
 
   /** 解析驿站 ID：显式优先，否则第一个 active */
   async resolveStationId(stationId?: string): Promise<string> {
@@ -127,7 +131,9 @@ export class AppointmentService {
   /** 客户提交预约 */
   async createPublic(dto: CreateAppointmentDto, stationId?: string) {
     const sid = await this.resolveStationId(stationId);
-    return this.createInternal(sid, dto, 'query');
+    const item = await this.createInternal(sid, dto, 'query');
+    const notifyHint = await this.notifyAppointmentCreated(sid, item);
+    return { ...item, notifyHint };
   }
 
   /** 内部创建 */
@@ -332,10 +338,88 @@ export class AppointmentService {
       )
       .maybeSingle();
     if (uErr) throw new Error(`更新预约失败: ${uErr.message}`);
-    return this.mapRow(data, false);
+    if (!data) throw new Error('更新预约失败：未返回数据');
+    const mapped = this.mapRow(data, false);
+    if (dto.status === 'confirmed') {
+      // 失败不阻断状态更新
+      try {
+        await this.notifyAppointmentConfirmed(stationId, {
+          recipientPhone: String(data.recipient_phone || mapped.recipientPhone),
+          recipientName: mapped.recipientName,
+          slotDate: mapped.slotDate,
+          slotLabel: mapped.slotLabel,
+        });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[Appointment] 确认通知失败:', e instanceof Error ? e.message : e);
+      }
+    }
+    return mapped;
   }
 
   // ---------- helpers ----------
+
+
+  private async getStationName(stationId: string): Promise<string> {
+    const { data } = await this.supabase
+      .getClient()
+      .from('ss_stations')
+      .select('name')
+      .eq('id', stationId)
+      .maybeSingle();
+    return (data?.name as string) || '智能快递驿站';
+  }
+
+  private async notifyAppointmentCreated(
+    stationId: string,
+    item: {
+      recipientPhone: string;
+      recipientName: string | null;
+      slotDate: string;
+      slotLabel: string;
+    },
+  ): Promise<string | null> {
+    try {
+      const stationName = await this.getStationName(stationId);
+      const res = await this.notify.sendAppointmentCreated({
+        stationName,
+        phone: item.recipientPhone,
+        recipientName: item.recipientName,
+        slotDate: item.slotDate,
+        slotLabel: item.slotLabel,
+        stationId,
+      });
+      if (res.customerPushed) return '预约提醒已发到您绑定的微信，请注意查收';
+      if (!res.customerBound) {
+        return '预约已登记。绑定微信通知后可自动收提醒；也可在本页「查我的预约」查看';
+      }
+      return '预约已登记，微信提醒发送失败，请以本页预约记录为准';
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[Appointment] 创建通知失败:', e instanceof Error ? e.message : e);
+      return '预约已登记（提醒通道暂不可用，请记住时段到店）';
+    }
+  }
+
+  private async notifyAppointmentConfirmed(
+    stationId: string,
+    item: {
+      recipientPhone: string;
+      recipientName: string | null;
+      slotDate: string;
+      slotLabel: string;
+    },
+  ): Promise<void> {
+    const stationName = await this.getStationName(stationId);
+    await this.notify.sendAppointmentConfirmed({
+      stationName,
+      phone: item.recipientPhone,
+      recipientName: item.recipientName,
+      slotDate: item.slotDate,
+      slotLabel: item.slotLabel,
+      stationId,
+    });
+  }
 
   private assertValidSlot(slotDate: string, slotStart: string, slotEnd: string) {
     const today = this.beijingToday();

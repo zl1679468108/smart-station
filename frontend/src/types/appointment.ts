@@ -26,6 +26,8 @@ export interface AppointmentItem {
   handledAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** 创建后通知提示（客户可见白话） */
+  notifyHint?: string | null;
 }
 
 export interface AppointmentSlot {
