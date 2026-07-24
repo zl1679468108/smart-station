@@ -1424,3 +1424,10 @@
 | M129.2 | P0 | 交班页/弹窗「补发私信失败」入口 | shifts | done | |
 | M129.3 | P0 | 批量入库拆分私信失败/未绑定筛选与补发 | inbound batch | done | 回写 notifySummary |
 
+## M130 滞留失败再发 + 出库/扫描失败入口（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M130.1 | P0 | 滞留触达回执支持失败 ids 一键再发 | overdue | done | |
+| M130.2 | P0 | 通知触达筛选支持 template=overdue_remind/all | NotifyTab | done | |
+| M130.3 | P1 | 出库成功「客户没收到码」+ 扫描机补发入口 | outbound/scan | done | |
+

@@ -134,10 +134,18 @@ const NotifyTab: React.FC = () => {
       if (logFilter === 'overdue') logOpts.templateCode = 'overdue_remind';
 
       // 触达筛选：默认「时间窗 + 到件」，便于从工作台深链复盘
+      // URL ?template=overdue_remind|all 可覆盖（滞留失败复盘）
       if (REACH_FILTERS.includes(logFilter)) {
         logOpts.reach = logFilter;
         logOpts.days = rangeDays;
-        logOpts.templateCode = 'inbound_notice';
+        const tpl = (searchParams.get('template') || '').trim();
+        if (tpl === 'all') {
+          // 不限模板：到件 + 滞留等
+        } else if (tpl === 'overdue_remind' || tpl === 'inbound_notice') {
+          logOpts.templateCode = tpl;
+        } else {
+          logOpts.templateCode = 'inbound_notice';
+        }
       } else if (logFilter === 'today') {
         logOpts.days = 1;
       } else if (logFilter === 'inbound' || logFilter === 'overdue') {
@@ -170,7 +178,14 @@ const NotifyTab: React.FC = () => {
       if (logFilter === 'overdue') summaryOpts.templateCode = 'overdue_remind';
       if (REACH_FILTERS.includes(logFilter)) {
         summaryOpts.reach = logFilter;
-        summaryOpts.templateCode = 'inbound_notice';
+        const tpl = (searchParams.get('template') || '').trim();
+        if (tpl === 'all') {
+          // no template
+        } else if (tpl === 'overdue_remind' || tpl === 'inbound_notice') {
+          summaryOpts.templateCode = tpl;
+        } else {
+          summaryOpts.templateCode = 'inbound_notice';
+        }
       }
       if (logFilter === 'failed' && searchParams.get('today') === '1') {
         summaryOpts.days = 1;

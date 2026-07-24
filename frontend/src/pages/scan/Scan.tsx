@@ -9,7 +9,11 @@ import type { OutboundResult } from '@/types/outbound';
 import Icon from '@/components/ui/Icon';
 import { useDashboard } from '@/hooks/useDashboardData';
 import { printOutboundReceipt } from '@/utils/printPickupSlip';
+import { useNavigate } from 'react-router-dom';
 import OutboundBindNudge, { type OutboundBindState } from '@/components/OutboundBindNudge';
+import { buildBindShareScript } from '@/utils/staffScripts';
+import { copyText } from '@/utils/stationVisit';
+import { notifyError, notifySuccess } from '@/utils/notification';
 
 type Phase = 'scan' | 'submitting' | 'success' | 'error';
 
@@ -17,6 +21,7 @@ type Phase = 'scan' | 'submitting' | 'success' | 'error';
 // 扫码枪作为键盘输入设备会向 input 注入文本并回车，因此输入框是核心交互
 // 摄像头 BarcodeDetector 作为可选增强（部分浏览器支持）
 const Scan: React.FC = () => {
+  const navigate = useNavigate();
   const { stations, currentStationId } = useAuth();
   const stationName =
     stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
@@ -331,6 +336,36 @@ const Scan: React.FC = () => {
               : ''}
             {notify.customerPushFailed > 0 ? ` · 私信失败 ${notify.customerPushFailed}` : ''}
           </p>
+          {(notify.customerUnbound > 0 || notify.customerPushFailed > 0) && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {notify.customerPushFailed > 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate('/admin/system?tab=notify&filter=push_failed&days=1')
+                  }
+                  className="rounded-md bg-amber-500 px-2 py-1 text-[11px] font-semibold text-black hover:bg-amber-400"
+                >
+                  补发失败私信
+                </button>
+              )}
+              {notify.customerUnbound > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void (async () => {
+                      const ok = await copyText(buildBindShareScript());
+                      if (ok) notifySuccess('已复制绑定话术');
+                      else notifyError('复制失败');
+                    })();
+                  }}
+                  className="rounded-md bg-white/90 px-2 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-white"
+                >
+                  复制绑定话术
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

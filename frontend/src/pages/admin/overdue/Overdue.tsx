@@ -71,7 +71,10 @@ const OverduePage: React.FC = () => {
     staffMessage: string;
     /** 单件提醒时的手机号，便于按人引导绑定 */
     samplePhone?: string | null;
+    /** 私信失败可再发的包裹 id */
+    failedIds?: string[];
   } | null>(null);
+  const [retryingFailed, setRetryingFailed] = useState(false);
   const pageSize = 20;
   const fromDashboard = searchParams.get('from') === 'dashboard';
 
@@ -157,6 +160,8 @@ const OverduePage: React.FC = () => {
         failed: r.customerBound && !r.customerPushed ? 1 : 0,
         staffMessage: r.staffMessage || '提醒已发送',
         samplePhone: phone,
+        failedIds:
+          r.customerBound && !r.customerPushed ? [id] : [],
       });
       await invalidateOverdue();
     } catch (e: any) {
@@ -213,6 +218,14 @@ const onBatchRemind = async () => {
     try {
       const r = await overdueService.remindOverdueBatch(remindableIds);
       notifySuccess(r.staffMessage || '批量提醒完成');
+      const failedIds = (r.results || [])
+        .filter((x) => x.ok && x.customerBound && !x.customerPushed)
+        .map((x) => x.id)
+        .concat(
+          (r.results || [])
+            .filter((x) => !x.ok)
+            .map((x) => x.id),
+        );
       setLastReach({
         source: 'batch',
         title: `本页批量提醒触达（${r.total} 条）`,
@@ -220,12 +233,63 @@ const onBatchRemind = async () => {
         customerUnbound: r.unbound,
         failed: r.failed,
         staffMessage: r.staffMessage || '批量提醒完成',
+        failedIds: [...new Set(failedIds)],
       });
       await invalidateOverdue();
     } catch (e: any) {
       notifyError(e?.message || '批量提醒失败');
     } finally {
       setBatchReminding(false);
+    }
+  };
+
+  const onRetryFailed = async () => {
+    const ids = (lastReach?.failedIds || []).filter(Boolean).slice(0, 30);
+    if (ids.length === 0 || retryingFailed || batchReminding || remindingId) return;
+    const ok = window.confirm(
+      `对 ${ids.length} 条私信失败再发滞留提醒？\n\n会走自动短重试；成功后客户微信会收到取件码。`,
+    );
+    if (!ok) return;
+    setRetryingFailed(true);
+    try {
+      if (ids.length === 1) {
+        const r = await overdueService.remindOverdue(ids[0]);
+        const phone =
+          items.find((it) => it.id === ids[0])?.recipientPhone ||
+          lastReach?.samplePhone ||
+          null;
+        setLastReach({
+          source: 'single',
+          title: '失败再发触达',
+          customerPushed: r.customerPushed ? 1 : 0,
+          customerUnbound: r.customerBound ? 0 : 1,
+          failed: r.customerBound && !r.customerPushed ? 1 : 0,
+          staffMessage: r.staffMessage || '已再发',
+          samplePhone: phone,
+          failedIds: r.customerBound && !r.customerPushed ? [ids[0]] : [],
+        });
+        notifySuccess(r.staffMessage || '已再发');
+      } else {
+        const r = await overdueService.remindOverdueBatch(ids);
+        const failedIds = (r.results || [])
+          .filter((x) => (x.ok && x.customerBound && !x.customerPushed) || !x.ok)
+          .map((x) => x.id);
+        setLastReach({
+          source: 'batch',
+          title: `失败再发触达（${r.total} 条）`,
+          customerPushed: r.pushed,
+          customerUnbound: r.unbound,
+          failed: r.failed,
+          staffMessage: r.staffMessage || '再发完成',
+          failedIds: [...new Set(failedIds)],
+        });
+        notifySuccess(r.staffMessage || '再发完成');
+      }
+      await invalidateOverdue();
+    } catch (e: any) {
+      notifyError(e?.message || '再发失败');
+    } finally {
+      setRetryingFailed(false);
     }
   };
 
@@ -310,7 +374,11 @@ const onBatchRemind = async () => {
           {(lastReach.customerUnbound > 0 || (lastReach.failed || 0) > 0) && (
             <div className="mt-3 space-y-2 rounded-md border border-orange-200 bg-orange-50/80 px-3 py-2.5">
               <p className="text-[11px] font-semibold text-orange-950">
-                催取时顺便绑：未绑定客户收不到微信私信
+                {(lastReach.failed || 0) > 0 && lastReach.customerUnbound === 0
+                  ? '私信失败优先：先点「一键再发失败」，客户已绑定只需重试'
+                  : (lastReach.failed || 0) > 0
+                    ? '失败先再发；未绑定请当面报码并引导绑定'
+                    : '催取时顺便绑：未绑定客户收不到微信私信'}
               </p>
               <ol className="list-decimal space-y-0.5 pl-4 text-[11px] leading-relaxed text-orange-900">
                 <li>当面报取件码（可复制当面话术，勿发群）</li>
@@ -318,6 +386,31 @@ const onBatchRemind = async () => {
                 <li>绑定后可再发滞留提醒，取件码会私信到微信</li>
               </ol>
               <div className="flex flex-wrap gap-1.5">
+                {(lastReach.failed || 0) > 0 && (lastReach.failedIds || []).length > 0 && (
+                  <button
+                    type="button"
+                    disabled={retryingFailed || batchReminding || Boolean(remindingId)}
+                    onClick={() => void onRetryFailed()}
+                    className="min-h-[36px] rounded-md bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+                  >
+                    {retryingFailed
+                      ? '再发中…'
+                      : `一键再发失败（${(lastReach.failedIds || []).length}）`}
+                  </button>
+                )}
+                {(lastReach.failed || 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        '/admin/system?tab=notify&filter=push_failed&days=1&template=overdue_remind',
+                      )
+                    }
+                    className="min-h-[36px] rounded-md border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-50"
+                  >
+                    看滞留私信失败
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {

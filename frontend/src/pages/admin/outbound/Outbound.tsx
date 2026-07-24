@@ -427,6 +427,16 @@ const ManualOutbound: React.FC = () => {
               )}
               <button
                 type="button"
+                onClick={() =>
+                  navigate('/admin/system?tab=notify&filter=push_failed&days=1')
+                }
+                className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
+                title="客户说没收到取件码时，去补发今日私信失败"
+              >
+                客户没收到码？
+              </button>
+              <button
+                type="button"
                 onClick={() => setLastReceipt(null)}
                 className="rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs text-emerald-900 hover:bg-emerald-100/50"
               >
