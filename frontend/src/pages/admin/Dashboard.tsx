@@ -4,6 +4,7 @@ import type { DashboardData, DashboardHourly } from '@/types/stats';
 import type { Shelf } from '@/types/admin';
 import { useShelves } from '@/hooks/useDictionary';
 import { useDashboard, useDashboardEvents } from '@/hooks/useDashboardData';
+import { useStatsBindConversion } from '@/hooks/useStatsReport';
 import type { DashboardEvent } from '@/types/stats';
 import { useLayoutConfig } from '@/hooks/useSystemAdmin';
 import { useAuth } from '@/utils/auth';
@@ -39,6 +40,8 @@ const Dashboard: React.FC = () => {
     stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const { data: shelves = [] } = useShelves();
   const { data, isLoading, error } = useDashboard();
+  const bindConvQuery = useStatsBindConversion(7);
+  const bindConv = bindConvQuery.data ?? null;
   const {
     data: recentEvents = [],
     isLoading: eventsLoading,
@@ -499,6 +502,44 @@ const Dashboard: React.FC = () => {
                 近3日未绑定跟进
               </button>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* 近7日绑定转化速览 */}
+      {bindConv && (
+        <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-4 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <div className="text-sm font-medium text-gray-800">近7日绑定转化</div>
+              <p className="mt-0.5 text-xs text-gray-600">
+                到件 {bindConv.summary.uniqueRecipients} 人 · 新绑 {bindConv.summary.newBindings} 人 · 人数覆盖{' '}
+                {bindConv.summary.coverRate}%
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/admin/stats')}
+                className="rounded-md border border-emerald-200 bg-white px-2.5 py-1 text-[11px] font-medium text-emerald-800 hover:bg-emerald-50"
+              >
+                看转化明细
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  navigate('/admin/system?tab=notify&filter=unbound&view=byPhone&days=3')
+                }
+                className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+              >
+                近3日未绑定
+              </button>
+            </div>
+          </div>
+          {bindConv.summary.coverRate < 70 && (
+            <p className="mt-2 text-[11px] text-emerald-900/80">
+              覆盖还不高：入库/取件时顺带引导客户绑定，绑定后可自动收码。
+            </p>
           )}
         </div>
       )}

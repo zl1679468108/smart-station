@@ -1257,3 +1257,10 @@
 | M104.2 | P1 | 通知页时间窗与只看未绑定 | NotifyTab | done | URL deep link |
 | M104.3 | P1 | 工作台/统计近3日跟进入口 | dashboard/stats | done | 复制/导出/深链 |
 
+## M105 绑定转化轻报表（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M105.1 | P0 | GET /api/stats/bind-conversion | stats-report | done | 到件人数/新绑/覆盖 按日 |
+| M105.2 | P1 | 统计页绑定转化卡 | stats UI | done | 随统计窗口 7/30/90 |
+| M105.3 | P2 | 工作台近7日转化速览 | dashboard | done | 深链统计/未绑定跟进 |
+

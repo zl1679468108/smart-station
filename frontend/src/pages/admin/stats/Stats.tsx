@@ -6,6 +6,7 @@ import type {
   FunnelResult,
   RetentionResult,
   PeakHoursResult,
+  NotifyBindConversionResult,
 } from '@/types/stats-report';
 import type { DashboardNotify } from '@/types/stats';
 import {
@@ -13,6 +14,7 @@ import {
   useStatsFunnel,
   useStatsRetention,
   useStatsPeakHours,
+  useStatsBindConversion,
 } from '@/hooks/useStatsReport';
 import { useDashboard } from '@/hooks/useDashboardData';
 import * as adminService from '@/services/admin';
@@ -50,15 +52,21 @@ const StatsPage: React.FC = () => {
   const funnelQuery = useStatsFunnel(days);
   const retentionQuery = useStatsRetention(days);
   const peakQuery = useStatsPeakHours(days);
+  const bindDays = days === 7 || days === 30 || days === 90 ? days : 7;
+  const bindQuery = useStatsBindConversion(bindDays);
   const dashboardQuery = useDashboard();
 
   const trend = trendQuery.data ?? null;
   const funnel = funnelQuery.data ?? null;
   const retention = retentionQuery.data ?? null;
   const peak = peakQuery.data ?? null;
+  const bindConv: NotifyBindConversionResult | null = bindQuery.data ?? null;
   const notifyToday: DashboardNotify | null = dashboardQuery.data?.notify ?? null;
   const rangeLoading =
-    funnelQuery.isPending || retentionQuery.isPending || peakQuery.isPending;
+    funnelQuery.isPending ||
+    retentionQuery.isPending ||
+    peakQuery.isPending ||
+    bindQuery.isPending;
 
   const pushRate =
     notifyToday && notifyToday.inboundNotices > 0
@@ -158,7 +166,7 @@ const StatsPage: React.FC = () => {
     <div className="w-full space-y-4">
       <PageHeader
         title="数据统计"
-        description="看清入库出库走势、取件转化、滞留与高峰；今日触达可直接跟进未绑定客户"
+        description="看清入库出库走势、绑定转化、滞留与高峰；今日触达可直接跟进未绑定客户"
       />
 
       {/* 今日到件触达（运营） */}
@@ -338,6 +346,130 @@ const StatsPage: React.FC = () => {
           </>
         ) : (
           <p className="mt-3 text-xs text-gray-500">暂无今日触达数据</p>
+        )}
+      </section>
+
+      {/* 绑定转化（运营） */}
+      <section className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-medium text-gray-800">绑定转化</h2>
+            <p className="mt-0.5 text-[11px] text-gray-600">
+              近 {bindDays} 天：到件人数 → 新绑人数 → 私信覆盖（看引导绑定有没有用）
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                navigate('/admin/system?tab=notify&filter=unbound&view=byPhone&days=3')
+              }
+              className="rounded-md border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-100"
+            >
+              近3日未绑定跟进
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/system?tab=notify')}
+              className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
+            >
+              打开通知记录
+            </button>
+          </div>
+        </div>
+
+        {bindQuery.isPending && !bindConv ? (
+          <p className="mt-3 text-xs text-gray-400">加载中…</p>
+        ) : bindConv ? (
+          <>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="rounded-lg bg-gray-50 px-3 py-2">
+                <div className="text-[11px] text-gray-500">到件人数</div>
+                <div className="text-lg font-semibold text-gray-800">
+                  {bindConv.summary.uniqueRecipients}
+                </div>
+                <div className="text-[10px] text-gray-400">
+                  到件通知 {bindConv.summary.inboundNotices} 次
+                </div>
+              </div>
+              <div className="rounded-lg bg-emerald-50 px-3 py-2">
+                <div className="text-[11px] text-emerald-700">窗口新绑</div>
+                <div className="text-lg font-semibold text-emerald-800">
+                  {bindConv.summary.newBindings}
+                </div>
+                <div className="text-[10px] text-emerald-700/80">
+                  新绑率 {bindConv.summary.bindRate}% · 当前已绑{' '}
+                  {bindConv.summary.activeBindings}
+                </div>
+              </div>
+              <div className="rounded-lg bg-sky-50 px-3 py-2">
+                <div className="text-[11px] text-sky-700">人数覆盖</div>
+                <div className="text-lg font-semibold text-sky-800">
+                  {bindConv.summary.coverRate}%
+                </div>
+                <div className="text-[10px] text-sky-700/80">
+                  {bindConv.summary.uniquePushedRecipients}/
+                  {bindConv.summary.uniqueRecipients} 人收到私信
+                </div>
+              </div>
+              <div className="rounded-lg bg-orange-50 px-3 py-2">
+                <div className="text-[11px] text-orange-700">未绑定到件</div>
+                <div className="text-lg font-semibold text-orange-800">
+                  {bindConv.summary.customerUnbound}
+                </div>
+                <div className="text-[10px] text-orange-700/80">
+                  件次私信率 {bindConv.summary.pushRate}%
+                </div>
+              </div>
+            </div>
+
+            <p className="mt-3 text-[11px] text-gray-500">
+              {bindConv.summary.coverRate >= 70
+                ? '覆盖不错：继续在入库/取件时顺带引导绑定即可。'
+                : bindConv.summary.newBindings > 0
+                  ? '已有客户绑定，但覆盖仍偏低：优先把近几日未绑定客户当面报码并引导绑定。'
+                  : '窗口内几乎没有新绑定：建议在查件结果页和入库成功后更强引导「绑定后自动收码」。'}
+            </p>
+
+            <div className="mt-3 overflow-x-auto rounded-lg border border-gray-100">
+              <table className="min-w-full text-left text-xs">
+                <thead className="bg-gray-50 text-gray-500">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">日期</th>
+                    <th className="px-3 py-2 font-medium">到件人数</th>
+                    <th className="px-3 py-2 font-medium">新绑</th>
+                    <th className="px-3 py-2 font-medium">人数覆盖</th>
+                    <th className="px-3 py-2 font-medium">件次私信率</th>
+                    <th className="px-3 py-2 font-medium">未绑定</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...bindConv.points].reverse().map((p) => (
+                    <tr key={p.date} className="border-t border-gray-100">
+                      <td className="px-3 py-1.5 text-gray-700">{p.date.slice(5)}</td>
+                      <td className="px-3 py-1.5 text-gray-800">{p.uniqueRecipients}</td>
+                      <td className="px-3 py-1.5 text-emerald-700">{p.newBindings}</td>
+                      <td className="px-3 py-1.5">
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className="h-full rounded-full bg-sky-500"
+                              style={{ width: `${Math.min(100, p.coverRate)}%` }}
+                            />
+                          </div>
+                          <span className="text-gray-700">{p.coverRate}%</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5 text-gray-700">{p.pushRate}%</td>
+                      <td className="px-3 py-1.5 text-orange-700">{p.customerUnbound}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <p className="mt-3 text-xs text-gray-500">暂无绑定转化数据</p>
         )}
       </section>
 

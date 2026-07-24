@@ -7,6 +7,7 @@ import { SupabaseService } from '../supabase/supabase.service';
  * - 转化漏斗（入库 → 出库 → 滞留 → 退回）
  * - 滞留率（总体 + 按快递公司）
  * - 取件高峰（8:00-22:00 出库小时分布）
+ * - 绑定转化（到件人数 → 新绑 → 私信覆盖）
  *
  * 说明：数据库存 UTC，服务端时区为北京时间，Date.getHours()/getDay() 即北京时间。
  * 所有查询按 station_id 隔离。
@@ -256,4 +257,221 @@ export class StatsReportService {
       weekdays,
     };
   }
+
+  /**
+   * 绑定转化轻报表：窗口内到件通知 → 去重人数 → 新绑人数 → 私信覆盖
+   * 用于看「引导绑定」话术有没有效果（白话运营指标）。
+   */
+  async getNotifyBindConversion(stationId: string, days: number) {
+    const safeDays = Math.min(Math.max(Math.floor(days) || 7, 1), 30);
+    const from = this.startOfDay(new Date());
+    from.setDate(from.getDate() - (safeDays - 1));
+    const fromIso = from.toISOString();
+
+    type DayPoint = {
+      date: string;
+      inboundNotices: number;
+      customerPushed: number;
+      customerUnbound: number;
+      customerPushFailed: number;
+      uniqueRecipients: number;
+      uniquePushedRecipients: number;
+      newBindings: number;
+      pushRate: number;
+      coverRate: number;
+    };
+
+    const points: DayPoint[] = [];
+    const index: Record<string, number> = {};
+    const dayPhones: Array<Set<string>> = [];
+    const dayPushedPhones: Array<Set<string>> = [];
+    const cursor = new Date(from);
+    for (let i = 0; i < safeDays; i++) {
+      const label = this.fmtDate(cursor);
+      index[label] = points.length;
+      points.push({
+        date: label,
+        inboundNotices: 0,
+        customerPushed: 0,
+        customerUnbound: 0,
+        customerPushFailed: 0,
+        uniqueRecipients: 0,
+        uniquePushedRecipients: 0,
+        newBindings: 0,
+        pushRate: 0,
+        coverRate: 0,
+      });
+      dayPhones.push(new Set());
+      dayPushedPhones.push(new Set());
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    const emptySummary = {
+      inboundNotices: 0,
+      customerPushed: 0,
+      customerUnbound: 0,
+      customerPushFailed: 0,
+      uniqueRecipients: 0,
+      uniquePushedRecipients: 0,
+      newBindings: 0,
+      activeBindings: 0,
+      pushRate: 0,
+      coverRate: 0,
+      bindRate: 0,
+    };
+
+    try {
+      const [logsRes, newBindRes, activeBindRes] = await Promise.all([
+        this.supabase
+          .getClient()
+          .from('ss_sms_logs')
+          .select('status, params, recipient_phone, created_at')
+          .eq('station_id', stationId)
+          .eq('template_code', 'inbound_notice')
+          .gte('created_at', fromIso)
+          .order('created_at', { ascending: true })
+          .limit(3000),
+        this.supabase
+          .getClient()
+          .from('ss_notify_bindings')
+          .select('phone, created_at')
+          .eq('station_id', stationId)
+          .eq('status', 'active')
+          .gte('created_at', fromIso)
+          .limit(2000),
+        this.supabase
+          .getClient()
+          .from('ss_notify_bindings')
+          .select('id', { count: 'exact', head: true })
+          .eq('station_id', stationId)
+          .eq('status', 'active'),
+      ]);
+
+      if (logsRes.error) {
+        const msg = String(logsRes.error.message || '');
+        if (msg.includes('ss_sms_logs') || msg.includes('does not exist')) {
+          return { days: safeDays, summary: emptySummary, points };
+        }
+        // eslint-disable-next-line no-console
+        console.warn('[Stats] 绑定转化日志查询失败:', msg);
+        return { days: safeDays, summary: emptySummary, points };
+      }
+
+      const allPhones = new Set<string>();
+      const allPushedPhones = new Set<string>();
+      let inboundNotices = 0;
+      let customerPushed = 0;
+      let customerUnbound = 0;
+      let customerPushFailed = 0;
+
+      for (const row of (logsRes.data || []) as Array<{
+        status?: string;
+        params?: unknown;
+        recipient_phone?: string | null;
+        created_at?: string;
+      }>) {
+        if (!row.created_at) continue;
+        const label = this.fmtDate(new Date(row.created_at));
+        const i = index[label];
+        if (i === undefined) continue;
+
+        inboundNotices += 1;
+        points[i].inboundNotices += 1;
+
+        const phone = String(row.recipient_phone || '').trim();
+        if (phone) {
+          allPhones.add(phone);
+          dayPhones[i].add(phone);
+        }
+
+        const params =
+          row.params && typeof row.params === 'object'
+            ? (row.params as Record<string, unknown>)
+            : {};
+        const channelResults = Array.isArray(params.channelResults)
+          ? (params.channelResults as Array<{ channel?: string; ok?: boolean }>)
+          : [];
+        const customerResults = channelResults.filter((c) =>
+          String(c.channel || '').startsWith('binding:'),
+        );
+
+        if (customerResults.length === 0) {
+          customerUnbound += 1;
+          points[i].customerUnbound += 1;
+        } else if (customerResults.some((c) => c.ok)) {
+          customerPushed += 1;
+          points[i].customerPushed += 1;
+          if (phone) {
+            allPushedPhones.add(phone);
+            dayPushedPhones[i].add(phone);
+          }
+        } else {
+          customerPushFailed += 1;
+          points[i].customerPushFailed += 1;
+        }
+      }
+
+      let newBindings = 0;
+      if (!newBindRes.error) {
+        for (const b of (newBindRes.data || []) as Array<{ created_at?: string }>) {
+          if (!b.created_at) continue;
+          const label = this.fmtDate(new Date(b.created_at));
+          const i = index[label];
+          if (i === undefined) continue;
+          points[i].newBindings += 1;
+          newBindings += 1;
+        }
+      }
+
+      for (let i = 0; i < points.length; i++) {
+        points[i].uniqueRecipients = dayPhones[i].size;
+        points[i].uniquePushedRecipients = dayPushedPhones[i].size;
+        points[i].pushRate =
+          points[i].inboundNotices > 0
+            ? Math.round((points[i].customerPushed / points[i].inboundNotices) * 100)
+            : 0;
+        points[i].coverRate =
+          points[i].uniqueRecipients > 0
+            ? Math.round(
+                (points[i].uniquePushedRecipients / points[i].uniqueRecipients) * 100,
+              )
+            : 0;
+      }
+
+      const uniqueRecipients = allPhones.size;
+      const uniquePushedRecipients = allPushedPhones.size;
+      const activeBindings = !activeBindRes.error ? activeBindRes.count || 0 : 0;
+      const pushRate =
+        inboundNotices > 0 ? Math.round((customerPushed / inboundNotices) * 100) : 0;
+      const coverRate =
+        uniqueRecipients > 0
+          ? Math.round((uniquePushedRecipients / uniqueRecipients) * 100)
+          : 0;
+      const bindRate =
+        uniqueRecipients > 0 ? Math.round((newBindings / uniqueRecipients) * 100) : 0;
+
+      return {
+        days: safeDays,
+        summary: {
+          inboundNotices,
+          customerPushed,
+          customerUnbound,
+          customerPushFailed,
+          uniqueRecipients,
+          uniquePushedRecipients,
+          newBindings,
+          activeBindings,
+          pushRate,
+          coverRate,
+          bindRate,
+        },
+        points,
+      };
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[Stats] 绑定转化报表异常:', err);
+      return { days: safeDays, summary: emptySummary, points };
+    }
+  }
 }
+

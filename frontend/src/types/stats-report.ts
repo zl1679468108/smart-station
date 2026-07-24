@@ -60,3 +60,41 @@ export interface PeakHoursResult {
   hours: PeakHour[];
   weekdays: PeakWeekday[];
 }
+
+/** 绑定转化：到件 → 新绑 → 私信覆盖 */
+export interface NotifyBindConversionPoint {
+  date: string;
+  inboundNotices: number;
+  customerPushed: number;
+  customerUnbound: number;
+  customerPushFailed: number;
+  uniqueRecipients: number;
+  uniquePushedRecipients: number;
+  newBindings: number;
+  pushRate: number;
+  coverRate: number;
+}
+
+export interface NotifyBindConversionSummary {
+  inboundNotices: number;
+  customerPushed: number;
+  customerUnbound: number;
+  customerPushFailed: number;
+  uniqueRecipients: number;
+  uniquePushedRecipients: number;
+  newBindings: number;
+  activeBindings: number;
+  /** 件次私信率 % */
+  pushRate: number;
+  /** 人数覆盖率 % */
+  coverRate: number;
+  /** 新绑 / 到件人数 % */
+  bindRate: number;
+}
+
+export interface NotifyBindConversionResult {
+  days: number;
+  summary: NotifyBindConversionSummary;
+  points: NotifyBindConversionPoint[];
+}
+

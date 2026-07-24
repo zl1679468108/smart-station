@@ -13,6 +13,7 @@ import { StationId } from '../common/decorators/station-id.decorator';
  * - GET /api/stats/funnel           转化漏斗
  * - GET /api/stats/retention        滞留率（总体 + 按快递公司）
  * - GET /api/stats/peak-hours       取件高峰（小时 + 星期分布）
+ * - GET /api/stats/bind-conversion  绑定转化（到件→新绑→私信覆盖）
  */
 @Controller('stats')
 @UseGuards(TokenAuthGuard)
@@ -54,5 +55,11 @@ export class StatsController {
   @Get('peak-hours')
   async peakHours(@StationId() stationId: string, @Query() q: RangeQueryDto) {
     return this.statsReportService.getPeakHours(stationId, q.days || 30);
+  }
+
+  /** 绑定转化：到件人数 → 新绑 → 私信覆盖（默认近 7 天） */
+  @Get('bind-conversion')
+  async bindConversion(@StationId() stationId: string, @Query() q: RangeQueryDto) {
+    return this.statsReportService.getNotifyBindConversion(stationId, q.days || 7);
   }
 }

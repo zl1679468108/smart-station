@@ -5,6 +5,7 @@ import type {
   FunnelResult,
   RetentionResult,
   PeakHoursResult,
+  NotifyBindConversionResult,
 } from '@/types/stats-report';
 
 export function fetchTrend(params: {
@@ -32,3 +33,11 @@ export function fetchPeakHours(days?: number): Promise<PeakHoursResult> {
   const q = days ? `?days=${days}` : '';
   return get<PeakHoursResult>(`/api/stats/peak-hours${q}`, { forceLoading: true });
 }
+
+export function fetchBindConversion(days?: number): Promise<NotifyBindConversionResult> {
+  const q = days ? `?days=${days}` : '';
+  return get<NotifyBindConversionResult>(`/api/stats/bind-conversion${q}`, {
+    forceLoading: true,
+  });
+}
+
