@@ -1,5 +1,10 @@
-import { get, patch } from './api';
-import type { AppointmentItem, AppointmentListResult, AppointmentStatus } from '@/types/appointment';
+import { get, patch, post } from './api';
+import type {
+  AppointmentItem,
+  AppointmentListResult,
+  AppointmentSlotsResult,
+  AppointmentStatus,
+} from '@/types/appointment';
 
 export function fetchAppointments(params: {
   slotDate?: string;
@@ -16,6 +21,23 @@ export function fetchAppointments(params: {
   if (params.pageSize) q.set('pageSize', String(params.pageSize));
   const s = q.toString();
   return get<AppointmentListResult>(`/api/appointments${s ? `?${s}` : ''}`);
+}
+
+export function fetchAppointmentSlots(): Promise<AppointmentSlotsResult> {
+  return get<AppointmentSlotsResult>('/api/appointments/slots');
+}
+
+export function createStaffAppointment(payload: {
+  phone: string;
+  recipientName?: string;
+  slotDate: string;
+  slotStart: string;
+  slotEnd: string;
+  note?: string;
+}): Promise<AppointmentItem> {
+  return post<AppointmentItem>('/api/appointments', payload, {
+    successMessage: '代客预约已登记',
+  });
 }
 
 export function updateAppointmentStatus(

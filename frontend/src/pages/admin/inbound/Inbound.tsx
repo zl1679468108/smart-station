@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import * as inboundService from '@/services/inbound';
 import { useCouriers, useInvalidateShelves, useShelves } from '@/hooks/useDictionary';
 import { useInvalidateDashboard } from '@/hooks/useDashboardData';
@@ -236,7 +236,10 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         setRecipientPhone('');
       }
       // 稍后再聚焦，避免与成功区重绘抢焦点
-      setTimeout(() => inputRef.current?.focus(), 30);
+      setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }, 30);
     } catch (err) {
       setError(err instanceof Error ? err.message : '入库失败');
     } finally {
@@ -424,6 +427,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const invalidateShelves = useInvalidateShelves();
   const invalidateDashboard = useInvalidateDashboard();
   const invalidateInventoryList = useInvalidateInventoryList();
+  const trackingInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     trackingNumber: '',
     courierCompanyId: '',
@@ -497,6 +501,11 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         freightCollectAmount: '',
         codAmount: '',
       }));
+      // 连续作业：成功后回到运单号，方便扫下一票
+      setTimeout(() => {
+        trackingInputRef.current?.focus();
+        trackingInputRef.current?.select();
+      }, 30);
     } catch (err) {
       setError(err instanceof Error ? err.message : '入库失败');
     } finally {
@@ -512,6 +521,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           <div>
             <label className="mb-1 block text-sm text-gray-600"><span className="mr-0.5 text-danger">*</span>运单号</label>
             <input
+              ref={trackingInputRef}
               type="text"
               value={form.trackingNumber}
               onChange={(e) => setForm({ ...form, trackingNumber: e.target.value })}

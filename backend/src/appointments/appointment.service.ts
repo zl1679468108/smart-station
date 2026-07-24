@@ -28,6 +28,40 @@ const MAX_ACTIVE_PER_PHONE = 3;
 /** 可预约未来天数（含今天） */
 const DAYS_AHEAD = 3;
 
+function hmToMin(hm: string): number {
+  const [h, m] = hm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/** 解析 "08:00-22:00" / "8:00~22:00"，复杂文案返回 null */
+function parseBusinessHoursRange(
+  businessHours?: string | null,
+): { open: number; close: number } | null {
+  if (!businessHours || !String(businessHours).trim()) return null;
+  const m = String(businessHours)
+    .trim()
+    .match(/(\d{1,2}):(\d{2})\s*[-~—至到]\s*(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const open = Number(m[1]) * 60 + Number(m[2]);
+  const close = Number(m[3]) * 60 + Number(m[4]);
+  if (Number.isNaN(open) || Number.isNaN(close)) return null;
+  return { open, close };
+}
+
+/** 按营业时间过滤默认可约时段（整段落在营业内才展示） */
+function slotTemplatesForHours(businessHours?: string | null) {
+  const range = parseBusinessHoursRange(businessHours);
+  if (!range) return DEFAULT_SLOTS;
+  // 跨午夜（如 22:00-02:00）试验期不做精细过滤
+  if (range.close <= range.open) return DEFAULT_SLOTS;
+  const filtered = DEFAULT_SLOTS.filter((s) => {
+    const a = hmToMin(s.start);
+    const b = hmToMin(s.end);
+    return a >= range.open && b <= range.close;
+  });
+  return filtered.length > 0 ? filtered : DEFAULT_SLOTS;
+}
+
 /**
  * 轻量预约取件
  * - 客户：选日 + 选时段 + 留手机号
@@ -66,6 +100,9 @@ export class AppointmentService {
       .eq('id', sid)
       .maybeSingle();
 
+    const businessHours = (station?.business_hours as string) || null;
+    const templates = slotTemplatesForHours(businessHours);
+
     const today = this.beijingToday();
     const nowHm = this.beijingNowHm();
     const dates: string[] = [];
@@ -93,7 +130,7 @@ export class AppointmentService {
 
     const days = dates.map((date) => {
       const isToday = date === today;
-      const slots = DEFAULT_SLOTS.map((slot) => {
+      const slots = templates.map((slot) => {
         const booked = countMap.get(`${date}|${slot.start}`) || 0;
         const remaining = Math.max(0, MAX_PER_SLOT - booked);
         // 今天已过的时段不可选
@@ -136,16 +173,25 @@ export class AppointmentService {
     return { ...item, notifyHint };
   }
 
+  /** 店员代客预约（电话到店等场景，默认已确认） */
+  async createStaff(stationId: string, dto: CreateAppointmentDto) {
+    const item = await this.createInternal(stationId, dto, 'admin', 'confirmed');
+    // 代约也推送客户（已绑定则私信；失败不阻断）
+    const notifyHint = await this.notifyAppointmentCreated(stationId, item, true);
+    return { ...item, notifyHint };
+  }
+
   /** 内部创建 */
   private async createInternal(
     stationId: string,
     dto: CreateAppointmentDto,
     source: 'query' | 'admin',
+    status: 'pending' | 'confirmed' = 'pending',
   ) {
     const slotDate = dto.slotDate.slice(0, 10);
     const slotStart = dto.slotStart.slice(0, 5);
     const slotEnd = dto.slotEnd.slice(0, 5);
-    this.assertValidSlot(slotDate, slotStart, slotEnd);
+    await this.assertValidSlot(stationId, slotDate, slotStart, slotEnd);
 
     // 同手机号未完成预约上限
     const { count: activeCount, error: cErr } = await this.supabase
@@ -187,7 +233,7 @@ export class AppointmentService {
         slot_start: `${slotStart}:00`,
         slot_end: `${slotEnd}:00`,
         note: (dto.note || '').trim() || null,
-        status: 'pending',
+        status,
         source,
       })
       .select(
@@ -378,6 +424,7 @@ export class AppointmentService {
       slotDate: string;
       slotLabel: string;
     },
+    byStaff = false,
   ): Promise<string | null> {
     try {
       const stationName = await this.getStationName(stationId);
@@ -389,6 +436,11 @@ export class AppointmentService {
         slotLabel: item.slotLabel,
         stationId,
       });
+      if (byStaff) {
+        if (res.customerPushed) return '已登记并私信客户微信';
+        if (!res.customerBound) return '已登记；客户未绑定微信，请口头告知时段';
+        return '已登记；微信提醒发送失败，请口头告知客户';
+      }
       if (res.customerPushed) return '预约提醒已发到您绑定的微信，请注意查收';
       if (!res.customerBound) {
         return '预约已登记。绑定微信通知后可自动收提醒；也可在本页「查我的预约」查看';
@@ -397,7 +449,9 @@ export class AppointmentService {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn('[Appointment] 创建通知失败:', e instanceof Error ? e.message : e);
-      return '预约已登记（提醒通道暂不可用，请记住时段到店）';
+      return byStaff
+        ? '已登记（提醒通道暂不可用，请口头告知客户）'
+        : '预约已登记（提醒通道暂不可用，请记住时段到店）';
     }
   }
 
@@ -421,15 +475,27 @@ export class AppointmentService {
     });
   }
 
-  private assertValidSlot(slotDate: string, slotStart: string, slotEnd: string) {
+  private async assertValidSlot(
+    stationId: string,
+    slotDate: string,
+    slotStart: string,
+    slotEnd: string,
+  ) {
     const today = this.beijingToday();
     const maxDate = this.addDays(today, DAYS_AHEAD - 1);
     if (slotDate < today || slotDate > maxDate) {
       throw new BadRequestException(`只能预约今天起 ${DAYS_AHEAD} 天内的时段`);
     }
-    const matched = DEFAULT_SLOTS.find((s) => s.start === slotStart && s.end === slotEnd);
+    const { data: station } = await this.supabase
+      .getClient()
+      .from('ss_stations')
+      .select('business_hours')
+      .eq('id', stationId)
+      .maybeSingle();
+    const templates = slotTemplatesForHours((station?.business_hours as string) || null);
+    const matched = templates.find((s) => s.start === slotStart && s.end === slotEnd);
     if (!matched) {
-      throw new BadRequestException('所选时段无效，请重新选择');
+      throw new BadRequestException('所选时段无效或超出营业时间，请重新选择');
     }
     if (slotDate === today && slotEnd <= this.beijingNowHm()) {
       throw new BadRequestException('该时段已过，请选其他时段');
