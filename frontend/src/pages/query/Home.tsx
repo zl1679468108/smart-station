@@ -693,7 +693,7 @@ const ResultView: React.FC<{
       {/* 绑定转化 / 未绑定兜底 */}
       {bindStatus?.bound ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
-          已开通微信收码：下次有件会直接发到你微信，不用反复查。
+          已开通微信收码：在库件绑定后会补发取件码；下次有件也会直接发到你微信。
         </div>
       ) : (
         <div className="rounded-xl border-2 border-primary/30 bg-orange-50 px-4 py-3 shadow-sm">

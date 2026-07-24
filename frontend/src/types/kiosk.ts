@@ -157,6 +157,10 @@ export interface BindNotifyResult {
   phoneMasked: string;
   channel: string;
   testPushed: boolean;
+  /** 绑定后补发的在库件数 */
+  catchupInStock?: number;
+  /** 绑定后成功私信件数 */
+  catchupPushed?: number;
   message: string;
   bindingId?: string;
 }
@@ -182,6 +186,8 @@ export interface WxPusherBindPollResult {
   phoneMasked?: string;
   bindingId?: string;
   testPushed?: boolean;
+  catchupInStock?: number;
+  catchupPushed?: number;
   pollIntervalSec?: number;
   message: string;
 }

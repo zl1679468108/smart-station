@@ -278,6 +278,90 @@ export class KioskService {
    * 兼容旧版：Server酱 SendKey 绑定（不推荐，保留给已有绑定）
    * 完整取件码只会推到该 SendKey，不会进企微群。
    */
+
+  /**
+   * 绑定成功后：给该手机号在库/滞留包裹补发到件私信（最多 10 件）。
+   * 失败不阻断绑定主流程。
+   */
+  private async pushInStockNoticesAfterBind(opts: {
+    phone: string;
+    stationId: string;
+  }): Promise<{ inStock: number; pushed: number }> {
+    try {
+      const { data: station } = await this.supabase
+        .getClient()
+        .from('ss_stations')
+        .select('id, name, sms_enabled')
+        .eq('id', opts.stationId)
+        .maybeSingle();
+      if (!station || station.sms_enabled === false) {
+        return { inStock: 0, pushed: 0 };
+      }
+
+      const { data: parcels, error } = await this.supabase
+        .getClient()
+        .from('ss_parcels')
+        .select('id, pickup_code, recipient_name, status')
+        .eq('station_id', opts.stationId)
+        .eq('recipient_phone', opts.phone)
+        .in('status', ['in_stock', 'overdue'])
+        .order('inbound_at', { ascending: false })
+        .limit(10);
+      if (error || !parcels?.length) {
+        return { inStock: 0, pushed: 0 };
+      }
+
+      let pushed = 0;
+      for (const p of parcels) {
+        if (!p.pickup_code) continue;
+        try {
+          const r = await this.notify.sendInboundNotice({
+            stationName: station.name,
+            phone: opts.phone,
+            recipientName: (p.recipient_name as string) || null,
+            pickupCode: String(p.pickup_code),
+            parcelId: p.id,
+            stationId: opts.stationId,
+          });
+          if (r.customerPushed) pushed += 1;
+        } catch {
+          // 单件失败不阻断
+        }
+      }
+      return { inStock: parcels.length, pushed };
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[Kiosk] 绑定后补发到件失败:', err);
+      return { inStock: 0, pushed: 0 };
+    }
+  }
+
+  private composeBindSuccessMessage(opts: {
+    testPushed: boolean;
+    catchup: { inStock: number; pushed: number };
+  }): string {
+    const parts: string[] = [];
+    if (opts.testPushed) {
+      parts.push('绑定成功，已发测试消息到你的微信');
+    } else {
+      parts.push('绑定已保存');
+    }
+    if (opts.catchup.inStock > 0) {
+      if (opts.catchup.pushed > 0) {
+        parts.push(
+          `你有 ${opts.catchup.inStock} 件在库包裹，已私信取件码 ${opts.catchup.pushed} 件，请查微信`,
+        );
+      } else {
+        parts.push(
+          `你有 ${opts.catchup.inStock} 件在库包裹，请到店凭取件码取件（可再查件页查看）`,
+        );
+      }
+    } else {
+      parts.push('下次有件会微信直接告诉你取件码');
+    }
+    return parts.join('。') + '。';
+  }
+
   async bindNotify(
     dto: { phone: string; code: string; sendKey: string },
     stationId?: string,
@@ -336,15 +420,20 @@ export class KioskService {
       testPushed = false;
     }
 
+    const catchup = await this.pushInStockNoticesAfterBind({
+      phone: dto.phone,
+      stationId: targetStationId,
+    });
+
     return {
       bound: true,
       phone: dto.phone,
       phoneMasked: this.notify.maskPhone(dto.phone),
       channel: 'serverchan',
       testPushed,
-      message: testPushed
-        ? '绑定成功，已发送测试消息到你的微信'
-        : '绑定已保存，但测试推送失败，请检查 SendKey 是否正确',
+      catchupInStock: catchup.inStock,
+      catchupPushed: catchup.pushed,
+      message: this.composeBindSuccessMessage({ testPushed, catchup }),
       bindingId: data?.id,
     };
   }
@@ -539,6 +628,11 @@ export class KioskService {
       testPushed = false;
     }
 
+    const catchup = await this.pushInStockNoticesAfterBind({
+      phone: pending.phone,
+      stationId: targetStationId,
+    });
+
     return {
       status: 'done' as const,
       bound: true,
@@ -547,9 +641,9 @@ export class KioskService {
       phoneMasked: this.notify.maskPhone(pending.phone),
       bindingId: binding?.id,
       testPushed,
-      message: testPushed
-        ? '绑定成功，已发送测试消息到你的微信'
-        : '绑定已保存，但测试推送失败，请稍后重试入库通知',
+      catchupInStock: catchup.inStock,
+      catchupPushed: catchup.pushed,
+      message: this.composeBindSuccessMessage({ testPushed, catchup }),
     };
   }
 
@@ -619,15 +713,20 @@ export class KioskService {
       testPushed = false;
     }
 
+    const catchup = await this.pushInStockNoticesAfterBind({
+      phone: dto.phone,
+      stationId: targetStationId,
+    });
+
     return {
       bound: true,
       phone: dto.phone,
       phoneMasked: this.notify.maskPhone(dto.phone),
       channel: 'pushplus' as const,
       testPushed,
-      message: testPushed
-        ? '绑定成功，已发送测试消息到你的微信'
-        : '绑定已保存，但测试消息发送失败，请检查绑定码是否正确',
+      catchupInStock: catchup.inStock,
+      catchupPushed: catchup.pushed,
+      message: this.composeBindSuccessMessage({ testPushed, catchup }),
       bindingId: data?.id,
     };
   }
