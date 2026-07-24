@@ -361,6 +361,21 @@ const onBatchRemindOverdue = async () => {
     else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
   };
 
+  const onPrintPageSlips = () => {
+    if (!data?.items?.length) {
+      notifyError('本页没有可打印的包裹');
+      return;
+    }
+    const slips = data.items.filter((it) => it.pickupCode).map(toSlip);
+    if (slips.length === 0) {
+      notifyError('本页包裹没有取件码');
+      return;
+    }
+    const ok = printPickupSlips(slips);
+    if (ok) notifySuccess(`已打开本页 ${slips.length} 张小票打印预览`);
+    else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+  };
+
   const handleBatchException = async () => {
     if (batchSubmitting) return;
     setBatchResult(null);
@@ -393,7 +408,17 @@ const onBatchRemindOverdue = async () => {
       <PageHeader
         title="库存查询"
         className="mb-4"
-        description="在库/滞留可补发到件；滞留或满 3 天可发提醒。未绑定客户需当面报码。"
+        description="在库/滞留可补发到件；滞留或满 3 天可发提醒。未绑定客户需当面报码。可按货架筛选后打印本页小票。"
+        actions={
+          <button
+            type="button"
+            onClick={onPrintPageSlips}
+            disabled={!data?.items?.some((it) => it.pickupCode)}
+            className="rounded-md border border-primary/30 bg-white px-3 py-2 text-sm font-medium text-primary hover:bg-orange-50 disabled:opacity-50"
+          >
+            打印本页小票
+          </button>
+        }
       />
 
       <NotifyReachBar className="mb-3" context="inventory" />
