@@ -1,6 +1,14 @@
 // Kiosk API 服务（公开接口，无 token 头）
 import { get, post } from './api';
-import type { SendCodeResult, KioskQueryResult, StationLayoutResponse } from '@/types/kiosk';
+import type {
+  SendCodeResult,
+  KioskQueryResult,
+  StationLayoutResponse,
+  NotifyGuideResponse,
+  BindNotifyResult,
+  WxPusherBindStartResult,
+  WxPusherBindPollResult,
+} from '@/types/kiosk';
 
 /**
  * 当前 Kiosk / 查询门户绑定的驿站
@@ -50,4 +58,62 @@ export function queryByTracking(trackingNumber: string): Promise<KioskQueryResul
 /** 取件码查询（1.1.0 新增） */
 export function queryByCode(code: string): Promise<KioskQueryResult> {
   return post<KioskQueryResult>(`/api/kiosk/query-by-code${kioskStationQuery()}`, { code });
+}
+
+/** 通知绑定引导（公示） */
+export function getNotifyGuide(): Promise<NotifyGuideResponse> {
+  return get<NotifyGuideResponse>(`/api/kiosk/notify-guide${kioskStationQuery()}`);
+}
+
+/** 兼容：绑定个人 Server酱 */
+export function bindNotify(payload: {
+  phone: string;
+  code: string;
+  sendKey: string;
+}): Promise<BindNotifyResult> {
+  return post<BindNotifyResult>(`/api/kiosk/notify-bind${kioskStationQuery()}`, payload, {
+    successMessage: '通知绑定成功',
+  });
+}
+
+/** WxPusher：校验手机号后生成关注二维码 */
+export function startWxPusherBind(payload: {
+  phone: string;
+  code: string;
+}): Promise<WxPusherBindStartResult> {
+  return post<WxPusherBindStartResult>(
+    `/api/kiosk/notify-bind/wxpusher/start${kioskStationQuery()}`,
+    payload,
+    {
+      // 页面内已有状态文案；避免全局 toast 刷屏
+      successMessage: false,
+      skipLoading: true,
+    },
+  );
+}
+
+/** WxPusher：轮询扫码绑定结果（建议间隔 ≥12s） */
+export function pollWxPusherBind(payload: {
+  qrCode: string;
+}): Promise<WxPusherBindPollResult> {
+  return post<WxPusherBindPollResult>(
+    `/api/kiosk/notify-bind/wxpusher/poll${kioskStationQuery()}`,
+    payload,
+    {
+      successMessage: false,
+      errorMessage: false,
+      skipLoading: true,
+      skipNotify: true,
+    },
+  );
+}
+
+/** 解绑个人通知 */
+export function unbindNotify(payload: {
+  phone: string;
+  code: string;
+}): Promise<{ unbound: boolean }> {
+  return post<{ unbound: boolean }>(`/api/kiosk/notify-unbind${kioskStationQuery()}`, payload, {
+    successMessage: '已解绑通知',
+  });
 }

@@ -67,6 +67,20 @@ export class AdminService {
     if (dto.overdueWarnDays !== undefined) patch.overdue_warn_days = Number(dto.overdueWarnDays);
     if (dto.overdueRemindDays !== undefined) patch.overdue_remind_days = Number(dto.overdueRemindDays);
     if (dto.overdueReturnDays !== undefined) patch.overdue_return_days = Number(dto.overdueReturnDays);
+    if (dto.notifyConfig !== undefined) {
+      // 浅合并，避免覆盖未传字段
+      const { data: prevRow } = await this.supabase
+        .getClient()
+        .from('ss_stations')
+        .select('notify_config')
+        .eq('id', stationId)
+        .maybeSingle();
+      const prev =
+        prevRow?.notify_config && typeof prevRow.notify_config === 'object'
+          ? (prevRow.notify_config as Record<string, unknown>)
+          : {};
+      patch.notify_config = { ...prev, ...dto.notifyConfig };
+    }
 
     if (Object.keys(patch).length === 0) {
       return this.getStation(stationId);

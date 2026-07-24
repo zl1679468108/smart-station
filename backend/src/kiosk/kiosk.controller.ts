@@ -16,6 +16,10 @@ import {
   QueryByPhoneDirectDto,
   QueryByTrackingDto,
   QueryByCodeDto,
+  BindNotifyDto,
+  UnbindNotifyDto,
+  StartWxPusherBindDto,
+  PollWxPusherBindDto,
 } from './dto/kiosk.dto';
 import { Public } from '../common/decorators/public.decorator';
 import type { Request } from 'express';
@@ -46,6 +50,13 @@ export class KioskController {
     return this.kioskService.getStationLayout(stationId);
   }
 
+  /** 通知绑定引导（公示） */
+  @SkipThrottle()
+  @Get('notify-guide')
+  async getNotifyGuide(@Query('stationId') stationId?: string) {
+    return this.kioskService.getNotifyGuide(stationId);
+  }
+
   @Post('send-code')
   @HttpCode(200)
   async sendCode(
@@ -54,6 +65,40 @@ export class KioskController {
     @Query('stationId') stationId?: string,
   ) {
     return this.kioskService.sendCode(dto, this.getClientIp(req), stationId);
+  }
+
+  /** 兼容：绑定个人 Server酱 SendKey */
+  @Post('notify-bind')
+  @HttpCode(200)
+  async bindNotify(@Body() dto: BindNotifyDto, @Query('stationId') stationId?: string) {
+    return this.kioskService.bindNotify(dto, stationId);
+  }
+
+  /** WxPusher 扫码绑定：校验手机号后创建关注二维码 */
+  @Post('notify-bind/wxpusher/start')
+  @HttpCode(200)
+  async startWxPusherBind(
+    @Body() dto: StartWxPusherBindDto,
+    @Query('stationId') stationId?: string,
+  ) {
+    return this.kioskService.startWxPusherBind(dto, stationId);
+  }
+
+  /** WxPusher 扫码绑定：轮询扫码 UID（建议 ≥12s） */
+  @Post('notify-bind/wxpusher/poll')
+  @HttpCode(200)
+  async pollWxPusherBind(
+    @Body() dto: PollWxPusherBindDto,
+    @Query('stationId') stationId?: string,
+  ) {
+    return this.kioskService.pollWxPusherBind(dto.qrCode, stationId);
+  }
+
+  /** 解绑个人通知（wxpusher / serverchan） */
+  @Post('notify-unbind')
+  @HttpCode(200)
+  async unbindNotify(@Body() dto: UnbindNotifyDto, @Query('stationId') stationId?: string) {
+    return this.kioskService.unbindNotify(dto, stationId);
   }
 
   @Post('query-by-phone')

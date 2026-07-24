@@ -239,7 +239,7 @@ export class OverdueService {
         await this.insertEvent(stationId, p.id, 'overdue_remind', `超期 ${days} 天二次提醒`);
         types.add('overdue_remind');
         reminded += 1;
-        // 短信 stub，不阻断
+        // 免费通道通知（console/wecom/serverchan），不阻断
         try {
           if (p.recipient_phone) {
             await this.notify.sendOverdueRemind({

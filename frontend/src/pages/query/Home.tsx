@@ -12,6 +12,7 @@ import {
   getZoneLetter,
 } from '@/components/warehouse3d';
 import { formatBeijingTimestamp } from '@/utils/date';
+import NotifyBindCard from '@/components/NotifyBindCard';
 
 const Warehouse3D = React.lazy(() => import('@/components/warehouse3d'));
 
@@ -116,6 +117,15 @@ const Home: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* 通知绑定公示 */}
+      <div className="border-b border-gray-100 bg-white px-4 py-3 sm:px-6 lg:px-8">
+        <NotifyBindCard
+          guide={layoutData?.station?.notifyGuide}
+          stationName={stationInfo?.name}
+          compact
+        />
+      </div>
 
       {/* 主区域：PC 左右双栏，平板/H5 上下 */}
       <main className="flex flex-1 flex-col overflow-hidden lg:flex-row">

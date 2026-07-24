@@ -469,6 +469,43 @@
 
 ---
 
+## 1.6.2 免费通知通道（已完成，2026-07-23）
+
+> 路线：不接商用短信；PC/PAD/H5 试验阶段用 console + 企业微信 Webhook + Server酱。对应 PRD §4.13 重写、候选池 B2 partial。
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M33.1 | P1 | NotifyService 多通道扇出 | backend/notify | done | `NOTIFY_CHANNELS=console,wecom,serverchan`；`WECOM_WEBHOOK_URL` / `SERVERCHAN_SENDKEY`；入库/滞留/验证码共用 dispatch；失败不阻断；写 `ss_sms_logs.params` 含 channelResults；`SMS_PROVIDER=real` 降级 console 警告 |
+| M33.2 | P1 | Kiosk 验证码走 Notify + devCode | backend/kiosk | done | sendCode 调 `sendVerificationCode`；非 production 或 `NOTIFY_EXPOSE_DEV_CODE` 返回 `devCode`；KioskModule 引入 NotifyModule |
+| M33.3 | P1 | 文档与 env 模板 | docs + .env.example | done | PRD §4.13 免费路线；TASKS B2 partial；`.env.example` 去掉商用短信引导 |
+
+---
+
+## 1.6.3 通知隐私边界 + 客户绑定公示（已完成，2026-07-24）
+
+> 修复：企微群广播取件码的隐私问题；补客户一对一绑定与系统公示。
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M34.1 | P0 | 企微群仅脱敏公告 | backend/notify | done | wecom 通道只发尾号摘要，不发取件码/验证码；完整内容仅 console、管理员 Server酱、客户绑定 |
+| M34.2 | P0 | 客户绑定表 + 公示配置 | database + backend | done | `ss_notify_bindings` + `ss_stations.notify_config`；bind/unbind/guide API；需 SQL Editor 执行 DDL |
+| M34.3 | P0 | 查询端公示与绑定 UI | frontend/query + m + admin | done | NotifyBindCard；系统管理驿站信息可编辑公示；/query 与 /m 展示 |
+
+---
+
+## 1.6.4 WxPusher 扫码客户绑定（进行中/完成，2026-07-24）
+
+> 客户主通道从 Server酱 SendKey 手填改为 **WxPusher 扫码关注**；企微群仍只发脱敏公告；管理员 Server酱 env 旁路保留。
+
+| ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
+|---|---|---|---|---|---|
+| M35.1 | P0 | NotifyService WxPusher 发送 | backend/notify | done | `sendWxPusher`；绑定 channel=`wxpusher` 走 UID；`WXPUSHER_APP_TOKEN` |
+| M35.2 | P0 | 扫码 start/poll API + pending 表 | backend/kiosk + SQL | done | `notify-bind/wxpusher/start|poll`；`ss_notify_bind_pending`；需执行 `migration-wxpusher-m35.sql` |
+| M35.3 | P0 | 查询端扫码绑定 UI | frontend NotifyBindCard | done | 验证码 → 展示二维码 → ≥12s 轮询；绑定成功提示 |
+| M35.4 | P1 | 文档与 env | docs + .env.example | done | PRD §4.13；TASKS；`WXPUSHER_APP_TOKEN` 模板 |
+
+---
+
 ## v1.0+ 后续版本规划
 
 > 5 个未实现模块的必要性判断（PRD §4.7-4.11 已有完整定义）：
@@ -568,10 +605,10 @@
 | 编号 | 方向 | 核心痛点 | 关联现有模块 | 价值判断 | 状态 |
 |---|---|---|---|---|---|
 | B1 | 面单 OCR 自动识别入库 | 晚高峰逐件扫码 + 手录手机号，排队到门口；入库耗时是运营第一瓶颈 | inbound / notify（PRD §5.2 已列 AI 识别） | 强必要：直接砍半入库耗时，提效命门 | ✅ done（1.6.0，见 M32） |
-| B2 | 多通道通知触达 + 滞留转化 | 短信 stub 触达率低、成本高，用户不看即滞留；滞留率是核心 KPI | notify / overdue（PRD §4.13 已预留供应商接口） | 强必要：直接打滞留率 KPI，串起 notify+overdue | backlog |
+| B2 | 多通道通知触达 + 滞留转化 | 试验期不走商用短信；需真实触达演示 | notify / overdue | 强必要：串起 notify+overdue | 🟡 partial（免费通道 console/wecom/serverchan + 客户 WxPusher 扫码绑定已落地，商用短信明确不做） |
 | B3 | 取件人身份核验 + 冒领留证 | 取件码可转发/偷看，晚高峰拿错件、冒领是真实纠纷源 | outbound / scan（PRD §4.5 出库两步流程） | 必要：降低纠纷与责任风险 | backlog |
 | B4 | 到付件 + 代收货款（对用户收款线） | 到付、代收货款是真实现金业务，当前 finance 只做「与快递公司月结」，对用户收款缺失，钱账对不上 | finance / inbound / outbound | 必要：补齐现金流闭环 | backlog |
 | B5 | 交接班 + 员工绩效 | 多店员轮班，谁入谁出、交接盘点、日结现金无汇总，只有事件轨迹 | admin / stats / parcel_events | 有价值：多店运营管理需求 | backlog |
 | B6 | 取件用户主动侧（订阅提醒 + 预约取件 + 到店导航） | 「有没有我的件」靠用户自查；跑空与滞留高 | query 门户 / notify | 有价值：提升留存、降跑空 | backlog |
 
-> **首推顺序建议**：B1（入库提效）或 B2（滞留 KPI）二选一先做；B3 冒领核验紧随其后（纠纷风险）。B4/B5/B6 依运营反馈再排。
+> **首推顺序建议**：B1 / B2 免费通道已落地；下一优先 **B3 冒领核验**。B4/B5/B6 依运营反馈再排。B2 剩余工作为触达统计与策略，非短信商用。

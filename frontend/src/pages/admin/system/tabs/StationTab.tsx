@@ -26,11 +26,20 @@ const StationTab: React.FC = () => {
     overdueWarnDays: 3,
     overdueRemindDays: 7,
     overdueReturnDays: 15,
+    notifyTitle: '',
+    notifyContent: '',
+    wecomQrUrl: '',
+    wecomJoinTip: '',
+    serverchanGuide: '',
+    serverchanGuideUrl: '',
+    wxpusherGuide: '',
+    bindEnabled: true,
   });
 
   // 缓存数据到达/更新时同步表单（写后 setQueryData 也会走这里）
   useEffect(() => {
     if (!station) return;
+    const nc = station.notify_config || {};
     setForm({
       name: station.name || '',
       address: station.address || '',
@@ -40,6 +49,14 @@ const StationTab: React.FC = () => {
       overdueWarnDays: station.overdue_warn_days,
       overdueRemindDays: station.overdue_remind_days,
       overdueReturnDays: station.overdue_return_days,
+      notifyTitle: nc.title || '',
+      notifyContent: nc.content || '',
+      wecomQrUrl: nc.wecomQrUrl || '',
+      wecomJoinTip: nc.wecomJoinTip || '',
+      serverchanGuide: nc.serverchanGuide || '',
+      serverchanGuideUrl: nc.serverchanGuideUrl || '',
+      wxpusherGuide: nc.wxpusherGuide || '',
+      bindEnabled: nc.bindEnabled !== false,
     });
   }, [station]);
 
@@ -48,7 +65,26 @@ const StationTab: React.FC = () => {
     if (saving) return;
     setSaving(true);
     try {
-      const updated = await adminService.updateStation(form);
+      const updated = await adminService.updateStation({
+        name: form.name,
+        address: form.address,
+        contactPhone: form.contactPhone,
+        businessHours: form.businessHours,
+        floorPlanUrl: form.floorPlanUrl,
+        overdueWarnDays: form.overdueWarnDays,
+        overdueRemindDays: form.overdueRemindDays,
+        overdueReturnDays: form.overdueReturnDays,
+        notifyConfig: {
+          title: form.notifyTitle,
+          content: form.notifyContent,
+          wecomQrUrl: form.wecomQrUrl,
+          wecomJoinTip: form.wecomJoinTip,
+          serverchanGuide: form.serverchanGuide,
+          serverchanGuideUrl: form.serverchanGuideUrl,
+          wxpusherGuide: form.wxpusherGuide,
+          bindEnabled: form.bindEnabled,
+        },
+      });
       setStationCache(updated);
       invalidateKioskLayout();
     } catch {
@@ -158,7 +194,7 @@ const StationTab: React.FC = () => {
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
               disabled={inputDisabled}
             />
-            <p className="mt-1 text-xs text-gray-400">二次短信提醒</p>
+            <p className="mt-1 text-xs text-gray-400">二次通知提醒</p>
           </div>
           <div>
             <label className="mb-1 block text-sm text-gray-600">退回天数</label>
@@ -171,6 +207,89 @@ const StationTab: React.FC = () => {
               disabled={inputDisabled}
             />
             <p className="mt-1 text-xs text-gray-400">超过此天数标记退回</p>
+          </div>
+        </div>
+      </section>
+
+
+      {/* 通知公示（客户绑定引导） */}
+      <section className="rounded-lg border border-gray-200 bg-white p-5">
+        <h2 className="mb-1 text-sm font-medium text-gray-700">通知公示与客户绑定</h2>
+        <p className="mb-4 text-xs text-gray-400">
+          企业微信群仅发脱敏公告（不含取件码）。客户通过 WxPusher 扫码关注后，完整取件码私信到其微信。
+          以下内容会展示在 /query 与 /m 查询页。
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm text-gray-600">公示标题</label>
+            <input
+              type="text"
+              value={form.notifyTitle}
+              onChange={(e) => setForm({ ...form, notifyTitle: e.target.value })}
+              placeholder="取件消息通知"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={inputDisabled}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm text-gray-600">公示说明</label>
+            <textarea
+              value={form.notifyContent}
+              onChange={(e) => setForm({ ...form, notifyContent: e.target.value })}
+              rows={3}
+              placeholder="说明绑定后如何收通知、企微群不含取件码等"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={inputDisabled}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">企微群二维码图片 URL</label>
+            <input
+              type="url"
+              value={form.wecomQrUrl}
+              onChange={(e) => setForm({ ...form, wecomQrUrl: e.target.value })}
+              placeholder="https://... 群二维码图片地址"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={inputDisabled}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-gray-600">入群提示文案</label>
+            <input
+              type="text"
+              value={form.wecomJoinTip}
+              onChange={(e) => setForm({ ...form, wecomJoinTip: e.target.value })}
+              placeholder="扫码加入驿站公告群（仅公告，不含取件码）"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={inputDisabled}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm text-gray-600">WxPusher 绑定步骤说明</label>
+            <textarea
+              value={form.wxpusherGuide}
+              onChange={(e) => setForm({ ...form, wxpusherGuide: e.target.value })}
+              rows={3}
+              placeholder="1. 输入手机号验证... 2. 生成关注二维码... 3. 微信扫码自动绑定..."
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+              disabled={inputDisabled}
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              后端需配置环境变量 WXPUSHER_APP_TOKEN（在 WxPusher 管理后台创建应用获取）。
+            </p>
+          </div>
+          <div className="flex items-center gap-2 pt-6">
+            <input
+              id="bindEnabled"
+              type="checkbox"
+              checked={form.bindEnabled}
+              onChange={(e) => setForm({ ...form, bindEnabled: e.target.checked })}
+              disabled={inputDisabled}
+              className="h-4 w-4 rounded border-gray-300 text-primary"
+            />
+            <label htmlFor="bindEnabled" className="text-sm text-gray-600">
+              允许客户在查询页绑定个人通知
+            </label>
           </div>
         </div>
       </section>

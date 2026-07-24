@@ -45,3 +45,57 @@ export class QueryByCodeDto {
   @Matches(/^\d{1,3}-\d{1,2}-\d{1,6}$/, { message: '取件码格式不正确，应为 货架号-层号-件号，如 3-2-9903' })
   code!: string;
 }
+
+/** 绑定个人通知通道（Server酱 SendKey） */
+export class BindNotifyDto {
+  @IsString()
+  @IsNotEmpty({ message: '手机号不能为空' })
+  @Matches(/^1\d{10}$/, { message: '手机号格式不正确' })
+  phone!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: '验证码不能为空' })
+  @Length(6, 6, { message: '验证码为 6 位数字' })
+  @Matches(/^\d{6}$/, { message: '验证码为 6 位数字' })
+  code!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'SendKey 不能为空' })
+  @Matches(/^SCT[A-Za-z0-9]+$/, { message: 'SendKey 格式不正确，应以 SCT 开头' })
+  sendKey!: string;
+}
+
+/** 解绑个人通知 */
+export class UnbindNotifyDto {
+  @IsString()
+  @IsNotEmpty({ message: '手机号不能为空' })
+  @Matches(/^1\d{10}$/, { message: '手机号格式不正确' })
+  phone!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: '验证码不能为空' })
+  @Length(6, 6, { message: '验证码为 6 位数字' })
+  @Matches(/^\d{6}$/, { message: '验证码为 6 位数字' })
+  code!: string;
+}
+
+/** WxPusher 扫码绑定：手机号 + 验证码 → 生成关注二维码 */
+export class StartWxPusherBindDto {
+  @IsString()
+  @IsNotEmpty({ message: '手机号不能为空' })
+  @Matches(/^1\d{10}$/, { message: '手机号格式不正确' })
+  phone!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: '验证码不能为空' })
+  @Length(6, 6, { message: '验证码为 6 位数字' })
+  @Matches(/^\d{6}$/, { message: '验证码为 6 位数字' })
+  code!: string;
+}
+
+/** WxPusher 轮询扫码结果 */
+export class PollWxPusherBindDto {
+  @IsString()
+  @IsNotEmpty({ message: 'qrCode 不能为空' })
+  qrCode!: string;
+}

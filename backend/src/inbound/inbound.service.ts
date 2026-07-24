@@ -122,7 +122,7 @@ export class InboundService {
       metadata: { method, pickup_code: pickupCode, shelf_number: shelfNumber, shelf_layer: shelfLayer, shelf_position: shelfPosition, courier_code: courierCompanyCode },
     });
 
-    // 6. 触发通知（若驿站开启 sms）
+    // 6. 触发通知（若驿站开启 sms_enabled；免费通道见 NotifyService）
     const station = await this.getStation(stationId);
     if (station.sms_enabled) {
       await this.notifyService.sendInboundNotice({

@@ -53,7 +53,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     AuthModule,
     // 系统管理模块（M2）
     AdminModule,
-    // 通知模块（M3，stub）
+    // 通知模块（免费通道：console / 企业微信 / Server酱）
     NotifyModule,
     // 入库模块（M3）
     InboundModule,

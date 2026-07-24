@@ -21,6 +21,8 @@ export interface KioskQueryResult {
 export interface SendCodeResult {
   sent: boolean;
   ttlSeconds: number;
+  /** 开发态由后端返回，便于免费通道路线联调（生产不返回） */
+  devCode?: string;
 }
 
 /** 货架大小类型 */
@@ -103,6 +105,8 @@ export interface StationLayoutResponse {
     /** 营业时间（公开，如 "08:00-22:00"） */
     businessHours: string | null;
     layoutConfig: StationLayoutConfig;
+    /** 通知绑定公示引导 */
+    notifyGuide?: NotifyGuide;
   };
 }
 
@@ -119,3 +123,60 @@ export const SHELF_ZONE_LABEL: Record<ShelfSizeType, string> = {
   medium: 'B 区（中件）',
   large: 'C 区（大件）',
 };
+
+
+/** 对外公示的通知引导 */
+export interface NotifyGuide {
+  title: string;
+  content: string;
+  wecomQrUrl: string;
+  wecomJoinTip: string;
+  /** @deprecated 客户主通道已切 WxPusher，保留兼容 */
+  serverchanGuideUrl: string;
+  /** @deprecated */
+  serverchanGuide: string;
+  wxpusherGuide?: string;
+  bindEnabled: boolean;
+  bindChannel: 'wxpusher' | 'serverchan' | string;
+}
+
+export interface NotifyGuideResponse {
+  stationId: string;
+  stationName: string;
+  guide: NotifyGuide;
+}
+
+export interface BindNotifyResult {
+  bound: boolean;
+  phone: string;
+  phoneMasked: string;
+  channel: string;
+  testPushed: boolean;
+  message: string;
+  bindingId?: string;
+}
+
+export interface WxPusherBindStartResult {
+  channel: 'wxpusher';
+  qrCode: string;
+  qrUrl: string;
+  shortUrl?: string;
+  expiresAt: string;
+  pollIntervalSec: number;
+  phone: string;
+  phoneMasked: string;
+  stationName?: string | null;
+  message: string;
+}
+
+export interface WxPusherBindPollResult {
+  status: 'waiting' | 'done' | 'expired';
+  bound: boolean;
+  channel?: 'wxpusher';
+  phone?: string;
+  phoneMasked?: string;
+  bindingId?: string;
+  testPushed?: boolean;
+  pollIntervalSec?: number;
+  message: string;
+}

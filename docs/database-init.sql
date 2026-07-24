@@ -136,6 +136,8 @@ CREATE TABLE IF NOT EXISTS ss_stations (
   overdue_return_days  INTEGER NOT NULL DEFAULT 15,
   -- 通知开关
   sms_enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+  -- 通知公示配置（客户绑定引导 / 企微群二维码等）
+  notify_config   JSONB NOT NULL DEFAULT '{}'::jsonb,
   status          VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'closed')),
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -423,7 +425,7 @@ CREATE INDEX IF NOT EXISTS idx_ss_sms_logs_status ON ss_sms_logs(status);
 CREATE INDEX IF NOT EXISTS idx_ss_sms_logs_created_at ON ss_sms_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ss_sms_logs_station_id ON ss_sms_logs(station_id);
 
-COMMENT ON TABLE ss_sms_logs IS '短信发送记录表 - 所有通知短信的发送记录与状态';
+COMMENT ON TABLE ss_sms_logs IS '通知发送记录表 - 免费多通道（console/wecom/serverchan）日志，表名历史遗留';
 COMMENT ON COLUMN ss_sms_logs.status IS '发送状态：pending(待发) / sent(已发) / failed(失败)';
 
 -- ==============================================
@@ -760,3 +762,71 @@ END;
 $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION ss_ocr_try_consume(VARCHAR, INTEGER) IS '原子占用一次 OCR 额度：当月+1，超过上限返回 allowed=false（不自增）';
+
+
+-- ==============================================
+-- 17. 客户通知绑定 + 驿站通知公示配置（免费通道路线）
+-- ==============================================
+-- 角色说明：
+-- - 企业微信群机器人 = 共享公告通道，仅脱敏摘要，永不发取件码
+-- - Server酱个人 SendKey = 客户一对一私信（完整取件码）
+-- - 环境变量 SERVERCHAN_SENDKEY = 管理员旁路（完整内容，仅管理员微信）
+
+ALTER TABLE ss_stations
+  ADD COLUMN IF NOT EXISTS notify_config JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+COMMENT ON COLUMN ss_stations.notify_config IS '通知公示与引导 JSON：title/content/wecomQrUrl/wecomJoinTip/wxpusherGuide/serverchanGuide/serverchanGuideUrl/bindEnabled';
+COMMENT ON COLUMN ss_stations.sms_enabled IS '是否启用到件通知（历史字段名；实际走免费多通道而非商用短信）';
+
+CREATE TABLE IF NOT EXISTS ss_notify_bindings (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  station_id  UUID NOT NULL REFERENCES ss_stations(id) ON DELETE CASCADE,
+  phone       VARCHAR(20) NOT NULL,
+  -- 主通道 wxpusher；兼容 serverchan
+  channel     VARCHAR(20) NOT NULL DEFAULT 'wxpusher'
+              CHECK (channel IN ('wxpusher', 'serverchan')),
+  -- wxpusher 为 UID_xxx；serverchan 为 SendKey
+  target      TEXT NOT NULL,
+  status      VARCHAR(20) NOT NULL DEFAULT 'active'
+              CHECK (status IN ('active', 'disabled')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (station_id, phone, channel)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ss_notify_bindings_phone
+  ON ss_notify_bindings(phone);
+CREATE INDEX IF NOT EXISTS idx_ss_notify_bindings_station
+  ON ss_notify_bindings(station_id);
+
+COMMENT ON TABLE ss_notify_bindings IS '客户通知绑定 - 手机号一对一免费推送（主通道 WxPusher UID，兼容 Server酱 SendKey）';
+COMMENT ON COLUMN ss_notify_bindings.target IS '通道目标：wxpusher 为 UID_xxx；serverchan 为 SendKey';
+
+DROP TRIGGER IF EXISTS update_ss_notify_bindings_updated_at ON ss_notify_bindings;
+CREATE TRIGGER update_ss_notify_bindings_updated_at BEFORE UPDATE ON ss_notify_bindings
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- WxPusher 扫码绑定会话
+CREATE TABLE IF NOT EXISTS ss_notify_bind_pending (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  station_id  UUID NOT NULL REFERENCES ss_stations(id) ON DELETE CASCADE,
+  phone       VARCHAR(20) NOT NULL,
+  qr_code     VARCHAR(100) NOT NULL UNIQUE,
+  extra       VARCHAR(64),
+  expires_at  TIMESTAMPTZ NOT NULL,
+  status      VARCHAR(20) NOT NULL DEFAULT 'pending'
+              CHECK (status IN ('pending', 'done', 'expired')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ss_notify_bind_pending_phone
+  ON ss_notify_bind_pending(phone);
+CREATE INDEX IF NOT EXISTS idx_ss_notify_bind_pending_expires
+  ON ss_notify_bind_pending(expires_at);
+
+COMMENT ON TABLE ss_notify_bind_pending IS 'WxPusher 扫码绑定会话：create/qrcode 后轮询 UID 前的暂存';
+
+DROP TRIGGER IF EXISTS update_ss_notify_bind_pending_updated_at ON ss_notify_bind_pending;
+CREATE TRIGGER update_ss_notify_bind_pending_updated_at BEFORE UPDATE ON ss_notify_bind_pending
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

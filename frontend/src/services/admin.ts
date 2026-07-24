@@ -16,7 +16,9 @@ export function fetchStation(): Promise<Station> {
   return get<Station>('/api/admin/station');
 }
 
-export function updateStation(payload: Partial<Station>): Promise<Station> {
+export function updateStation(
+  payload: Record<string, unknown>,
+): Promise<Station> {
   return put<Station>('/api/admin/station', payload, { successMessage: '驿站信息已保存' });
 }
 

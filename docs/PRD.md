@@ -383,7 +383,7 @@ smart-station
 | 级别 | 条件（默认阈值） | 列表色 | 系统动作 |
 |------|------------------|--------|----------|
 | `warn` 预警 | 天数 ≥ `overdue_warn_days`（3）且 < remind | 黄 | 标记列表；首次达到时写 `overdue_warn` 事件；包裹 `status` 可保持 `in_stock` 或置 `overdue` |
-| `remind` 提醒 | 天数 ≥ `overdue_remind_days`（7）且 < return | 橙 | 写 `overdue_remind` 事件；触发短信 stub（`overdue_remind` 模板） |
+| `remind` 提醒 | 天数 ≥ `overdue_remind_days`（7）且 < return | 橙 | 写 `overdue_remind` 事件；触发免费通道通知（`overdue_remind` 模板） |
 | `return` 待退回 | 天数 ≥ `overdue_return_days`（15） | 红 | 列表高亮「待退回」；引导人工退回流程 |
 
 > 阈值可在系统设置按驿站调整（已有字段）。扫描任务将达到 warn 及以上且仍为 `in_stock` 的包裹批量更新为 `status=overdue`。
@@ -409,7 +409,7 @@ smart-station
   3. 计算 `days = floor((now - inbound_at) / 1d)`
   4. 升级：`in_stock` → `overdue`（若 days ≥ warn）
   5. 事件防重：同 parcel 同 `event_type` 在「当前超期周期」内不重复写（以是否已有该事件为准）
-  6. remind 级触发短信 stub（失败不阻断扫描）
+  6. remind 级触发免费通道通知（失败不阻断扫描）
 - **返回**：`{ scanned, markedOverdue, warned, reminded, returnCandidates }`
 
 #### 4.7.5 API
@@ -639,21 +639,46 @@ smart-station
 
 ### 4.13 通知服务
 
-#### 4.13.1 短信模板
+> **路线决策（开发试验）**：不接商用短信，采用**免费多通道**触达。目标平台仅 PC / PAD / H5，不做小程序。
+
+#### 4.13.1 通知模板
 | 模板 | 触发 | 内容 |
 |------|------|------|
 | 入库通知 | 入库成功 | 【驿站名】您有包裹已到，取件码 3-2-9903，请凭码到对应货架取件。 |
-| 超期提醒 | 滞留 3/7 天 | 【驿站名】您的包裹已到 X 天，请尽快取件，超期将退回。 |
-| 退回通知 | 标记退回 | 【驿站名】您的包裹已退回原快递公司，运单号 Y。 |
-| 取件成功 | 出库成功 | 【驿站名】您的包裹已取出，感谢使用。 |
+| 超期提醒 | 滞留扫描 remind 级 | 【驿站名】您的包裹已到 X 天，即将退回，请立即取件。 |
+| 查件验证码 | Kiosk / 查件门户 | 【智能快递驿站】您的查件验证码为 NNNNNN，5 分钟内有效。 |
+| 退回通知 | 标记退回 | 【驿站名】您的包裹已退回原快递公司，运单号 Y。（模板预留） |
+| 取件成功 | 出库成功 | 【驿站名】您的包裹已取出，感谢使用。（模板预留） |
 
-#### 4.13.2 发送记录
-- 列表查询：时间、收件人、手机号、模板、状态（成功/失败）
-- 失败可重发
+#### 4.13.2 免费通道与隐私边界（`NOTIFY_CHANNELS`）
+| 通道 | 配置 | 角色 | 内容 |
+|------|------|------|------|
+| `console` | 默认 | 开发日志 | 完整 |
+| `wecom` | `WECOM_WEBHOOK_URL` | **共享公告群**（全员可见） | **仅脱敏摘要**（手机尾号），**永不发取件码/验证码** |
+| `serverchan`（环境变量） | `SERVERCHAN_SENDKEY` | 管理员个人旁路 | 完整（仅管理员微信） |
+| 客户绑定（主） | `WXPUSHER_APP_TOKEN` + 表 `ss_notify_bindings`（channel=`wxpusher`） | **一对一私信** | 完整取件码（客户扫码关注 WxPusher 后按 UID 推送） |
+| 客户绑定（兼容） | 表 `ss_notify_bindings`（channel=`serverchan`） | **一对一私信** | 完整取件码（历史 SendKey 绑定仍有效） |
 
-#### 4.13.3 接口预留
-- 第三方 SMS 服务商接口预留（阿里云/腾讯云短信）
-- 后端 NotifyService 封装统一发送接口，可切换服务商
+- 多通道逗号组合，如 `NOTIFY_CHANNELS=console,wecom,serverchan`
+- 客户绑定 API：
+  - `GET /api/kiosk/notify-guide` 公示文案与企微群二维码
+  - `POST /api/kiosk/notify-bind/wxpusher/start` 手机号验证后创建关注二维码
+  - `POST /api/kiosk/notify-bind/wxpusher/poll` 轮询扫码 UID（间隔 ≥12s）并完成绑定
+  - `POST /api/kiosk/notify-unbind` 解绑
+  - `POST /api/kiosk/notify-bind` 兼容旧 Server酱 SendKey 绑定
+- 驿站公示配置：`ss_stations.notify_config`（企微群二维码 URL、WxPusher 绑定步骤文案），在 `/query`、`/m` 与系统管理「驿站信息」维护
+- 查件验证码：不进企微群；非 production 可返回 `devCode`
+- 驿站开关仍用 `ss_stations.sms_enabled`（语义为「是否发送到件通知」）
+
+#### 4.13.3 发送记录
+- 写入 `ss_sms_logs`（表名历史遗留，实际为通知日志）
+- `params` 含 `channels` / `channelResults` / `freeRoute: true`
+- 列表查询与失败重发为后续管理页能力（当前可走 DB / 日志）
+
+#### 4.13.4 明确不做（当前阶段）
+- 不接阿里云/腾讯云商用短信
+- 不做微信小程序 / 服务号订阅消息
+- `SMS_PROVIDER=real` 不再触发付费短信，回退 console 并打警告日志
 
 ---
 
@@ -860,7 +885,7 @@ smart-station
 | 序 | 方向 | 核心痛点 | 关键能力 | 关联现有模块 | 契合度 |
 |----|------|----------|----------|--------------|--------|
 | ~~P1~~ ✅ | 面单 OCR 智能入库（**已交付 1.6.0**） | 晚高峰逐件扫码 + 手录手机号，排队到门口，入库慢且易错 | 拍照/上传面单 → OCR 解析运单号/手机号/收件人 → 预填入库表单，人工确认 | inbound、增强池「AI 识别」 | 高 |
-| P2 | 多通道触达 + 滞留转化 | 短信为 stub，触达率低成本高，用户不看即滞留 | 多通道（短信/语音外呼/小程序）+ 滞留自动升级提醒 + 触达效果统计 | notify、overdue | 高 |
+| P2 | 多通道触达 + 滞留转化 | 试验期不走商用短信 | 免费通道（console/企业微信/Server酱）已落地；后续可加触达统计与策略升级 | notify、overdue | 中（免费路线已接） |
 | P3 | 取件人身份核验 | 取件码可转发/偷看，晚高峰拿错件、冒领引发纠纷 | 出库侧尾号确认 / 拍照留证 / 大件签名，纠纷可回溯 | outbound、scan | 中高 |
 | P4 | 到付 + 代收货款 | 到付件、代收货款是真实现金业务，当前无「对用户收款」线，钱账对不上 | 到付/代收金额录入 → 取件时收款 → 日结与账单打通 | finance、outbound | 中 |
 | P5 | 交接班 + 员工绩效 | 多店员轮班，谁入谁出、交接盘点、日结现金无汇总 | 班次记录、交接盘点、按操作人绩效与现金日结 | admin、stats、parcel_events | 中 |

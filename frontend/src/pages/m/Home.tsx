@@ -3,6 +3,7 @@ import * as kioskService from '@/services/kiosk';
 import type { KioskParcelItem, KioskQueryResult } from '@/types/kiosk';
 import EmptyState from '@/components/ui/EmptyState';
 import { formatBeijingTimestamp } from '@/utils/date';
+import NotifyBindCard from '@/components/NotifyBindCard';
 
 // H5 远端查件：手机号 + 验证码 → 在库包裹列表（仅查看，不可出库）
 const Home: React.FC = () => {
@@ -33,8 +34,13 @@ const Home: React.FC = () => {
     }
     setSendingCode(true);
     try {
-      await kioskService.sendCode(phone);
-      setInfo('验证码已发送，5 分钟内有效');
+      const res = await kioskService.sendCode(phone);
+      if (res.devCode) {
+        setCode(res.devCode);
+        setInfo(`验证码已发送（开发态：${res.devCode}），5 分钟内有效`);
+      } else {
+        setInfo('验证码已发送，5 分钟内有效');
+      }
       setCountdown(60);
       codeRef.current?.focus();
     } catch (err) {
@@ -149,6 +155,10 @@ const Home: React.FC = () => {
     <div>
       <h1 className="mb-2 text-xl font-bold text-gray-800">取件查询</h1>
       <p className="mb-6 text-sm text-gray-500">输入手机号查询您的在库包裹</p>
+
+      <div className="mb-4">
+        <NotifyBindCard compact />
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>

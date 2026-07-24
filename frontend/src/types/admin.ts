@@ -1,5 +1,17 @@
 // 系统管理相关类型定义
 
+export interface NotifyConfig {
+  title?: string;
+  content?: string;
+  wecomQrUrl?: string;
+  wecomJoinTip?: string;
+  /** @deprecated 客户主通道 WxPusher */
+  serverchanGuideUrl?: string;
+  serverchanGuide?: string;
+  wxpusherGuide?: string;
+  bindEnabled?: boolean;
+}
+
 export interface Station {
   id: string;
   name: string;
@@ -12,6 +24,7 @@ export interface Station {
   overdue_remind_days: number;
   overdue_return_days: number;
   sms_enabled: boolean;
+  notify_config?: NotifyConfig | null;
   status: string;
   created_at: string;
   updated_at: string;
