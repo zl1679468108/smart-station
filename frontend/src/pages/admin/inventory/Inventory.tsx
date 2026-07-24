@@ -19,6 +19,7 @@ import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
 import PageHeader from '@/components/ui/PageHeader';
+import NotifyReachBar from '@/components/NotifyReachBar';
 import type {
   InventoryQuery,
   ParcelListItem,
@@ -356,38 +357,7 @@ const onBatchRemindOverdue = async () => {
         description="在库/滞留可补发到件；滞留或满 3 天可发提醒。未绑定客户需当面报码。"
       />
 
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-orange-100 bg-orange-50/70 px-3 py-2">
-        <p className="text-[11px] text-orange-900">
-          通知跟进：客户绑定后可补发取件码；今日未绑定可按手机号集中处理。
-        </p>
-        <button
-          type="button"
-          onClick={() => navigate('/admin/system?tab=notify&filter=unbound&view=byPhone')}
-          className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
-        >
-          按手机号跟进
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate('/admin/system?tab=notify&filter=inbound')}
-          className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 hover:bg-gray-50"
-        >
-          到件通知记录
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            void (async () => {
-              const ok = await copyText(buildBindGuideScript());
-              if (ok) notifySuccess('已复制绑定引导（不含取件码）');
-              else notifyError('复制失败');
-            })();
-          }}
-          className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
-        >
-          复制绑定话术
-        </button>
-      </div>
+      <NotifyReachBar className="mb-3" context="inventory" />
 
       {/* 筛选栏 */}
       <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">

@@ -17,7 +17,7 @@ import {
   setSuccessBeepEnabled,
 } from '@/utils/inboundOps';
 import { useCouriers, useInvalidateShelves, useShelves } from '@/hooks/useDictionary';
-import { useDashboard, useInvalidateDashboard } from '@/hooks/useDashboardData';
+import { useInvalidateDashboard } from '@/hooks/useDashboardData';
 import { useInvalidateInventoryList } from '@/hooks/useInventoryData';
 import type {
   BatchNotifySummary,
@@ -32,6 +32,7 @@ import Icon from '@/components/ui/Icon';
 import PageHeader from '@/components/ui/PageHeader';
 import WaybillOcrUploader from '@/components/ui/WaybillOcrUploader';
 import NotifyBindHint from '@/components/NotifyBindHint';
+import NotifyReachBar from '@/components/NotifyReachBar';
 import * as shiftService from '@/services/shift';
 
 type Mode = 'scan' | 'manual' | 'batch';
@@ -250,146 +251,6 @@ function CollectDueHint({ freight, cod }: { freight: string; cod: string }) {
 
 
 
-/** 入库页常驻：今日到件触达（与工作台同源），高峰不用回工作台也能跟进 */
-const InboundNotifyReachBar: React.FC = () => {
-  const navigate = useNavigate();
-  const { data, isFetching } = useDashboard({ refetchInterval: 45000 });
-  const notify = data?.notify;
-  if (!notify) {
-    return isFetching ? (
-      <div className="mb-4 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-400">
-        正在同步今日触达…
-      </div>
-    ) : null;
-  }
-
-  const rate =
-    notify.inboundNotices > 0
-      ? Math.round((notify.customerPushed / notify.inboundNotices) * 100)
-      : null;
-  const needFollow =
-    notify.customerUnbound > 0 || notify.customerPushFailed > 0 || notify.sendFailed > 0;
-
-  return (
-    <div
-      className={`mb-4 rounded-lg border px-3 py-2.5 ${
-        needFollow
-          ? 'border-orange-200 bg-orange-50/80'
-          : 'border-emerald-100 bg-emerald-50/50'
-      }`}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <p className="text-sm font-medium text-gray-800">今日到件触达</p>
-            {rate != null && (
-              <span className="text-[11px] text-gray-600">
-                私信率 {rate}%（{notify.customerPushed}/{notify.inboundNotices}）
-              </span>
-            )}
-            {isFetching && (
-              <span className="text-[10px] text-gray-400">刷新中</span>
-            )}
-          </div>
-          <p className="mt-0.5 text-[11px] text-gray-500">
-            本站全天数据；入库成功后会自动刷新。未绑定客户收不到微信取件码。
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              void (async () => {
-                const ok = await copyText(buildBindGuideScript());
-                if (ok) notifySuccess('已复制绑定引导（不含取件码）');
-                else notifyError('复制失败');
-              })();
-            }}
-            className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
-          >
-            复制绑定话术
-          </button>
-          {notify.customerUnbound > 0 && (
-            <button
-              type="button"
-              onClick={() =>
-                navigate('/admin/system?tab=notify&filter=unbound&view=byPhone')
-              }
-              className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
-            >
-              按手机号跟进
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => navigate('/admin/system?tab=notify&filter=today')}
-            className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
-          >
-            通知记录
-          </button>
-        </div>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
-        <button
-          type="button"
-          onClick={() => navigate('/admin/system?tab=notify&filter=pushed')}
-          className="rounded-full bg-white px-2.5 py-1 text-emerald-700 ring-1 ring-emerald-100 hover:bg-emerald-50"
-        >
-          已私信 {notify.customerPushed}
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            navigate('/admin/system?tab=notify&filter=unbound&view=byPhone')
-          }
-          className={`rounded-full bg-white px-2.5 py-1 ring-1 hover:bg-orange-50 ${
-            notify.customerUnbound > 0
-              ? 'font-medium text-orange-800 ring-orange-200'
-              : 'text-gray-600 ring-gray-200'
-          }`}
-        >
-          未绑定 {notify.customerUnbound}
-        </button>
-        {notify.customerPushFailed > 0 && (
-          <button
-            type="button"
-            onClick={() => navigate('/admin/system?tab=notify&filter=push_failed')}
-            className="rounded-full bg-white px-2.5 py-1 font-medium text-amber-800 ring-1 ring-amber-100 hover:bg-amber-50"
-          >
-            私信失败 {notify.customerPushFailed}
-          </button>
-        )}
-        {notify.sendFailed > 0 && (
-          <button
-            type="button"
-            onClick={() => navigate('/admin/system?tab=notify&filter=failed&today=1')}
-            className="rounded-full bg-white px-2.5 py-1 font-medium text-red-700 ring-1 ring-red-100 hover:bg-red-50"
-          >
-            发送失败 {notify.sendFailed}
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => navigate('/admin/system?tab=notify&filter=inbound')}
-          className="rounded-full bg-white px-2.5 py-1 text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50"
-        >
-          到件通知 {notify.inboundNotices}
-        </button>
-        <span className="self-center text-[11px] text-gray-500">
-          已绑定客户 {notify.activeBindings} 人
-        </span>
-      </div>
-      {needFollow && (
-        <p className="mt-2 text-[11px] text-orange-900/90">
-          {notify.customerUnbound > 0
-            ? '有未绑定：当面报码，或复制绑定话术让客户查件绑定后再补发。'
-            : '有私信/发送失败：到通知记录点补发，或当面告知取件码。'}
-        </p>
-      )}
-    </div>
-  );
-};
-
 // 入库管理页：扫码入库（主）/ 手动录入 / 批量导入（入口）
 const Inbound: React.FC = () => {
 
@@ -433,7 +294,7 @@ const Inbound: React.FC = () => {
         </div>
       )}
 
-      <InboundNotifyReachBar />
+      <NotifyReachBar className="mb-4" context="inbound" />
 
       {/* 模式切换 */}
       <div className="mb-4 flex gap-1 border-b border-gray-200">
