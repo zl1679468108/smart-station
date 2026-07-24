@@ -42,6 +42,27 @@ export function buildFacePickupScript(opts: {
 export const UNBOUND_FACE_HINT =
   '客户还没绑定微信：请当面报取件码；也可引导查件页绑定——绑定后系统会自动补发取件码。';
 
+/** 入库成功后未绑定：店员三步动作（UI 展示） */
+export const INBOUND_UNBOUND_STEPS = [
+  '当面报取件码（可复制当面话术，勿发群）',
+  '引导客户打开查件页绑定微信通知',
+  '客户绑定后点「补发通知」，已在库件会自动收码',
+] as const;
+
+/** 入库未绑定：组合提醒（含取件码，仅一对一） */
+export function buildInboundUnboundComboScript(opts: {
+  pickupCode: string;
+  stationName?: string;
+  recipientName?: string | null;
+  collectDueAmount?: number | null;
+}): string {
+  return [
+    buildFacePickupScript(opts),
+    '',
+    buildBindGuideScript({ stationName: opts.stationName }),
+  ].join('\n');
+}
+
 const METHOD_LABEL: Record<string, string> = {
   cash: '现金',
   wechat: '微信',

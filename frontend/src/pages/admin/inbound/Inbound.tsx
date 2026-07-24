@@ -5,10 +5,12 @@ import * as adminService from '@/services/admin';
 import { ApiError } from '@/services/api';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import {
-  UNBOUND_FACE_HINT,
   buildBindGuideScript,
   buildFacePickupScript,
+  buildInboundUnboundComboScript,
   buildUnboundFollowupScript,
+  INBOUND_UNBOUND_STEPS,
+  UNBOUND_FACE_HINT,
 } from '@/utils/staffScripts';
 import {
   loadLastParcelSize,
@@ -517,7 +519,15 @@ const InboundSuccess: React.FC<{
         <div className={`mt-4 rounded-md border px-3 py-2.5 text-xs leading-relaxed ${notifyTone}`}>
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="font-medium">通知状态</p>
+              <p className="font-medium">
+                {!n.enabled
+                  ? '通知状态'
+                  : n.customerPushed
+                    ? '通知状态 · 已私信'
+                    : n.customerBound
+                      ? '通知状态 · 私信未成功'
+                      : '通知状态 · 客户收不到微信私信'}
+              </p>
               <p className="mt-1">{n.staffMessage}</p>
               {!n.customerBound && n.enabled && (
                 <p className="mt-1 text-[11px] opacity-90">{UNBOUND_FACE_HINT}</p>
@@ -540,21 +550,61 @@ const InboundSuccess: React.FC<{
             )}
           </div>
           {!n.customerBound && n.enabled && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void onCopyFaceScript()}
-                className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
-              >
-                复制当面话术（含取件码）
-              </button>
-              <button
-                type="button"
-                onClick={() => void onCopyBindScript()}
-                className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
-              >
-                复制绑定引导（不含码）
-              </button>
+            <div className="mt-3 rounded-md border border-orange-300 bg-white/90 px-3 py-2.5">
+              <p className="text-[11px] font-semibold text-orange-950">店员三步（未绑定必做）</p>
+              <ol className="mt-1 list-decimal space-y-0.5 pl-4 text-[11px] text-orange-900">
+                {INBOUND_UNBOUND_STEPS.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void onCopyFaceScript()}
+                  className="min-h-[36px] rounded-md bg-orange-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-orange-700"
+                >
+                  复制当面话术（含码，优先）
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void onCopyBindScript()}
+                  className="min-h-[36px] rounded-md border border-orange-300 bg-white px-3 py-1.5 text-[11px] font-medium text-orange-900 hover:bg-orange-50"
+                >
+                  复制绑定引导（不含码）
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void (async () => {
+                      const text = buildInboundUnboundComboScript({
+                        pickupCode: result.pickupCode,
+                        collectDueAmount: needCollect ? collectDue : undefined,
+                      });
+                      const ok = await copyText(text);
+                      if (ok) notifySuccess('已复制「当面+绑定」组合（含取件码，勿发群）');
+                      else notifyError('复制失败');
+                    })();
+                  }}
+                  className="min-h-[36px] rounded-md border border-orange-200 bg-orange-50 px-3 py-1.5 text-[11px] font-medium text-orange-900 hover:bg-orange-100"
+                >
+                  复制组合话术
+                </button>
+                {result.recipientPhone && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        `/admin/system?tab=notify&filter=unbound&view=byPhone&phone=${encodeURIComponent(
+                          String(result.recipientPhone).replace(/\D/g, '').slice(0, 11),
+                        )}`,
+                      )
+                    }
+                    className="min-h-[36px] rounded-md border border-gray-200 bg-white px-3 py-1.5 text-[11px] text-gray-700 hover:bg-gray-50"
+                  >
+                    按手机号看通知
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -724,6 +774,13 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       }));
       saveLastParcelSize(size);
       playInboundSuccessBeep();
+      if (res.notify?.enabled && !res.notify?.customerBound) {
+        notifySuccess('入库成功 · 客户未绑定，请当面报取件码');
+      } else if (res.notify?.customerPushed) {
+        notifySuccess('入库成功 · 已微信私信取件码');
+      } else {
+        notifySuccess('入库成功');
+      }
       invalidateShelves();
       invalidateDashboard();
       invalidateInventoryList();
@@ -972,19 +1029,64 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {sessionStats.unbound > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void (async () => {
-                      const ok = await copyText(buildBindGuideScript());
-                      if (ok) notifySuccess('已复制绑定引导（不含取件码）');
-                      else notifyError('复制失败');
-                    })();
-                  }}
-                  className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] text-orange-800 hover:bg-orange-50"
-                >
-                  复制绑定话术
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void (async () => {
+                        const ok = await copyText(buildBindGuideScript());
+                        if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                        else notifyError('复制失败');
+                      })();
+                    }}
+                    className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] text-orange-800 hover:bg-orange-50"
+                  >
+                    复制绑定话术
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void (async () => {
+                        const items = recent
+                          .filter((r) => r.notify?.enabled && !r.notify?.customerBound)
+                          .map((r) => ({
+                            phone: String(r.recipientPhone || '').trim(),
+                            phoneMasked: r.recipientPhone
+                              ? maskPhone(String(r.recipientPhone))
+                              : undefined,
+                            recipientName: undefined as string | null | undefined,
+                            unbound: 1,
+                            pushFailed: 0,
+                            lastPickupCode: r.pickupCode,
+                          }))
+                          .filter((x) => x.phone);
+                        if (items.length === 0) {
+                          // fallback: still copy guide
+                          const ok = await copyText(buildBindGuideScript());
+                          if (ok) notifySuccess('已复制绑定引导（本会话暂无手机号明细）');
+                          else notifyError('复制失败');
+                          return;
+                        }
+                        const text = buildUnboundFollowupScript(items);
+                        const ok = await copyText(text);
+                        if (ok) notifySuccess(`已复制本会话未绑定 ${items.length} 人跟进清单`);
+                        else notifyError('复制失败');
+                      })();
+                    }}
+                    className="rounded-md border border-orange-300 bg-orange-100/80 px-2 py-1 text-[11px] font-medium text-orange-950 hover:bg-orange-100"
+                  >
+                    复制本会话未绑定清单
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate('/admin/system?tab=notify&filter=unbound&view=byPhone&days=3')
+                    }
+                    className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] text-orange-800 hover:bg-orange-50"
+                  >
+                    近3日未绑定
+                  </button>
+                </>
               )}
               <button
                 type="button"
@@ -1001,6 +1103,9 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           </div>
           <p className="mt-1 text-[11px] text-gray-500">
             只统计当前页面未刷新期间的入库，方便连续扫码时心里有数
+            {sessionStats.unbound > 0
+              ? ' · 有未绑定请当面报码，或复制清单逐个跟进'
+              : ''}
           </p>
         </div>
       )}
@@ -1146,6 +1251,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
 
 // ============ 手动录入 ============
 const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
+  const navigate = useNavigate();
   const invalidateShelves = useInvalidateShelves();
   const invalidateDashboard = useInvalidateDashboard();
   const invalidateInventoryList = useInvalidateInventoryList();
@@ -1243,6 +1349,13 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       }));
       saveLastParcelSize(form.size);
       playInboundSuccessBeep();
+      if (res.notify?.enabled && !res.notify?.customerBound) {
+        notifySuccess('入库成功 · 客户未绑定，请当面报取件码');
+      } else if (res.notify?.customerPushed) {
+        notifySuccess('入库成功 · 已微信私信取件码');
+      } else {
+        notifySuccess('入库成功');
+      }
       invalidateShelves();
       invalidateDashboard();
       invalidateInventoryList();
@@ -1466,19 +1579,30 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {sessionStats.unbound > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void (async () => {
-                      const ok = await copyText(buildBindGuideScript());
-                      if (ok) notifySuccess('已复制绑定引导（不含取件码）');
-                      else notifyError('复制失败');
-                    })();
-                  }}
-                  className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] text-orange-800 hover:bg-orange-50"
-                >
-                  复制绑定话术
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void (async () => {
+                        const ok = await copyText(buildBindGuideScript());
+                        if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                        else notifyError('复制失败');
+                      })();
+                    }}
+                    className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] text-orange-800 hover:bg-orange-50"
+                  >
+                    复制绑定话术
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate('/admin/system?tab=notify&filter=unbound&view=byPhone&days=3')
+                    }
+                    className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] text-orange-800 hover:bg-orange-50"
+                  >
+                    近3日未绑定
+                  </button>
+                </>
               )}
               <button
                 type="button"
@@ -1494,6 +1618,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           </div>
           <p className="mt-1 text-[11px] text-gray-500">
             只统计当前页面未刷新期间的入库
+            {sessionStats.unbound > 0 ? ' · 未绑定请当面报码并引导绑定' : ''}
           </p>
         </div>
       )}
@@ -2160,27 +2285,41 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
             </p>
             {bindPrecheck.unbound > 0 ? (
               <div className="mt-2 space-y-1.5">
+                <p className="font-medium opacity-95">
+                  未绑定客户入库后收不到微信私信：请当面报码 + 引导绑定。
+                </p>
                 <p className="opacity-90">
-                  未绑定客户入库后收不到取件码私信，请当面报码；可复制绑定话术后再补发。
+                  建议先复制绑定话术发给客户；导入后对未私信清单继续跟进。
                 </p>
                 {bindPrecheck.unboundSamples.length > 0 && (
                   <p className="font-mono text-[11px] opacity-80">
                     未绑定示例：{bindPrecheck.unboundSamples.join('、')}
                   </p>
                 )}
-                <button
-                  type="button"
-                  className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-100"
-                  onClick={() => {
-                    void (async () => {
-                      const ok = await copyText(buildBindGuideScript());
-                      if (ok) notifySuccess('已复制绑定引导（不含取件码）');
-                      else notifyError('复制失败');
-                    })();
-                  }}
-                >
-                  复制绑定话术
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="min-h-[36px] rounded-md bg-orange-600 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-orange-700"
+                    onClick={() => {
+                      void (async () => {
+                        const ok = await copyText(buildBindGuideScript());
+                        if (ok) notifySuccess('已复制绑定引导（不含取件码，可发客户）');
+                        else notifyError('复制失败');
+                      })();
+                    }}
+                  >
+                    复制绑定话术（推荐）
+                  </button>
+                  <button
+                    type="button"
+                    className="min-h-[36px] rounded-md border border-orange-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-orange-900 hover:bg-orange-100"
+                    onClick={() =>
+                      navigate('/admin/system?tab=notify&filter=unbound&view=byPhone&days=3')
+                    }
+                  >
+                    近3日未绑定
+                  </button>
+                </div>
               </div>
             ) : (
               <p className="mt-1 opacity-90">抽检手机均已绑定，入库后可尝试私信取件码。</p>
@@ -2295,9 +2434,21 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
               {(result.notifySummary.customerUnbound > 0 ||
                 result.notifySummary.customerPushFailed > 0) && (
                 <div className="mt-2 space-y-2">
-                  <p className="text-[11px] opacity-90">
-                    未私信的：当面报取件码；可复制绑定引导；客户绑定后点「补发」或下方一键补发。
+                  <p className="text-[11px] font-semibold opacity-95">
+                    未私信必做：① 当面报码 ② 引导绑定 ③ 绑定后补发
                   </p>
+                  <p className="text-[11px] opacity-90">
+                    可导出/复制未私信清单；也可打开近3日未绑定按手机号跟进。
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate('/admin/system?tab=notify&filter=unbound&view=byPhone&days=3')
+                    }
+                    className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-100"
+                  >
+                    近3日未绑定跟进
+                  </button>
                   <div className="flex flex-wrap gap-2">
                     {result.notifySummary.customerUnbound > 0 && (
                       <button
