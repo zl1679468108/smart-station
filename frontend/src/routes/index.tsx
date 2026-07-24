@@ -20,6 +20,7 @@ const Exception = React.lazy(() => import('@/pages/admin/exception/Exception'));
 const Shipping = React.lazy(() => import('@/pages/admin/shipping/Shipping'));
 const Finance = React.lazy(() => import('@/pages/admin/finance/Finance'));
 const Stats = React.lazy(() => import('@/pages/admin/stats/Stats'));
+const Shifts = React.lazy(() => import('@/pages/admin/shifts/Shifts'));
 const Scan = React.lazy(() => import('@/pages/scan/Scan'));
 const QueryHome = React.lazy(() => import('@/pages/query/Home'));
 
@@ -92,6 +93,15 @@ export const AppRoutes: React.FC = () => {
             element={
               <RequireRole roles={['admin', 'clerk']}>
                 <Stats />
+              </RequireRole>
+            }
+          />
+          {/* 交接班 + 员工绩效：admin + clerk */}
+          <Route
+            path="shifts"
+            element={
+              <RequireRole roles={['admin', 'clerk']}>
+                <Shifts />
               </RequireRole>
             }
           />

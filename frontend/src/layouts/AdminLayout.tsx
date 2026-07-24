@@ -22,6 +22,7 @@ const menuItems: { path: string; label: string; icon: IconName; roles: Role[] }[
   { path: '/admin/shipping', label: '寄件管理', icon: 'send', roles: ['admin', 'clerk'] },
   { path: '/admin/finance', label: '财务结算', icon: 'wallet', roles: ['admin', 'clerk'] },
   { path: '/admin/stats', label: '数据统计', icon: 'chart', roles: ['admin', 'clerk'] },
+  { path: '/admin/shifts', label: '交接班', icon: 'user', roles: ['admin', 'clerk'] },
   { path: '/admin/system', label: '系统管理', icon: 'settings', roles: ['admin', 'clerk'] },
 ];
 

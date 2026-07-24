@@ -337,6 +337,17 @@ const Dashboard: React.FC = () => {
             </button>
             <button
               type="button"
+              onClick={() => navigate('/admin/shifts')}
+              className="flex w-full flex-col rounded-md bg-slate-50 px-3 py-3 text-left hover:bg-slate-100/80"
+            >
+              <div className="flex w-full items-center justify-between">
+                <span className="text-sm text-gray-600">交接班</span>
+                <span className="text-lg font-bold text-slate-700">→</span>
+              </div>
+              <span className="mt-1 text-xs text-slate-600/80">开班上岗 / 交班盘点 / 员工绩效</span>
+            </button>
+            <button
+              type="button"
               onClick={() => navigate('/admin/inventory?collectStatus=unpaid')}
               className="flex w-full flex-col rounded-md bg-rose-50 px-3 py-3 text-left hover:bg-rose-100/80"
             >

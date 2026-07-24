@@ -913,7 +913,7 @@ smart-station
 | P2 | 多通道触达 + 滞留转化 | 试验期不走商用短信 | 免费通道（console/企业微信/Server酱）已落地；后续可加触达统计与策略升级 | notify、overdue | 中（免费路线已接） |
 | P3 | 取件人身份核验 | 取件码可转发/偷看，晚高峰拿错件、冒领引发纠纷 | 出库侧尾号确认 / 拍照留证 / 取件签名（大件推荐），纠纷可回溯 | outbound、scan | 中高 |
 | P4 | 到付 + 代收货款 | 到付件、代收货款是真实现金业务，当前无「对用户收款」线，钱账对不上 | 入库录金额 → 取件收款确认 → 收款日结（与快递公司月结独立） | finance、inbound、outbound | 中 |
-| P5 | 交接班 + 员工绩效 | 多店员轮班，谁入谁出、交接盘点、日结现金无汇总 | 班次记录、交接盘点、按操作人绩效与现金日结 | admin、stats、parcel_events | 中 |
+| P5 | 交接班 + 员工绩效 | 多店员轮班，谁入谁出、交接盘点、日结现金无汇总 | 开班/交班快照（入出库+收款）、班次记录、按操作人绩效 | shifts、stats | 中 |
 | P6 | 用户主动订阅提醒 | 「有没有我的件」需用户自查，跑空 + 滞留 | 订阅式主动提醒 + 预约取件时段 + 到店导航 | kiosk/query、notify | 中 |
 
 ---
@@ -1043,6 +1043,7 @@ smart-station/
 - `ss_roles` / `ss_permissions`
 - `ss_parcels`（包裹主表）
 - `ss_parcel_events`（状态轨迹）
+- `ss_shifts`（交接班班次）
 - `ss_shelves`（货架）
 - `ss_pickup_codes`（取件码）
 - `ss_overdue_rules`
