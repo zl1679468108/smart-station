@@ -44,7 +44,11 @@ function isLogFilter(v: string): v is LogFilter {
  */
 
 function collectUnboundFromPhoneSummaries(rows: NotifyPhoneSummaryItem[]) {
-  return rows.filter((r) => Number(r.unbound || 0) > 0 || Number(r.pushFailed || 0) > 0);
+  return rows.filter(
+    (r) =>
+      (Number(r.unbound || 0) > 0 || Number(r.pushFailed || 0) > 0) &&
+      r.hasBinding !== true,
+  );
 }
 
 function collectUnboundFromLogs(rows: NotifyLogItem[]) {
@@ -100,6 +104,18 @@ const NotifyTab: React.FC = () => {
   );
   const [logPage, setLogPage] = useState(1);
   const logPageSize = 40;
+  const parseDays = (raw: string | null) => {
+    const n = Number(raw || '');
+    if (n === 3 || n === 7) return n;
+    return 1;
+  };
+  const initialDays = parseDays(searchParams.get('days'));
+  const initialExcludeBound =
+    searchParams.get('excludeBound') === '0' || searchParams.get('excludeBound') === 'false'
+      ? false
+      : true;
+  const [rangeDays, setRangeDays] = useState<1 | 3 | 7>(initialDays as 1 | 3 | 7);
+  const [excludeBound, setExcludeBound] = useState(initialExcludeBound);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -117,37 +133,40 @@ const NotifyTab: React.FC = () => {
       if (logFilter === 'inbound') logOpts.templateCode = 'inbound_notice';
       if (logFilter === 'overdue') logOpts.templateCode = 'overdue_remind';
 
-      // 触达筛选：默认「今日 + 到件」，便于从工作台深链复盘
+      // 触达筛选：默认「时间窗 + 到件」，便于从工作台深链复盘
       if (REACH_FILTERS.includes(logFilter)) {
         logOpts.reach = logFilter;
-        logOpts.todayOnly = true;
+        logOpts.days = rangeDays;
         logOpts.templateCode = 'inbound_notice';
+      } else if (logFilter === 'today') {
+        logOpts.days = 1;
+      } else if (logFilter === 'inbound' || logFilter === 'overdue' || logFilter === 'failed') {
+        // 其它筛选默认带时间窗，避免扫全表
+        if (!phone) logOpts.days = rangeDays;
+      } else if (!phone) {
+        logOpts.days = rangeDays;
       }
 
-      // 发送失败可叠加今日
+      // 发送失败可叠加今日（兼容旧 deep link）
       if (logFilter === 'failed' && searchParams.get('today') === '1') {
-        logOpts.todayOnly = true;
+        logOpts.days = 1;
       }
 
       const summaryOpts: Parameters<typeof adminService.listNotifyLogPhoneSummary>[0] = {
-        limit: 300,
+        limit: rangeDays > 1 ? 800 : 300,
         phone,
+        days: rangeDays,
+        excludeBound: sub === 'byPhone' ? excludeBound : false,
       };
-      if (logFilter === 'today') summaryOpts.todayOnly = true;
       if (logFilter === 'failed') summaryOpts.status = 'failed';
       if (logFilter === 'inbound') summaryOpts.templateCode = 'inbound_notice';
       if (logFilter === 'overdue') summaryOpts.templateCode = 'overdue_remind';
       if (REACH_FILTERS.includes(logFilter)) {
         summaryOpts.reach = logFilter;
-        summaryOpts.todayOnly = true;
         summaryOpts.templateCode = 'inbound_notice';
       }
       if (logFilter === 'failed' && searchParams.get('today') === '1') {
-        summaryOpts.todayOnly = true;
-      }
-      // 默认聚合看今日，避免全量过大
-      if (!logFilter && !phone) {
-        summaryOpts.todayOnly = true;
+        summaryOpts.days = 1;
       }
 
       const [b, l, s, dash] = await Promise.all([
@@ -169,7 +188,7 @@ const NotifyTab: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [phoneQuery, logFilter, logPage, searchParams]);
+  }, [phoneQuery, logFilter, logPage, searchParams, rangeDays, excludeBound, sub]);
 
   useEffect(() => {
     void load();
@@ -179,24 +198,33 @@ const NotifyTab: React.FC = () => {
     if ((logFilter || phoneQuery) && sub === 'bindings') setSub('logs');
   }, [logFilter, phoneQuery, sub]);
 
-  // URL filter/phone/view 变化时同步（工作台/库存详情深链）
+  // URL filter/phone/view/days 变化时同步（工作台/统计深链）
   useEffect(() => {
     const f = searchParams.get('filter') || '';
     if (isLogFilter(f) && f !== logFilter) {
       setLogFilter(f);
+      setLogPage(1);
     }
     const p = (searchParams.get('phone') || '').replace(/\D/g, '').slice(0, 11);
     if (p && p !== phoneQuery) {
       setPhoneInput(p);
       setPhoneQuery(p);
       setLogPage(1);
-      setSub('logs');
+    }
+    if (!p && phoneQuery && !searchParams.get('phone')) {
+      // keep local clear via onClearSearch
     }
     const view = searchParams.get('view') || '';
     if (view === 'byPhone' && sub !== 'byPhone') {
       setSub('byPhone');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const d = parseDays(searchParams.get('days'));
+    if (d !== rangeDays) setRangeDays(d as 1 | 3 | 7);
+    const ex =
+      searchParams.get('excludeBound') === '0' || searchParams.get('excludeBound') === 'false'
+        ? false
+        : true;
+    if (ex !== excludeBound) setExcludeBound(ex);
   }, [searchParams]);
 
   const applyLogFilter = (f: LogFilter) => {
@@ -206,6 +234,23 @@ const NotifyTab: React.FC = () => {
     if (f) next.set('filter', f);
     else next.delete('filter');
     if (f !== 'failed') next.delete('today');
+    setSearchParams(next, { replace: true });
+  };
+
+  const applyRangeDays = (d: 1 | 3 | 7) => {
+    setRangeDays(d);
+    setLogPage(1);
+    const next = new URLSearchParams(searchParams);
+    if (d === 1) next.delete('days');
+    else next.set('days', String(d));
+    setSearchParams(next, { replace: true });
+  };
+
+  const applyExcludeBound = (v: boolean) => {
+    setExcludeBound(v);
+    const next = new URLSearchParams(searchParams);
+    if (v) next.delete('excludeBound');
+    else next.set('excludeBound', '0');
     setSearchParams(next, { replace: true });
   };
 
@@ -552,6 +597,46 @@ const NotifyTab: React.FC = () => {
         </div>
       )}
 
+      {/* 时间窗 + 跟进筛选 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-gray-500">时间范围</span>
+        {(
+          [
+            { d: 1 as const, label: '今日' },
+            { d: 3 as const, label: '近3日' },
+            { d: 7 as const, label: '近7日' },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.d}
+            type="button"
+            onClick={() => applyRangeDays(t.d)}
+            className={`rounded-full px-2.5 py-1 text-xs ${
+              rangeDays === t.d
+                ? 'bg-primary text-white'
+                : 'bg-white text-gray-600 ring-1 ring-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+        {sub === 'byPhone' && (
+          <label className="ml-1 inline-flex items-center gap-1.5 text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={excludeBound}
+              onChange={(e) => applyExcludeBound(e.target.checked)}
+              className="rounded border-gray-300 text-primary focus:ring-primary"
+            />
+            只看仍未绑定
+          </label>
+        )}
+        <span className="text-[11px] text-gray-400">
+          {rangeDays === 1 ? '今天到件' : `含今天共 ${rangeDays} 天`}
+          {sub === 'byPhone' && excludeBound ? ' · 已绑定的不出现在清单' : ''}
+        </span>
+      </div>
+
       {/* 手机号查询 */}
       <form onSubmit={onSearch} className="flex flex-wrap items-center gap-2">
         <input
@@ -743,7 +828,8 @@ const NotifyTab: React.FC = () => {
       ) : sub === 'byPhone' ? (
         <div className="space-y-2">
           <p className="text-[11px] text-gray-500">
-            按手机号汇总最近发送记录（已扫 {phoneSummaryScanned} 条日志）。优先列出未私信/失败多的客户，点手机号可筛选明细。
+            按手机号汇总{rangeDays === 1 ? '今日' : `近${rangeDays}日`}发送记录（已扫{' '}
+            {phoneSummaryScanned} 条日志）。优先列出未私信/失败多的客户；勾选「只看仍未绑定」可做班中跟进清单。
           </p>
           {unboundFollowupItems.length > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-orange-100 bg-orange-50/70 px-3 py-2">
@@ -791,6 +877,13 @@ const NotifyTab: React.FC = () => {
                         {row.recipientName && (
                           <div className="text-[11px] text-gray-400">{row.recipientName}</div>
                         )}
+                        <div className="mt-0.5 text-[10px]">
+                          {row.hasBinding ? (
+                            <span className="text-emerald-600">已绑定</span>
+                          ) : (
+                            <span className="text-orange-600">未绑定</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-xs text-gray-700">{row.total}</td>
                       <td className="px-3 py-2 text-xs text-emerald-700">{row.pushed}</td>

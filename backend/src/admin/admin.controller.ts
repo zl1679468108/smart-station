@@ -192,14 +192,19 @@ export class AdminController {
     @Query('status') status?: string,
     @Query('templateCode') templateCode?: string,
     @Query('todayOnly') todayOnly?: string,
+    @Query('days') days?: string,
+    @Query('excludeBound') excludeBound?: string,
     @Query('reach') reach?: string,
   ) {
+    const daysNum = days ? Number(days) : 0;
     return this.adminService.listNotifyLogPhoneSummary(stationId, {
-      limit: limit ? Number(limit) : 300,
+      limit: limit ? Number(limit) : undefined,
       phone,
       status,
       templateCode,
       todayOnly: todayOnly === '1' || todayOnly === 'true',
+      days: Number.isFinite(daysNum) && daysNum > 0 ? daysNum : undefined,
+      excludeBound: excludeBound === '1' || excludeBound === 'true',
       reach,
     });
   }
@@ -213,8 +218,10 @@ export class AdminController {
     @Query('status') status?: string,
     @Query('templateCode') templateCode?: string,
     @Query('todayOnly') todayOnly?: string,
+    @Query('days') days?: string,
     @Query('reach') reach?: string,
   ) {
+    const daysNum = days ? Number(days) : 0;
     return this.adminService.listNotifyLogs(stationId, {
       limit: limit ? Number(limit) : 50,
       page: page ? Number(page) : 1,
@@ -222,6 +229,7 @@ export class AdminController {
       status,
       templateCode,
       todayOnly: todayOnly === '1' || todayOnly === 'true',
+      days: Number.isFinite(daysNum) && daysNum > 0 ? daysNum : undefined,
       reach,
     });
   }

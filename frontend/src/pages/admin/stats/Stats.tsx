@@ -74,51 +74,54 @@ const StatsPage: React.FC = () => {
       : null;
   const [exportingUnbound, setExportingUnbound] = useState(false);
 
-  const loadTodayUnboundPhones = async () => {
+  const loadUnboundPhones = async (days: 1 | 3 = 1) => {
     const res = await adminService.listNotifyLogPhoneSummary({
-      limit: 300,
-      todayOnly: true,
+      limit: days > 1 ? 800 : 300,
+      days,
+      excludeBound: true,
       reach: 'unbound',
       templateCode: 'inbound_notice',
     });
     return (res.items || []).filter((r) => Number(r.unbound || 0) > 0);
   };
 
-  const copyTodayUnboundList = async () => {
+  const copyUnboundList = async (days: 1 | 3 = 1) => {
     if (exportingUnbound) return;
     setExportingUnbound(true);
     try {
-      const items = await loadTodayUnboundPhones();
+      const items = await loadUnboundPhones(days);
       if (items.length === 0) {
-        notifyError('今日暂无未绑定到件客户');
+        notifyError(days === 1 ? '今日暂无未绑定客户' : '近3日暂无未绑定客户');
         return;
       }
-      const text = buildUnboundFollowupScript(
-        items.map((r) => ({
-          phone: r.phone,
-          phoneMasked: r.phoneMasked,
-          recipientName: r.recipientName,
-          unbound: r.unbound,
-          pushFailed: r.pushFailed,
-        })),
-      );
+      const lines = items.map((r, i) => {
+        const name = r.recipientName ? `（${r.recipientName}）` : '';
+        return `${i + 1}. ${r.phone}${name} · 未绑定${r.unbound}次`;
+      });
+      const title = days === 1 ? '【今日未绑定客户】' : '【近3日未绑定客户】';
+      const text = [
+        title,
+        ...lines,
+        '',
+        buildBindGuideScript(),
+      ].join('\n');
       const ok = await copyText(text);
-      if (ok) notifySuccess(`已复制今日未绑定 ${items.length} 人清单（勿发群）`);
+      if (ok) notifySuccess(`已复制未绑定 ${items.length} 人（${days === 1 ? '今日' : '近3日'}）`);
       else notifyError('复制失败');
     } catch (e: any) {
-      notifyError(e?.message || '加载未绑定清单失败');
+      notifyError(e?.message || '复制失败');
     } finally {
       setExportingUnbound(false);
     }
   };
 
-  const exportTodayUnboundCsv = async () => {
+  const exportUnboundCsv = async (days: 1 | 3 = 1) => {
     if (exportingUnbound) return;
     setExportingUnbound(true);
     try {
-      const items = await loadTodayUnboundPhones();
+      const items = await loadUnboundPhones(days);
       if (items.length === 0) {
-        notifyError('今日暂无未绑定到件客户');
+        notifyError(days === 1 ? '今日暂无未绑定客户' : '近3日暂无未绑定客户');
         return;
       }
       const escape = (v: string | number | null | undefined) =>
@@ -137,12 +140,13 @@ const StatsPage: React.FC = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `今日未绑定到件_${new Date().toISOString().slice(0, 10)}.csv`;
+      const label = days === 1 ? '今日未绑定到件' : '近3日未绑定到件';
+      a.download = `${label}_${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      notifySuccess(`已导出未绑定 ${items.length} 人`);
+      notifySuccess(`已导出未绑定 ${items.length} 人（${days === 1 ? '今日' : '近3日'}）`);
     } catch (e: any) {
       notifyError(e?.message || '导出失败');
     } finally {
@@ -270,7 +274,7 @@ const StatsPage: React.FC = () => {
                 <button
                   type="button"
                   disabled={exportingUnbound}
-                  onClick={() => void copyTodayUnboundList()}
+                  onClick={() => void copyUnboundList(1)}
                   className="rounded-md border border-orange-300 bg-white px-2 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-50 disabled:opacity-60"
                 >
                   {exportingUnbound ? '处理中…' : '复制今日未绑定清单'}
@@ -278,10 +282,56 @@ const StatsPage: React.FC = () => {
                 <button
                   type="button"
                   disabled={exportingUnbound}
-                  onClick={() => void exportTodayUnboundCsv()}
+                  onClick={() => void exportUnboundCsv(1)}
                   className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-100 disabled:opacity-60"
                 >
-                  导出未绑定 CSV
+                  导出今日 CSV
+                </button>
+                <button
+                  type="button"
+                  disabled={exportingUnbound}
+                  onClick={() => void copyUnboundList(3)}
+                  className="rounded-md border border-orange-300 bg-white px-2 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-50 disabled:opacity-60"
+                >
+                  复制近3日未绑定
+                </button>
+                <button
+                  type="button"
+                  disabled={exportingUnbound}
+                  onClick={() => void exportUnboundCsv(3)}
+                  className="rounded-md border border-orange-300 bg-orange-50 px-2 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-100 disabled:opacity-60"
+                >
+                  导出近3日 CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate('/admin/system?tab=notify&filter=unbound&view=byPhone&days=3')
+                  }
+                  className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+                >
+                  打开近3日跟进
+                </button>
+              </div>
+            )}
+            {notifyToday && notifyToday.customerUnbound === 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={exportingUnbound}
+                  onClick={() => void copyUnboundList(3)}
+                  className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50 disabled:opacity-60"
+                >
+                  复制近3日未绑定
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate('/admin/system?tab=notify&filter=unbound&view=byPhone&days=3')
+                  }
+                  className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-100"
+                >
+                  打开近3日跟进
                 </button>
               </div>
             )}

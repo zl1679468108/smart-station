@@ -465,7 +465,38 @@ const Dashboard: React.FC = () => {
                 }}
                 className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
               >
-                按手机号跟进
+                今日按手机号跟进
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(
+                    '/admin/system?tab=notify&filter=unbound&view=byPhone&days=3',
+                  );
+                }}
+                className="rounded-md border border-orange-300 bg-orange-100/80 px-2 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-100"
+              >
+                近3日未绑定跟进
+              </button>
+            </div>
+          )}
+          {data.notify && data.notify.customerUnbound === 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <p className="text-[11px] text-gray-500">
+                今日到件已私信完；仍可查看近几日未绑定客户做补跟进。
+              </p>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(
+                    '/admin/system?tab=notify&filter=unbound&view=byPhone&days=3',
+                  );
+                }}
+                className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+              >
+                近3日未绑定跟进
               </button>
             </div>
           )}
@@ -490,9 +521,20 @@ const Dashboard: React.FC = () => {
                 }
                 className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-100"
               >
-                未绑定 {data.notify.customerUnbound} · 去跟进
+                今日未绑定 {data.notify.customerUnbound} · 去跟进
               </button>
             )}
+            <button
+              type="button"
+              onClick={() =>
+                navigate(
+                  '/admin/system?tab=notify&filter=unbound&view=byPhone&days=3',
+                )
+              }
+              className="rounded-md border border-orange-100 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+            >
+              近3日未绑定
+            </button>
             <button
               type="button"
               onClick={() => setSearchParams({ view: 'screen' })}

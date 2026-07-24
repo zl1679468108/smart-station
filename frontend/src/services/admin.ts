@@ -198,6 +198,8 @@ export function listNotifyLogs(opts?: {
   status?: string;
   templateCode?: string;
   todayOnly?: boolean;
+  /** 含今天共 N 天（1–14） */
+  days?: number;
   /** unbound | pushed | push_failed */
   reach?: string;
 }): Promise<{
@@ -215,7 +217,8 @@ export function listNotifyLogs(opts?: {
   if (opts?.phone) params.set('phone', opts.phone);
   if (opts?.status) params.set('status', opts.status);
   if (opts?.templateCode) params.set('templateCode', opts.templateCode);
-  if (opts?.todayOnly) params.set('todayOnly', '1');
+  if (opts?.days && opts.days > 0) params.set('days', String(opts.days));
+  else if (opts?.todayOnly) params.set('todayOnly', '1');
   if (opts?.reach) params.set('reach', opts.reach);
   return get(`/api/admin/notify/logs?${params.toString()}`);
 }
@@ -226,18 +229,24 @@ export function listNotifyLogPhoneSummary(opts?: {
   status?: string;
   templateCode?: string;
   todayOnly?: boolean;
+  days?: number;
+  excludeBound?: boolean;
   reach?: string;
 }): Promise<{
   items: NotifyPhoneSummaryItem[];
   total: number;
   scanned: number;
+  days?: number | null;
+  excludeBound?: boolean;
 }> {
   const params = new URLSearchParams();
   if (opts?.limit) params.set('limit', String(opts.limit));
   if (opts?.phone) params.set('phone', opts.phone);
   if (opts?.status) params.set('status', opts.status);
   if (opts?.templateCode) params.set('templateCode', opts.templateCode);
-  if (opts?.todayOnly) params.set('todayOnly', '1');
+  if (opts?.days && opts.days > 0) params.set('days', String(opts.days));
+  else if (opts?.todayOnly) params.set('todayOnly', '1');
+  if (opts?.excludeBound) params.set('excludeBound', '1');
   if (opts?.reach) params.set('reach', opts.reach);
   const q = params.toString();
   return get(`/api/admin/notify/logs/by-phone${q ? `?${q}` : ''}`);

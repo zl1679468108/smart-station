@@ -1250,3 +1250,10 @@
 | M103.1 | P2 | 大屏 ticker 人数覆盖/新绑 | warehouse screen | done | 与工作台同源字段 |
 | M103.2 | P2 | 交班摘要与 CSV 扩展 | shifts | done | 今日新绑/人数覆盖 |
 
+## M104 近3日未绑定跟进清单（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M104.1 | P0 | 通知聚合支持 days/excludeBound | admin notify | done | 1/3/7 日窗 + 过滤已绑定 |
+| M104.2 | P1 | 通知页时间窗与只看未绑定 | NotifyTab | done | URL deep link |
+| M104.3 | P1 | 工作台/统计近3日跟进入口 | dashboard/stats | done | 复制/导出/深链 |
+

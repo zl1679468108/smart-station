@@ -175,6 +175,8 @@ export interface NotifyPhoneSummaryItem {
   lastTemplateLabel?: string;
   lastReach?: 'unbound' | 'pushed' | 'push_failed';
   lastReachLabel?: string;
+  /** 当前是否已有有效绑定 */
+  hasBinding?: boolean;
 }
 
 export interface NotifyLogItem {

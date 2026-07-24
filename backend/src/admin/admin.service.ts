@@ -795,6 +795,8 @@ export class AdminService {
       status?: string;
       templateCode?: string;
       todayOnly?: boolean;
+      /** 含今天共 N 天（1–14），优先于 todayOnly */
+      days?: number;
       /** 客户触达：unbound / pushed / push_failed（按 params.channelResults 推断） */
       reach?: string;
     },
@@ -836,14 +838,14 @@ export class AdminService {
     if (opts?.templateCode) {
       q = q.eq('template_code', opts.templateCode);
     }
-    if (opts?.todayOnly) {
-      const now = new Date(Date.now() + 8 * 3600 * 1000);
-      const y = now.getUTCFullYear();
-      const m = String(now.getUTCMonth() + 1).padStart(2, '0');
-      const d = String(now.getUTCDate()).padStart(2, '0');
-      // 北京时间当天 00:00 = UTC 前一天 16:00
-      const start = new Date(`${y}-${m}-${d}T00:00:00+08:00`).toISOString();
-      q = q.gte('created_at', start);
+    const days =
+      opts?.days != null && Number(opts.days) > 0
+        ? Math.min(Math.max(Math.floor(Number(opts.days)), 1), 14)
+        : 0;
+    if (days > 0) {
+      q = q.gte('created_at', this.beijingDayStartIso(days));
+    } else if (opts?.todayOnly) {
+      q = q.gte('created_at', this.beijingDayStartIso(1));
     }
 
     const { data, error, count } = await q;
@@ -906,11 +908,21 @@ export class AdminService {
       status?: string;
       templateCode?: string;
       todayOnly?: boolean;
+      /** 含今天共 N 天（1–14），优先于 todayOnly */
+      days?: number;
+      /** 仅保留当前仍未绑定的手机号（跟进清单） */
+      excludeBound?: boolean;
       reach?: string;
     },
   ) {
     const reach = this.normalizeReach(opts?.reach);
-    const take = Math.min(Math.max(Number(opts?.limit) || 300, 50), 500);
+    const days =
+      opts?.days != null && Number(opts.days) > 0
+        ? Math.min(Math.max(Math.floor(Number(opts.days)), 1), 14)
+        : 0;
+    // 多日扫描放宽抓取上限，便于班中跟进近几日未绑定
+    const defaultTake = days > 1 ? Math.min(300 + days * 120, 1000) : 300;
+    const take = Math.min(Math.max(Number(opts?.limit) || defaultTake, 50), 1200);
     const phone = this.normalizePhoneQuery(opts?.phone);
 
     let q = this.supabase
@@ -929,13 +941,10 @@ export class AdminService {
     }
     if (opts?.status) q = q.eq('status', opts.status);
     if (opts?.templateCode) q = q.eq('template_code', opts.templateCode);
-    if (opts?.todayOnly) {
-      const now = new Date(Date.now() + 8 * 3600 * 1000);
-      const y = now.getUTCFullYear();
-      const m = String(now.getUTCMonth() + 1).padStart(2, '0');
-      const d = String(now.getUTCDate()).padStart(2, '0');
-      const start = new Date(`${y}-${m}-${d}T00:00:00+08:00`).toISOString();
-      q = q.gte('created_at', start);
+    if (days > 0) {
+      q = q.gte('created_at', this.beijingDayStartIso(days));
+    } else if (opts?.todayOnly) {
+      q = q.gte('created_at', this.beijingDayStartIso(1));
     }
 
     const { data, error } = await q;
@@ -956,6 +965,7 @@ export class AdminService {
       lastTemplateLabel: string;
       lastReach: 'unbound' | 'pushed' | 'push_failed';
       lastReachLabel: string;
+      hasBinding: boolean;
     };
 
     const map = new Map<string, Agg>();
@@ -987,6 +997,7 @@ export class AdminService {
           lastTemplateLabel: this.templateLabel(r.template_code as string),
           lastReach: customerReach,
           lastReachLabel: this.customerReachLabel(customerReach),
+          hasBinding: false,
         };
         map.set(rawPhone, agg);
       }
@@ -999,9 +1010,38 @@ export class AdminService {
       // rows already ordered desc; first seen is latest
     }
 
-    const items = Array.from(map.values()).sort((a, b) => {
-      // 优先未私信/失败多的客户
-      const score = (x: Agg) => x.unbound * 3 + x.pushFailed * 2 + x.failed;
+    const phones = Array.from(map.keys());
+    if (phones.length > 0) {
+      try {
+        const { data: binds, error: bErr } = await this.supabase
+          .getClient()
+          .from('ss_notify_bindings')
+          .select('phone')
+          .eq('station_id', stationId)
+          .eq('status', 'active')
+          .in('phone', phones);
+        if (!bErr && binds) {
+          const boundSet = new Set(
+            (binds as Array<{ phone?: string }>).map((b) => String(b.phone || '').trim()).filter(Boolean),
+          );
+          for (const p of phones) {
+            const agg = map.get(p);
+            if (agg) agg.hasBinding = boundSet.has(p);
+          }
+        }
+      } catch {
+        // 绑定表异常时不阻断跟进清单
+      }
+    }
+
+    let items = Array.from(map.values());
+    if (opts?.excludeBound) {
+      items = items.filter((x) => !x.hasBinding);
+    }
+    items.sort((a, b) => {
+      // 优先未私信/失败多、且仍未绑定的客户
+      const score = (x: Agg) =>
+        x.unbound * 3 + x.pushFailed * 2 + x.failed + (x.hasBinding ? 0 : 1);
       const d = score(b) - score(a);
       if (d !== 0) return d;
       return String(b.lastAt || '').localeCompare(String(a.lastAt || ''));
@@ -1011,6 +1051,8 @@ export class AdminService {
       items,
       total: items.length,
       scanned: (data || []).length,
+      days: days || (opts?.todayOnly ? 1 : null),
+      excludeBound: !!opts?.excludeBound,
     };
   }
 
@@ -1117,6 +1159,16 @@ export class AdminService {
       staffMessage: dispatch.staffMessage,
       channelResults: (dispatch.channelResults || []).map((c) => this.formatChannelResult(c)),
     };
+  }
+
+  /** 北京时间「含今天共 days 天」的起点 ISO（days=1 即今日 00:00） */
+  private beijingDayStartIso(days: number): string {
+    const safeDays = Math.min(Math.max(Math.floor(days) || 1, 1), 14);
+    const now = new Date(Date.now() + 8 * 3600 * 1000 - (safeDays - 1) * 86400000);
+    const y = now.getUTCFullYear();
+    const m = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(now.getUTCDate()).padStart(2, '0');
+    return new Date(`${y}-${m}-${d}T00:00:00+08:00`).toISOString();
   }
 
   private normalizePhoneQuery(raw?: string | null): string {
