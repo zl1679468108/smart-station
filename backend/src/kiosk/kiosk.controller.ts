@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Param,
   Post,
   Query,
   Req,
@@ -25,6 +26,12 @@ import {
 } from './dto/kiosk.dto';
 import { Public } from '../common/decorators/public.decorator';
 import type { Request } from 'express';
+import { AppointmentService } from '../appointments/appointment.service';
+import {
+  CreateAppointmentDto,
+  MyAppointmentsDto,
+  CancelAppointmentDto,
+} from '../appointments/dto/appointment.dto';
 
 /**
  * Kiosk 取件自助查询控制器
@@ -37,7 +44,10 @@ import type { Request } from 'express';
 @Public()
 @UseGuards(ThrottlerGuard)
 export class KioskController {
-  constructor(private readonly kioskService: KioskService) {}
+  constructor(
+    private readonly kioskService: KioskService,
+    private readonly appointmentService: AppointmentService,
+  ) {}
 
   private getClientIp(req: Request): string | undefined {
     const xff = req.headers['x-forwarded-for'];
@@ -151,4 +161,42 @@ export class KioskController {
   async queryByCode(@Body() dto: QueryByCodeDto, @Query('stationId') stationId?: string) {
     return this.kioskService.queryByCode(dto, stationId);
   }
+  /** 可预约时段（到店导航配套） */
+  @SkipThrottle()
+  @Get('appointment/slots')
+  async getAppointmentSlots(@Query('stationId') stationId?: string) {
+    return this.appointmentService.getSlots(stationId);
+  }
+
+  /** 客户提交预约取件 */
+  @Post('appointment')
+  @HttpCode(200)
+  async createAppointment(
+    @Body() dto: CreateAppointmentDto,
+    @Query('stationId') stationId?: string,
+  ) {
+    return this.appointmentService.createPublic(dto, stationId);
+  }
+
+  /** 客户查自己的预约 */
+  @Post('appointment/my')
+  @HttpCode(200)
+  async myAppointments(
+    @Body() dto: MyAppointmentsDto,
+    @Query('stationId') stationId?: string,
+  ) {
+    return this.appointmentService.listMine(dto.phone, stationId);
+  }
+
+  /** 客户取消预约 */
+  @Post('appointment/:id([0-9a-fA-F-]{36})/cancel')
+  @HttpCode(200)
+  async cancelAppointment(
+    @Param('id') id: string,
+    @Body() dto: CancelAppointmentDto,
+    @Query('stationId') stationId?: string,
+  ) {
+    return this.appointmentService.cancelMine(id, dto.phone, stationId);
+  }
+
 }

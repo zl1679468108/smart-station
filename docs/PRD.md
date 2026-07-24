@@ -916,7 +916,7 @@ smart-station
 | P3 | 取件人身份核验 | 取件码可转发/偷看，晚高峰拿错件、冒领引发纠纷 | 出库侧尾号确认 / 拍照留证 / 取件签名（大件推荐），纠纷可回溯 | outbound、scan | 中高 |
 | P4 | 到付 + 代收货款 | 到付件、代收货款是真实现金业务，当前无「对用户收款」线，钱账对不上 | 入库录金额 → 取件收款确认 → 收款日结（与快递公司月结独立） | finance、inbound、outbound | 中 |
 | P5 | 交接班 + 员工绩效 | 多店员轮班，谁入谁出、交接盘点、日结现金无汇总 | 开班/交班快照（入出库+收款）、班次记录、按操作人绩效 | shifts、stats | 中 |
-| P6 | 用户主动订阅提醒 | 「有没有我的件」需用户自查，跑空 + 滞留 | 订阅式主动提醒 + 预约取件时段 + 到店导航 | kiosk/query、notify | 中 |
+| P6 | 用户主动订阅提醒 | 「有没有我的件」需用户自查，跑空 + 滞留 | 订阅绑定（已有）+ 预约取件时段 + 到店导航（M50 已落地第一刀） | kiosk/query、notify | 中 |
 
 ---
 
@@ -1056,6 +1056,8 @@ smart-station/
 - `ss_finance_bills`
 - `ss_finance_items`
 - `ss_sms_templates` / `ss_sms_logs`
+- `ss_pickup_appointments`（轻量预约取件）
+- `ss_notify_bindings` / `ss_shifts`
 - `ss_devices`
 
 ### 8.3 认证机制

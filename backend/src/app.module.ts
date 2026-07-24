@@ -17,6 +17,7 @@ import { ExceptionModule } from './exception/exception.module';
 import { ShippingModule } from './shipping/shipping.module';
 import { FinanceModule } from './finance/finance.module';
 import { ShiftModule } from './shifts/shift.module';
+import { AppointmentModule } from './appointments/appointment.module';
 import { OcrModule } from './ocr/ocr.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TokenAuthGuard } from './common/guards/token-auth.guard';
@@ -75,6 +76,8 @@ import { RolesGuard } from './common/guards/roles.guard';
     FinanceModule,
     // 交接班 + 员工绩效（B5）
     ShiftModule,
+    // 轻量预约取件（B6）
+    AppointmentModule,
     // 面单 OCR 智能入库模块（P1 / 1.6.0）
     OcrModule,
   ],

@@ -18,6 +18,8 @@ import {
 } from '@/components/warehouse3d';
 import { formatBeijingTimestamp } from '@/utils/date';
 import NotifyBindCard from '@/components/NotifyBindCard';
+import StationVisitCard from '@/components/StationVisitCard';
+import PickupAppointmentCard from '@/components/PickupAppointmentCard';
 import { useQueryDevice } from '@/hooks/useQueryDevice';
 import { isNativeEditableTarget } from '@/utils/keypadTarget';
 
@@ -141,23 +143,13 @@ const Home: React.FC = () => {
         </div>
       </header>
 
-      {/* 驿站详细信息条：地址 + 电话（H5 下隐藏，避免拥挤） */}
-      {(stationInfo?.address || stationInfo?.contactPhone) && (
-        <div className="hidden flex-wrap items-center gap-x-5 gap-y-1 border-b border-gray-100 bg-gray-50 px-4 py-1.5 text-xs text-gray-600 sm:flex sm:px-6 lg:px-8">
-          {stationInfo?.address && (
-            <span className="flex items-center gap-1">
-              <Icon name="box" size={12} className="text-gray-400" />
-              <span className="truncate">{stationInfo.address}</span>
-            </span>
-          )}
-          {stationInfo?.contactPhone && (
-            <span className="flex items-center gap-1">
-              <Icon name="phone" size={12} className="text-gray-400" />
-              <span>{stationInfo.contactPhone}</span>
-            </span>
-          )}
-        </div>
-      )}
+      {/* 到店导航 + 营业状态（白话对客） */}
+      <StationVisitCard
+        name={stationInfo?.name}
+        address={stationInfo?.address}
+        contactPhone={stationInfo?.contactPhone}
+        businessHours={stationInfo?.businessHours}
+      />
 
       {/* 通知绑定公示 */}
       <div className="border-b border-gray-100 bg-white px-4 py-3 sm:px-6 lg:px-8">
@@ -200,6 +192,11 @@ const Home: React.FC = () => {
                 useNativeInput={useNativeInput}
               />
             )}
+
+            {/* 预约到店（B6） */}
+            <div className="mt-4">
+              <PickupAppointmentCard defaultPhone={lastQueryPhone} />
+            </div>
 
             {/* 查询结果 */}
             {items !== null && (

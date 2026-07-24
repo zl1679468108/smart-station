@@ -136,6 +136,7 @@ backend/
     stats/                统计模块（工作台 Dashboard）
     admin/                系统管理模块
     notify/               通知模块（免费通道 console/wecom/serverchan + 客户 WxPusher，不接商用短信）
+    appointments/         轻量预约取件（店员列表 + 状态）
     shipping/             寄件模块（寄件单 + 运费试算 + 地址簿）
     finance/              财务结算模块（费率 + 月结账单 + 对账 + CSV 导出）
     # 已实现 M24 overdue/exception、M25 shipping/finance、M26 stats 报表扩展（trend/funnel/retention/peak-hours）

@@ -10,6 +10,10 @@ import type {
   WxPusherBindPollResult,
   NotifyBindStatusResult,
 } from '@/types/kiosk';
+import type {
+  AppointmentItem,
+  AppointmentSlotsResult,
+} from '@/types/appointment';
 
 /**
  * 当前 Kiosk / 查询门户绑定的驿站
@@ -140,3 +144,45 @@ export function getNotifyBindStatus(phone: string): Promise<NotifyBindStatusResu
     { successMessage: false, skipLoading: true, errorMessage: false },
   );
 }
+
+// ---------- 预约取件（B6） ----------
+
+/** 可预约时段 */
+export function getAppointmentSlots(): Promise<AppointmentSlotsResult> {
+  return get<AppointmentSlotsResult>(`/api/kiosk/appointment/slots${kioskStationQuery()}`, {
+    notifyError: false,
+  });
+}
+
+/** 提交预约 */
+export function createAppointment(payload: {
+  phone: string;
+  recipientName?: string;
+  slotDate: string;
+  slotStart: string;
+  slotEnd: string;
+  note?: string;
+}): Promise<AppointmentItem> {
+  return post<AppointmentItem>(`/api/kiosk/appointment${kioskStationQuery()}`, payload, {
+    successMessage: '预约成功，请按时到店',
+  });
+}
+
+/** 我的预约 */
+export function myAppointments(phone: string): Promise<{ items: AppointmentItem[] }> {
+  return post<{ items: AppointmentItem[] }>(
+    `/api/kiosk/appointment/my${kioskStationQuery()}`,
+    { phone },
+    { successMessage: false, skipLoading: true },
+  );
+}
+
+/** 取消预约 */
+export function cancelAppointment(id: string, phone: string): Promise<AppointmentItem> {
+  return post<AppointmentItem>(
+    `/api/kiosk/appointment/${id}/cancel${kioskStationQuery()}`,
+    { phone },
+    { successMessage: '已取消预约' },
+  );
+}
+

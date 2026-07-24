@@ -21,6 +21,7 @@ const Shipping = React.lazy(() => import('@/pages/admin/shipping/Shipping'));
 const Finance = React.lazy(() => import('@/pages/admin/finance/Finance'));
 const Stats = React.lazy(() => import('@/pages/admin/stats/Stats'));
 const Shifts = React.lazy(() => import('@/pages/admin/shifts/Shifts'));
+const Appointments = React.lazy(() => import('@/pages/admin/appointments/Appointments'));
 const Scan = React.lazy(() => import('@/pages/scan/Scan'));
 const QueryHome = React.lazy(() => import('@/pages/query/Home'));
 
@@ -102,6 +103,15 @@ export const AppRoutes: React.FC = () => {
             element={
               <RequireRole roles={['admin', 'clerk']}>
                 <Shifts />
+              </RequireRole>
+            }
+          />
+          {/* 预约取件：admin + clerk */}
+          <Route
+            path="appointments"
+            element={
+              <RequireRole roles={['admin', 'clerk']}>
+                <Appointments />
               </RequireRole>
             }
           />
