@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as inboundService from '@/services/inbound';
+import * as adminService from '@/services/admin';
 import { ApiError } from '@/services/api';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import {
@@ -119,6 +120,75 @@ const DuplicateTrackingBanner: React.FC<{
 
 
 /** 手机号脱敏展示（连续同收件人提示用） */
+
+
+type BatchPhoneBindSummary = {
+  phoneTotal: number;
+  checked: number;
+  bound: number;
+  unbound: number;
+  failed: number;
+  unboundSamples: string[];
+};
+
+function maskPhoneTail(phone: string): string {
+  const p = phone.replace(/\D/g, '');
+  if (p.length < 7) return p;
+  return `${p.slice(0, 3)}****${p.slice(-4)}`;
+}
+
+/** 批量入库：对手机号抽样预检绑定（最多 30 个，避免拖慢预检） */
+async function checkBatchPhoneBinds(phones: string[]): Promise<BatchPhoneBindSummary> {
+  const unique = Array.from(
+    new Set(
+      phones
+        .map((p) => p.replace(/\D/g, ''))
+        .filter((p) => /^1\d{10}$/.test(p)),
+    ),
+  );
+  const sample = unique.slice(0, 30);
+  let bound = 0;
+  let unbound = 0;
+  let failed = 0;
+  const unboundSamples: string[] = [];
+
+  // 控制并发，避免一次打爆接口
+  const concurrency = 5;
+  for (let i = 0; i < sample.length; i += concurrency) {
+    const chunk = sample.slice(i, i + concurrency);
+    const rows = await Promise.all(
+      chunk.map(async (p) => {
+        try {
+          const res = await adminService.listNotifyBindings({ limit: 5, phone: p });
+          const active = (res.items || []).filter((x) => x.status === 'active');
+          return { p, ok: true as const, bound: active.length > 0 };
+        } catch {
+          return { p, ok: false as const, bound: false };
+        }
+      }),
+    );
+    for (const r of rows) {
+      if (!r.ok) {
+        failed += 1;
+        continue;
+      }
+      if (r.bound) bound += 1;
+      else {
+        unbound += 1;
+        if (unboundSamples.length < 8) unboundSamples.push(maskPhoneTail(r.p));
+      }
+    }
+  }
+
+  return {
+    phoneTotal: unique.length,
+    checked: sample.length,
+    bound,
+    unbound,
+    failed,
+    unboundSamples,
+  };
+}
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -1460,6 +1530,7 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const [submitting, setSubmitting] = useState(false);
   const [prechecking, setPrechecking] = useState(false);
   const [precheck, setPrecheck] = useState<CheckTrackingBatchResult | null>(null);
+  const [bindPrecheck, setBindPrecheck] = useState<BatchPhoneBindSummary | null>(null);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{
     succeeded: number;
@@ -1679,6 +1750,7 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     if (!parsed) return;
     setPrechecking(true);
     setPrecheck(null);
+    setBindPrecheck(null);
     try {
       const check = await inboundService.checkTrackingBatch(
         parsed.items.map((x) => x.trackingNumber),
@@ -1689,12 +1761,20 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         check,
         parsed.parseErrors,
       );
+      const bindSum = await checkBatchPhoneBinds(readyFinal.map((x) => x.recipientPhone));
+      setBindPrecheck(bindSum);
+      const bindTip =
+        bindSum.checked > 0
+          ? `；手机绑定 已绑 ${bindSum.bound}/抽检 ${bindSum.checked}`
+          : '';
       if (check.blocked > 0 || skippedErrors.length > 0) {
         notifySuccess(
-          `${check.staffMessage}；可入库 ${readyFinal.length} 条。确认无误后点「预检并导入」。`,
+          `${check.staffMessage}；可入库 ${readyFinal.length} 条${bindTip}。确认无误后点「预检并导入」。`,
         );
       } else {
-        notifySuccess(check.staffMessage || `预检完成：${readyFinal.length} 条均可入库`);
+        notifySuccess(
+          (check.staffMessage || `预检完成：${readyFinal.length} 条均可入库`) + bindTip,
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '预检失败');
@@ -1762,6 +1842,7 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     // 先预检：库内重复 + CSV 内重复
     setPrechecking(true);
     setPrecheck(null);
+    setBindPrecheck(null);
     let check: CheckTrackingBatchResult | null = null;
     try {
       check = await inboundService.checkTrackingBatch(items.map((x) => x.trackingNumber));
@@ -1771,9 +1852,16 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       setPrechecking(false);
       return;
     }
-    setPrechecking(false);
 
     const { readyFinal, skippedErrors } = buildReadyFromPrecheck(items, check, parseErrors);
+    let bindSum: BatchPhoneBindSummary | null = null;
+    try {
+      bindSum = await checkBatchPhoneBinds(readyFinal.map((x) => x.recipientPhone));
+      setBindPrecheck(bindSum);
+    } catch {
+      // 绑定预检失败不阻断入库
+    }
+    setPrechecking(false);
 
     if (readyFinal.length === 0) {
       setError(check?.staffMessage || '没有可入库的运单（均为重复）');
@@ -1787,9 +1875,17 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     }
 
     const skipCount = items.length - readyFinal.length;
-    if (skipCount > 0) {
+    const bindTip =
+      bindSum && bindSum.checked > 0
+        ? `\n绑定预检：已绑 ${bindSum.bound} / 抽检 ${bindSum.checked}，未绑 ${bindSum.unbound}`
+        : '';
+    if (skipCount > 0 || (bindSum && bindSum.unbound > 0)) {
       const ok = window.confirm(
-        `${check?.staffMessage || '预检完成'}\n\n将跳过 ${skipCount} 条重复，仅导入 ${readyFinal.length} 条。是否继续？`,
+        `${check?.staffMessage || '预检完成'}${bindTip}\n\n` +
+          (skipCount > 0
+            ? `将跳过 ${skipCount} 条重复，仅导入 ${readyFinal.length} 条。`
+            : `将导入 ${readyFinal.length} 条。`) +
+          `\n未绑定客户需当面报码。是否继续？`,
       );
       if (!ok) return;
     }
@@ -1964,6 +2060,53 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                     ))}
                 </ul>
               </div>
+            )}
+          </div>
+        )}
+        {bindPrecheck && bindPrecheck.checked > 0 && (
+          <div
+            className={`mt-3 rounded-md border px-3 py-2.5 text-xs leading-relaxed ${
+              bindPrecheck.unbound > 0
+                ? 'border-orange-200 bg-orange-50 text-orange-900'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+            }`}
+          >
+            <p className="font-medium">本批手机号绑定预检</p>
+            <p className="mt-1">
+              共 {bindPrecheck.phoneTotal} 个手机号
+              {bindPrecheck.phoneTotal > bindPrecheck.checked
+                ? `（抽检 ${bindPrecheck.checked} 个）`
+                : ''}
+              ：已绑定 <strong>{bindPrecheck.bound}</strong>，未绑定{' '}
+              <strong>{bindPrecheck.unbound}</strong>
+              {bindPrecheck.failed > 0 ? `，查询失败 ${bindPrecheck.failed}` : ''}
+            </p>
+            {bindPrecheck.unbound > 0 ? (
+              <div className="mt-2 space-y-1.5">
+                <p className="opacity-90">
+                  未绑定客户入库后收不到取件码私信，请当面报码；可复制绑定话术后再补发。
+                </p>
+                {bindPrecheck.unboundSamples.length > 0 && (
+                  <p className="font-mono text-[11px] opacity-80">
+                    未绑定示例：{bindPrecheck.unboundSamples.join('、')}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-100"
+                  onClick={() => {
+                    void (async () => {
+                      const ok = await copyText(buildBindGuideScript());
+                      if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                      else notifyError('复制失败');
+                    })();
+                  }}
+                >
+                  复制绑定话术
+                </button>
+              </div>
+            ) : (
+              <p className="mt-1 opacity-90">抽检手机均已绑定，入库后可尝试私信取件码。</p>
             )}
           </div>
         )}

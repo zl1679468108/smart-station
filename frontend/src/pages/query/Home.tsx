@@ -73,7 +73,10 @@ const Home: React.FC = () => {
     setTimeout(() => setToast(null), 2500);
   };
 
-  const refreshBindStatus = async (phone: string | null) => {
+  const refreshBindStatus = async (
+    phone: string | null,
+    opts?: { autoOpenIfUnbound?: boolean; hasParcels?: boolean },
+  ) => {
     if (!phone || !/^1\d{10}$/.test(phone)) {
       setBindStatus(null);
       return;
@@ -81,16 +84,25 @@ const Home: React.FC = () => {
     try {
       const st = await kioskService.getNotifyBindStatus(phone);
       setBindStatus(st);
+      // 查到在库件且未绑定：自动展开顶部绑定区，提高转化
+      if (opts?.autoOpenIfUnbound && opts?.hasParcels && st && !st.bound) {
+        setBindForceOpen(true);
+      }
     } catch {
       setBindStatus(null);
     }
   };
 
   const handleResult = (res: { items?: KioskParcelItem[] }, meta?: { phone?: string }) => {
-    setItems(res.items || []);
+    const nextItems = res.items || [];
+    setItems(nextItems);
     const phone = meta?.phone || null;
     setLastQueryPhone(phone);
-    void refreshBindStatus(phone);
+    setBindForceOpen(false);
+    void refreshBindStatus(phone, {
+      autoOpenIfUnbound: true,
+      hasParcels: nextItems.length > 0,
+    });
   };
 
   const switchTab = (t: QueryTab) => {
