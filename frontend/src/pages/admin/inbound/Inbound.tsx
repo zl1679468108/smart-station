@@ -1193,59 +1193,55 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                           return;
                         }
                         setSessionResending(true);
-                        let pushed = 0;
-                        let failed = 0;
-                        for (const item of targets) {
-                          try {
-                            const r = await inboundService.resendInboundNotice(item.id);
-                            if (r.customerPushed) {
-                              pushed += 1;
-                              setRecent((prev) =>
-                                prev.map((x) =>
-                                  x.id === item.id && x.notify
-                                    ? {
-                                        ...x,
-                                        notify: {
-                                          ...x.notify,
-                                          customerBound: r.customerBound,
-                                          customerPushed: r.customerPushed,
-                                          staffMessage: r.staffMessage,
-                                        },
-                                      }
-                                    : x,
-                                ),
-                              );
-                              setResult((prev) =>
-                                prev && prev.id === item.id && prev.notify
-                                  ? {
-                                      ...prev,
-                                      notify: {
-                                        ...prev.notify,
-                                        customerBound: r.customerBound,
-                                        customerPushed: r.customerPushed,
-                                        staffMessage: r.staffMessage,
-                                      },
-                                    }
-                                  : prev,
-                              );
-                            } else {
-                              failed += 1;
-                            }
-                          } catch {
-                            failed += 1;
-                          }
+                        try {
+                          const batch = await inboundService.resendInboundNoticeBatch(
+                            targets.map((item) => item.id),
+                          );
+                          const byId = new Map(batch.results.map((r) => [r.id, r]));
+                          setRecent((prev) =>
+                            prev.map((x) => {
+                              const r = byId.get(x.id);
+                              if (!r?.ok || !x.notify) return x;
+                              return {
+                                ...x,
+                                notify: {
+                                  ...x.notify,
+                                  customerBound: !!r.customerBound,
+                                  customerPushed: !!r.customerPushed,
+                                  staffMessage: r.staffMessage,
+                                },
+                              };
+                            }),
+                          );
+                          setResult((prev) => {
+                            if (!prev?.notify) return prev;
+                            const r = byId.get(prev.id);
+                            if (!r?.ok) return prev;
+                            return {
+                              ...prev,
+                              notify: {
+                                ...prev.notify,
+                                customerBound: !!r.customerBound,
+                                customerPushed: !!r.customerPushed,
+                                staffMessage: r.staffMessage,
+                              },
+                            };
+                          });
+                          setSessionStats((prev) => ({
+                            ...prev,
+                            pushFailed: Math.max(0, prev.pushFailed - batch.pushed),
+                          }));
+                          notifySuccess(
+                            `本会话补发完成：成功私信 ${batch.pushed}，仍失败 ${batch.failed}` +
+                              (targets.length < recent.length || batch.failed > 0
+                                ? '（若还有更早失败，请到通知页补发）'
+                                : ''),
+                          );
+                        } catch (err) {
+                          notifyError(err instanceof Error ? err.message : '本会话补发失败');
+                        } finally {
+                          setSessionResending(false);
                         }
-                        setSessionStats((prev) => ({
-                          ...prev,
-                          pushFailed: Math.max(0, prev.pushFailed - pushed),
-                        }));
-                        setSessionResending(false);
-                        notifySuccess(
-                          `本会话补发完成：成功私信 ${pushed}，仍失败 ${failed}` +
-                            (targets.length < recent.length || failed > 0
-                              ? '（若还有更早失败，请到通知页补发）'
-                              : ''),
-                        );
                       })();
                     }}
                     className="rounded-md border border-amber-300 bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-60"
@@ -3000,56 +2996,54 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                             );
                             if (!ok) return;
                             setBulkResending(true);
-                            let pushed = 0;
-                            let failed = 0;
-                            const updates = new Map<string, (typeof targets)[0]>();
-                            for (const s of targets) {
-                              try {
-                                const r = await inboundService.resendInboundNotice(s.id);
-                                updates.set(s.id, {
-                                  ...s,
-                                  staffMessage: r.staffMessage,
-                                  notifyEnabled: r.enabled,
-                                  customerPushed: r.customerPushed,
-                                  customerBound: r.customerBound,
-                                });
-                                if (r.customerPushed) pushed += 1;
-                                else failed += 1;
-                              } catch {
-                                failed += 1;
-                              }
-                            }
-                            setResult((prev) => {
-                              if (!prev?.successes) return prev;
-                              const successes = prev.successes.map(
-                                (x) => updates.get(x.id) || x,
+                            try {
+                              const batch = await inboundService.resendInboundNoticeBatch(
+                                targets.map((s) => s.id),
                               );
-                              const notifySummary = prev.notifySummary
-                                ? {
-                                    ...prev.notifySummary,
-                                    customerPushed: successes.filter((s) => s.customerPushed)
-                                      .length,
-                                    customerUnbound: successes.filter(
-                                      (s) => s.notifyEnabled && !s.customerBound,
-                                    ).length,
-                                    customerPushFailed: successes.filter(
-                                      (s) =>
-                                        s.notifyEnabled &&
-                                        s.customerBound &&
-                                        !s.customerPushed,
-                                    ).length,
-                                    staffMessage:
-                                      failed === 0 && pushed > 0
-                                        ? `本批补发完成：成功私信 ${pushed} 条`
-                                        : `本批补发：成功 ${pushed}，仍失败 ${failed}`,
-                                  }
-                                : prev.notifySummary;
-                              return { ...prev, successes, notifySummary };
-                            });
-                            setBulkResending(false);
-                            notifySuccess(
-                              `私信失败补发完成：成功 ${pushed}，仍失败 ${failed}`,
-                            );
+                              const byId = new Map(batch.results.map((r) => [r.id, r]));
+                              setResult((prev) => {
+                                if (!prev?.successes) return prev;
+                                const successes = prev.successes.map((x) => {
+                                  const r = byId.get(x.id);
+                                  if (!r?.ok) return x;
+                                  return {
+                                    ...x,
+                                    staffMessage: r.staffMessage,
+                                    notifyEnabled: r.enabled ?? x.notifyEnabled,
+                                    customerPushed: !!r.customerPushed,
+                                    customerBound: !!r.customerBound,
+                                  };
+                                });
+                                const notifySummary = prev.notifySummary
+                                  ? {
+                                      ...prev.notifySummary,
+                                      customerPushed: successes.filter((s) => s.customerPushed)
+                                        .length,
+                                      customerUnbound: successes.filter(
+                                        (s) => s.notifyEnabled && !s.customerBound,
+                                      ).length,
+                                      customerPushFailed: successes.filter(
+                                        (s) =>
+                                          s.notifyEnabled &&
+                                          s.customerBound &&
+                                          !s.customerPushed,
+                                      ).length,
+                                      staffMessage:
+                                        batch.failed === 0 && batch.pushed > 0
+                                          ? `本批补发完成：成功私信 ${batch.pushed} 条`
+                                          : `本批补发：成功 ${batch.pushed}，仍失败 ${batch.failed}`,
+                                    }
+                                  : prev.notifySummary;
+                                return { ...prev, successes, notifySummary };
+                              });
+                              notifySuccess(
+                                `私信失败补发完成：成功 ${batch.pushed}，仍失败 ${batch.failed}`,
+                              );
+                            } catch (err) {
+                              notifyError(err instanceof Error ? err.message : '补发失败');
+                            } finally {
+                              setBulkResending(false);
+                            }
                           })();
                         }}
                       >
@@ -3071,55 +3065,51 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                           );
                           if (!ok) return;
                           setBulkResending(true);
-                          let pushed = 0;
-                          let stillUnbound = 0;
-                          let failed = 0;
-                          const updates = new Map<string, (typeof targets)[0]>();
-                          for (const s of targets) {
-                            try {
-                              const r = await inboundService.resendInboundNotice(s.id);
-                              updates.set(s.id, {
-                                ...s,
-                                staffMessage: r.staffMessage,
-                                notifyEnabled: r.enabled,
-                                customerPushed: r.customerPushed,
-                                customerBound: r.customerBound,
-                              });
-                              if (r.customerPushed) pushed += 1;
-                              else if (!r.customerBound) stillUnbound += 1;
-                              else failed += 1;
-                            } catch {
-                              failed += 1;
-                            }
-                          }
-                          setResult((prev) => {
-                            if (!prev?.successes) return prev;
-                            const successes = prev.successes.map(
-                              (x) => updates.get(x.id) || x,
+                          try {
+                            const batch = await inboundService.resendInboundNoticeBatch(
+                              targets.map((s) => s.id),
                             );
-                            const notifySummary = prev.notifySummary
-                              ? {
-                                  ...prev.notifySummary,
-                                  customerPushed: successes.filter((s) => s.customerPushed)
-                                    .length,
-                                  customerUnbound: successes.filter(
-                                    (s) => s.notifyEnabled && !s.customerBound,
-                                  ).length,
-                                  customerPushFailed: successes.filter(
-                                    (s) =>
-                                      s.notifyEnabled &&
-                                      s.customerBound &&
-                                      !s.customerPushed,
-                                  ).length,
-                                  staffMessage: `补发完成：已私信 ${pushed}，仍未绑定 ${stillUnbound}，失败 ${failed}`,
-                                }
-                              : prev.notifySummary;
-                            return { ...prev, successes, notifySummary };
-                          });
-                          setBulkResending(false);
-                          notifySuccess(
-                            `补发完成：已私信 ${pushed}，仍未绑定 ${stillUnbound}，失败 ${failed}`,
-                          );
+                            const byId = new Map(batch.results.map((r) => [r.id, r]));
+                            setResult((prev) => {
+                              if (!prev?.successes) return prev;
+                              const successes = prev.successes.map((x) => {
+                                const r = byId.get(x.id);
+                                if (!r?.ok) return x;
+                                return {
+                                  ...x,
+                                  staffMessage: r.staffMessage,
+                                  notifyEnabled: r.enabled ?? x.notifyEnabled,
+                                  customerPushed: !!r.customerPushed,
+                                  customerBound: !!r.customerBound,
+                                };
+                              });
+                              const notifySummary = prev.notifySummary
+                                ? {
+                                    ...prev.notifySummary,
+                                    customerPushed: successes.filter((s) => s.customerPushed)
+                                      .length,
+                                    customerUnbound: successes.filter(
+                                      (s) => s.notifyEnabled && !s.customerBound,
+                                    ).length,
+                                    customerPushFailed: successes.filter(
+                                      (s) =>
+                                        s.notifyEnabled &&
+                                        s.customerBound &&
+                                        !s.customerPushed,
+                                    ).length,
+                                    staffMessage: `补发完成：已私信 ${batch.pushed}，仍未绑定 ${batch.unbound}，失败 ${batch.failed}`,
+                                  }
+                                : prev.notifySummary;
+                              return { ...prev, successes, notifySummary };
+                            });
+                            notifySuccess(
+                              `补发完成：已私信 ${batch.pushed}，仍未绑定 ${batch.unbound}，失败 ${batch.failed}`,
+                            );
+                          } catch (err) {
+                            notifyError(err instanceof Error ? err.message : '补发失败');
+                          } finally {
+                            setBulkResending(false);
+                          }
                         })();
                       }}
                     >

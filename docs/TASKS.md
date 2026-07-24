@@ -1459,3 +1459,10 @@
 | M134.2 | P0 | POST notify/logs/resend-batch 批量补发 | admin | done | 最多40条 |
 | M134.3 | P0 | 通知本页/按手机号走批量 API | NotifyTab | done | 不再串行 HTTP |
 
+## M135 入库/库存到件补发批量 API（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M135.1 | P0 | POST inbound/resend-notice-batch | inbound | done | 最多30件 |
+| M135.2 | P0 | 库存勾选批量补发走批量接口 | Inventory | done | |
+| M135.3 | P0 | 入库会话/批量结果一键补发走批量接口 | Inbound | done | |
+

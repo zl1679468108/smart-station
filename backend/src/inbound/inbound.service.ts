@@ -741,6 +741,76 @@ export class InboundService {
     }
   }
 
+  /**
+   * 批量补发到件通知。
+   * 入库会话/批量入库/库存勾选一键补发走此接口，避免串行多次 HTTP。
+   */
+  async resendInboundNoticeBatch(stationId: string, ids: string[]) {
+    const unique = Array.from(
+      new Set((ids || []).map((x) => String(x || '').trim()).filter(Boolean)),
+    );
+    if (unique.length === 0) {
+      throw new BadRequestException('请选择要补发的包裹');
+    }
+    if (unique.length > 30) {
+      throw new BadRequestException('一次最多补发 30 件');
+    }
+
+    const results: Array<{
+      id: string;
+      ok: boolean;
+      enabled?: boolean;
+      attempted?: boolean;
+      customerBound?: boolean;
+      customerPushed?: boolean;
+      customerChannels?: string[];
+      staffMessage: string;
+      trackingNumber?: string;
+      pickupCode?: string;
+    }> = [];
+
+    let pushed = 0;
+    let unbound = 0;
+    let failed = 0;
+
+    for (const id of unique) {
+      try {
+        const r = await this.resendInboundNotice(stationId, id);
+        results.push({
+          id,
+          ok: true,
+          enabled: r.enabled,
+          attempted: r.attempted,
+          customerBound: r.customerBound,
+          customerPushed: r.customerPushed,
+          customerChannels: r.customerChannels,
+          staffMessage: r.staffMessage,
+          trackingNumber: r.trackingNumber,
+          pickupCode: r.pickupCode,
+        });
+        if (r.customerPushed) pushed += 1;
+        else if (!r.customerBound) unbound += 1;
+        else failed += 1;
+      } catch (e: any) {
+        failed += 1;
+        results.push({
+          id,
+          ok: false,
+          staffMessage: e?.message || '补发失败',
+        });
+      }
+    }
+
+    return {
+      total: unique.length,
+      pushed,
+      unbound,
+      failed,
+      staffMessage: `批量补发完成：已私信 ${pushed}，未绑定 ${unbound}，失败 ${failed}（共 ${unique.length} 件）`,
+      results,
+    };
+  }
+
   private async getStation(stationId: string) {
     const { data, error } = await this.supabase
       .getClient()

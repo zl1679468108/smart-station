@@ -10,6 +10,7 @@ import { CheckTrackingDto } from './dto/check-tracking.dto';
 import { CheckTrackingBatchDto } from './dto/check-tracking-batch.dto';
 import { InboundService } from './inbound.service';
 import { InboundDto } from './dto/inbound.dto';
+import { ResendNoticeBatchDto } from './dto/resend-notice-batch.dto';
 import { TokenAuthGuard } from '../common/guards/token-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -62,6 +63,16 @@ export class InboundController {
       operatorId: user.id,
       method,
     });
+  }
+
+  /** 批量补发到件通知（入库会话/库存勾选一键补发） */
+  @Post('resend-notice-batch')
+  @HttpCode(200)
+  async resendNoticeBatch(
+    @StationId() stationId: string,
+    @Body() dto: ResendNoticeBatchDto,
+  ) {
+    return this.inboundService.resendInboundNoticeBatch(stationId, dto.ids || []);
   }
 
   /** 补发到件通知 */

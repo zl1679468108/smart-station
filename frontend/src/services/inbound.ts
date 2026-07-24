@@ -55,3 +55,32 @@ export function resendInboundNotice(id: string): Promise<{
   });
 }
 
+/** 批量补发到件通知（会话/批量入库/库存勾选） */
+export function resendInboundNoticeBatch(ids: string[]): Promise<{
+  total: number;
+  pushed: number;
+  unbound: number;
+  failed: number;
+  staffMessage: string;
+  results: Array<{
+    id: string;
+    ok: boolean;
+    enabled?: boolean;
+    attempted?: boolean;
+    customerBound?: boolean;
+    customerPushed?: boolean;
+    customerChannels?: string[];
+    staffMessage: string;
+    trackingNumber?: string;
+    pickupCode?: string;
+  }>;
+}> {
+  return post(
+    '/api/inbound/resend-notice-batch',
+    { ids },
+    {
+      successMessage: false,
+    },
+  );
+}
+

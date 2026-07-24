@@ -194,24 +194,13 @@ const Inventory: React.FC = () => {
     );
     if (!ok) return;
     setResendingNoticeId('batch');
-    let pushed = 0;
-    let unbound = 0;
-    let failed = 0;
     try {
-      for (const item of targets) {
-        try {
-          const r = await inboundService.resendInboundNotice(item.id);
-          if (r.customerPushed) pushed += 1;
-          else if (!r.customerBound) unbound += 1;
-          else failed += 1;
-        } catch {
-          failed += 1;
-        }
-      }
-      const msg = `批量补发完成：已私信 ${pushed}，未绑定 ${unbound}，失败 ${failed}（共 ${targets.length} 件）`;
-      notifySuccess(msg);
-      setLastBatchRemind(msg);
+      const r = await inboundService.resendInboundNoticeBatch(targets.map((it) => it.id));
+      notifySuccess(r.staffMessage);
+      setLastBatchRemind(r.staffMessage);
       setSelected(new Set());
+    } catch (err) {
+      notifyError(err instanceof Error ? err.message : '批量补发失败');
     } finally {
       setResendingNoticeId(null);
     }
