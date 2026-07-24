@@ -15,6 +15,7 @@ import { canWrite } from '@/utils/permission';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import { buildBindGuideScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
+import { printPickupSlip, printPickupSlips } from '@/utils/printPickupSlip';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
@@ -113,7 +114,9 @@ const STATUS_META: Record<ParcelStatus, { label: string; cls: string }> = {
 const Inventory: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user } = useAuth();
+  const { user, stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const invalidateDashboard = useInvalidateDashboard();
   const invalidateInventoryDetail = useInvalidateInventoryDetail();
   const invalidateInventoryList = useInvalidateInventoryList();
@@ -322,6 +325,42 @@ const onBatchRemindOverdue = async () => {
     }
   };
 
+  const toSlip = (item: ParcelListItem) => ({
+    stationName,
+    pickupCode: item.pickupCode || '',
+    trackingNumber: item.trackingNumber,
+    shelfNumber: item.shelf?.number,
+    recipientName: item.recipientName,
+    recipientPhone: item.recipientPhone,
+    courierCompanyName: item.courier?.name,
+    inboundAt: item.inboundAt,
+    collectDueAmount: item.collectDueAmount,
+  });
+
+  const onPrintItem = (item: ParcelListItem) => {
+    if (!item.pickupCode) {
+      notifyError('该包裹没有取件码，无法打印');
+      return;
+    }
+    const ok = printPickupSlip(toSlip(item));
+    if (ok) notifySuccess('已打开打印预览');
+    else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+  };
+
+  const onBatchPrintSlips = () => {
+    if (!data?.items?.length) return;
+    const slips = data.items
+      .filter((it) => selected.has(it.id) && it.pickupCode)
+      .map(toSlip);
+    if (slips.length === 0) {
+      notifyError('所选包裹没有可打印的取件码');
+      return;
+    }
+    const ok = printPickupSlips(slips);
+    if (ok) notifySuccess(`已打开 ${slips.length} 张小票打印预览`);
+    else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+  };
+
   const handleBatchException = async () => {
     if (batchSubmitting) return;
     setBatchResult(null);
@@ -496,6 +535,14 @@ const onBatchRemindOverdue = async () => {
             className="rounded bg-warning px-3 py-1 text-xs text-white hover:bg-warning/90 disabled:opacity-60"
           >
             批量标记异常
+          </button>
+          <button
+            type="button"
+            onClick={onBatchPrintSlips}
+            disabled={batchReminding}
+            className="rounded border border-primary/30 bg-white px-3 py-1 text-xs font-medium text-primary hover:bg-orange-50 disabled:opacity-60"
+          >
+            打印取件码小票
           </button>
           <button
             type="button"
@@ -694,6 +741,15 @@ const onBatchRemindOverdue = async () => {
                             {remindingId === item.id ? '提醒中…' : '发提醒'}
                           </button>
                         )}
+                      {item.pickupCode && (
+                        <button
+                          type="button"
+                          onClick={() => onPrintItem(item)}
+                          className="text-xs text-gray-600 hover:underline"
+                        >
+                          打印
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => navigate(`/admin/inventory/${item.id}`)}
