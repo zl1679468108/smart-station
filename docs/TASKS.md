@@ -933,3 +933,14 @@
 | M64.1 | P1 | 批量入库「仅预检」按钮 | inbound batch | done | 不导入，先看重复 |
 | M64.2 | P1 | 出库加载在库待收款 | outbound | done | 库存 unpaid 映射出库列表 |
 | M64.3 | P2 | 出库结果 全部/待收款筛选 | outbound | done | 客户端筛选 chips |
+
+
+---
+
+## M65 待收款深链出库 + 批量预检导出（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M65.1 | P1 | 工作台待收款深链出库页 | dashboard | done | /admin/outbound?unpaid=1 |
+| M65.2 | P1 | 出库页 URL 自动加载待收款 | outbound | done | unpaid=1 触发 loadUnpaidParcels |
+| M65.3 | P2 | 批量预检结果导出 CSV | inbound batch | done | 运单/拦截/取件码/说明 |

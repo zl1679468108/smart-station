@@ -1082,6 +1082,22 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
 };
 
 // ============ 批量导入（CSV 粘贴） ============
+function downloadText(filename: string, content: string, mime = 'text/csv;charset=utf-8;') {
+  const blob = new Blob(['\uFEFF' + content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function escapeCsv(v: string | number | null | undefined) {
+  return `"${String(v ?? '').replace(/"/g, '""')}"`;
+}
+
 const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const invalidateShelves = useInvalidateShelves();
   const invalidateDashboard = useInvalidateDashboard();
@@ -1230,6 +1246,25 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     }
   };
 
+
+  const handleExportPrecheck = () => {
+    if (!precheck?.items?.length) return;
+    const header = ['序号', '运单号', '是否拦截', '库内已存在', '本批重复', '取件码', '状态', '说明'];
+    const rows = precheck.items.map((x) => [
+      x.index + 1,
+      x.trackingNumber,
+      x.blocked ? '是' : '否',
+      x.exists ? '是' : '否',
+      x.inBatchDuplicate ? '是' : '否',
+      x.parcel?.pickupCode || '',
+      x.parcel?.statusLabel || '',
+      x.message || '',
+    ]);
+    const csv = [header, ...rows].map((r) => r.map((c) => escapeCsv(c)).join(',')).join('\n');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '');
+    downloadText(`批量预检结果_${stamp}.csv`, csv);
+  };
+
   const handleSubmit = async () => {
     if (submitting || prechecking) return;
     setError('');
@@ -1348,7 +1383,16 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         {error && <div className="mt-3 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
         {precheck && (
           <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
-            <p className="font-medium">{precheck.staffMessage}</p>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <p className="font-medium">{precheck.staffMessage}</p>
+              <button
+                type="button"
+                onClick={handleExportPrecheck}
+                className="shrink-0 rounded-md border border-amber-200 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100/60"
+              >
+                导出预检 CSV
+              </button>
+            </div>
             <p className="mt-1 text-[11px] opacity-90">
               {precheck.blocked > 0
                 ? '导入时会自动跳过库内已存在与 CSV 内重复运单；也可先改 CSV 再预检。'

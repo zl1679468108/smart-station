@@ -503,7 +503,7 @@ const Dashboard: React.FC = () => {
             </button>
             <button
               type="button"
-              onClick={() => navigate('/admin/inventory?collectStatus=unpaid')}
+              onClick={() => navigate('/admin/outbound?unpaid=1')}
               className="flex w-full flex-col rounded-md bg-rose-50 px-3 py-3 text-left hover:bg-rose-100/80"
             >
               <div className="flex w-full items-center justify-between">
@@ -515,7 +515,7 @@ const Dashboard: React.FC = () => {
               {(todo.collectUnpaid ?? 0) === 0 ? (
                 <span className="mt-1 text-xs text-gray-400">无到付/代收货款待收</span>
               ) : (
-                <span className="mt-1 text-xs text-rose-700/80">取件时收款，点击查看</span>
+                <span className="mt-1 text-xs text-rose-700/80">取件时收款，点击去出库收</span>
               )}
             </button>
             <button

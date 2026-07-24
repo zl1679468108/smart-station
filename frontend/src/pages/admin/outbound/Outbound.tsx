@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as outboundService from '@/services/outbound';
 import * as inventoryService from '@/services/inventory';
 import { useInvalidateShelves } from '@/hooks/useDictionary';
@@ -87,6 +87,7 @@ const Outbound: React.FC = () => {
 
 // ============ 人工辅助出库（查询 + 确认两步流程） ============
 const ManualOutbound: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const invalidateShelves = useInvalidateShelves();
   const invalidateDashboard = useInvalidateDashboard();
   const invalidateInventoryDetail = useInvalidateInventoryDetail();
@@ -98,6 +99,7 @@ const ManualOutbound: React.FC = () => {
   const [loadingUnpaid, setLoadingUnpaid] = useState(false);
   const [confirming, setConfirming] = useState<OutboundSearchItem | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const unpaidAutoLoadKey = searchParams.get('unpaid');
 
   const handleResult = (res: { items?: OutboundSearchItem[] }) => {
     setItems(res.items || []);
@@ -150,6 +152,16 @@ const ManualOutbound: React.FC = () => {
       setLoadingUnpaid(false);
     }
   };
+
+  // 工作台「待收款包裹」深链：/admin/outbound?unpaid=1 自动加载在库待收款
+  useEffect(() => {
+    if (unpaidAutoLoadKey !== '1') return;
+    void loadUnpaidParcels();
+    const next = new URLSearchParams(searchParams);
+    next.delete('unpaid');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅响应 unpaid=1 深链
+  }, [unpaidAutoLoadKey]);
 
   const displayItems = (items || []).filter((it) => {
     if (resultFilter !== 'unpaid') return true;
