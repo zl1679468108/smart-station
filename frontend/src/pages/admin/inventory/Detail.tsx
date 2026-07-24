@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import * as inventoryService from '@/services/inventory';
+import * as inboundService from '@/services/inbound';
+import { notifyError, notifySuccess } from '@/utils/notification';
 import {
   useInvalidateInventoryDetail,
   useInvalidateInventoryList,
@@ -55,6 +57,7 @@ const ParcelDetailPage: React.FC = () => {
   const [collectNoteInput, setCollectNoteInput] = useState('');
   const [savingCollect, setSavingCollect] = useState(false);
   const [collectError, setCollectError] = useState('');
+  const [resendingNotice, setResendingNotice] = useState(false);
 
   useEffect(() => {
     if (!detail) return;
@@ -102,7 +105,50 @@ const ParcelDetailPage: React.FC = () => {
         </div>
         <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <InfoItem label="运单号" value={detail.trackingNumber} />
-          <InfoItem label="取件码" value={detail.pickupCode || '-'} highlight />
+          <div className="sm:col-span-2">
+            <InfoItem label="取件码" value={detail.pickupCode || '-'} highlight />
+            {(detail.status === 'in_stock' || detail.status === 'overdue') && detail.pickupCode && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                  onClick={async () => {
+                    try {
+                      if (navigator.clipboard?.writeText) {
+                        await navigator.clipboard.writeText(detail.pickupCode);
+                        notifySuccess('取件码已复制');
+                      } else {
+                        notifyError('当前环境不支持复制');
+                      }
+                    } catch {
+                      notifyError('复制失败');
+                    }
+                  }}
+                >
+                  复制取件码
+                </button>
+                <button
+                  type="button"
+                  disabled={resendingNotice}
+                  className="rounded-md border border-primary/30 bg-orange-50 px-3 py-1.5 text-xs text-primary hover:bg-orange-100 disabled:opacity-60"
+                  onClick={async () => {
+                    if (resendingNotice || !id) return;
+                    setResendingNotice(true);
+                    try {
+                      const r = await inboundService.resendInboundNotice(id);
+                      notifySuccess(r.staffMessage || '已尝试补发通知');
+                    } catch (e: any) {
+                      notifyError(e?.message || '补发失败');
+                    } finally {
+                      setResendingNotice(false);
+                    }
+                  }}
+                >
+                  {resendingNotice ? '补发中…' : '补发到件通知'}
+                </button>
+              </div>
+            )}
+          </div>
           <InfoItem label="收件人" value={detail.recipientName} />
           <InfoItem label="手机号" value={detail.recipientPhone} />
           <InfoItem

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   HttpCode,
+  Param,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -39,6 +40,13 @@ export class InboundController {
       operatorId: user.id,
       method,
     });
+  }
+
+  /** 补发到件通知 */
+  @Post(':id([0-9a-fA-F-]{36})/resend-notice')
+  @HttpCode(200)
+  async resendNotice(@StationId() stationId: string, @Param('id') id: string) {
+    return this.inboundService.resendInboundNotice(stationId, id);
   }
 
   @Post('batch')

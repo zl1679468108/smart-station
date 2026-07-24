@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as inboundService from '@/services/inbound';
+import { notifyError, notifySuccess } from '@/utils/notification';
 import { useCouriers, useInvalidateShelves, useShelves } from '@/hooks/useDictionary';
 import { useInvalidateDashboard } from '@/hooks/useDashboardData';
 import { useInvalidateInventoryList } from '@/hooks/useInventoryData';
@@ -15,6 +16,31 @@ const SIZE_LABEL: Record<ParcelSize, string> = { small: '小件', medium: '中�
 const SIZE_ORDER: ParcelSize[] = ['small', 'medium', 'large'];
 
 /** 手机号脱敏展示（连续同收件人提示用） */
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fallthrough */
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 function maskPhone(phone: string): string {
   const digits = String(phone || '').replace(/\D/g, '');
   if (digits.length >= 7) return `${digits.slice(0, 3)}****${digits.slice(-4)}`;
@@ -103,8 +129,13 @@ const SizeSelector: React.FC<{
 };
 
 // ============ 入库成功结果展示 ============
-const InboundSuccess: React.FC<{ result: InboundResult }> = ({ result }) => {
+const InboundSuccess: React.FC<{
+  result: InboundResult;
+  onNotifyUpdate?: (next: InboundResult) => void;
+}> = ({ result, onNotifyUpdate }) => {
   const n = result.notify;
+  const [resending, setResending] = useState(false);
+  const [copied, setCopied] = useState(false);
   const notifyTone = !n
     ? 'border-gray-200 bg-gray-50 text-gray-600'
     : !n.enabled
@@ -114,6 +145,41 @@ const InboundSuccess: React.FC<{ result: InboundResult }> = ({ result }) => {
         : n.customerBound
           ? 'border-amber-200 bg-amber-50 text-amber-800'
           : 'border-orange-200 bg-orange-50 text-orange-800';
+
+  const onCopyCode = async () => {
+    const ok = await copyText(result.pickupCode);
+    if (ok) {
+      setCopied(true);
+      notifySuccess('取件码已复制');
+      setTimeout(() => setCopied(false), 1500);
+    } else {
+      notifyError('复制失败，请长按取件码手动复制');
+    }
+  };
+
+  const onResend = async () => {
+    if (resending) return;
+    setResending(true);
+    try {
+      const r = await inboundService.resendInboundNotice(result.id);
+      notifySuccess(r.staffMessage || '已尝试补发');
+      onNotifyUpdate?.({
+        ...result,
+        notify: {
+          enabled: r.enabled,
+          attempted: r.attempted,
+          customerBound: r.customerBound,
+          customerPushed: r.customerPushed,
+          customerChannels: r.customerChannels,
+          staffMessage: r.staffMessage,
+        },
+      });
+    } catch (e: any) {
+      notifyError(e?.message || '补发失败');
+    } finally {
+      setResending(false);
+    }
+  };
 
   return (
     <div className="rounded-lg border border-success/40 bg-success/5 p-5">
@@ -131,6 +197,13 @@ const InboundSuccess: React.FC<{ result: InboundResult }> = ({ result }) => {
           <span className="font-mono text-2xl font-bold tracking-widest text-primary">
             {result.pickupCode}
           </span>
+          <button
+            type="button"
+            onClick={() => void onCopyCode()}
+            className="mb-0.5 rounded-md border border-primary/30 bg-white px-2 py-1 text-xs text-primary hover:bg-orange-50"
+          >
+            {copied ? '已复制' : '复制取件码'}
+          </button>
           <span className="self-center text-xs text-gray-400">
             （第{result.shelfNumber}号货架 · 第{result.shelfLayer}层 · 第{result.shelfPosition}号）
           </span>
@@ -145,13 +218,27 @@ const InboundSuccess: React.FC<{ result: InboundResult }> = ({ result }) => {
 
       {n && (
         <div className={`mt-4 rounded-md border px-3 py-2.5 text-xs leading-relaxed ${notifyTone}`}>
-          <p className="font-medium">通知状态</p>
-          <p className="mt-1">{n.staffMessage}</p>
-          {!n.customerBound && n.enabled && (
-            <p className="mt-1 text-[11px] opacity-90">
-              可提醒客户打开查件页绑定微信通知，下次到件自动收码。
-            </p>
-          )}
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="font-medium">通知状态</p>
+              <p className="mt-1">{n.staffMessage}</p>
+              {!n.customerBound && n.enabled && (
+                <p className="mt-1 text-[11px] opacity-90">
+                  可提醒客户打开查件页绑定微信；绑定后点「补发通知」再推一次取件码。
+                </p>
+              )}
+            </div>
+            {n.enabled && (
+              <button
+                type="button"
+                disabled={resending}
+                onClick={() => void onResend()}
+                className="shrink-0 rounded-md border border-current/20 bg-white/80 px-2.5 py-1 text-[11px] font-medium hover:bg-white disabled:opacity-60"
+              >
+                {resending ? '补发中…' : n.customerPushed ? '再发一次' : '补发通知'}
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -372,7 +459,15 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         <p className="text-center text-xs text-gray-400">快递公司自动识别，货架按包裹大小自动分配</p>
       </form>
 
-      {result && <InboundSuccess result={result} />}
+      {result && (
+        <InboundSuccess
+          result={result}
+          onNotifyUpdate={(next) => {
+            setResult(next);
+            setRecent((prev) => prev.map((x) => (x.id === next.id ? next : x)));
+          }}
+        />
+      )}
 
       {recent.length > 0 && (
         <div className="rounded-lg border border-gray-200 bg-white p-4">
@@ -406,11 +501,74 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                     <div className="font-mono text-sm font-semibold text-primary">{r.pickupCode}</div>
                     <div className="truncate text-gray-500">{r.trackingNumber}</div>
                   </div>
-                  <div className="text-right">
+                  <div className="flex flex-col items-end gap-1">
                     <div className="text-gray-700">
                       {r.shelfNumber}-{r.shelfLayer}-{String(r.shelfPosition).padStart(4, '0')}
                     </div>
                     <div className={tipClass}>{tip}</div>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        className="rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50"
+                        onClick={() =>
+                          void copyText(r.pickupCode).then((ok) =>
+                            ok ? notifySuccess('取件码已复制') : notifyError('复制失败'),
+                          )
+                        }
+                      >
+                        复制码
+                      </button>
+                      {n?.enabled && (
+                        <button
+                          type="button"
+                          className="rounded border border-primary/30 px-1.5 py-0.5 text-[11px] text-primary hover:bg-orange-50"
+                          onClick={() => {
+                            void (async () => {
+                              try {
+                                const res = await inboundService.resendInboundNotice(r.id);
+                                notifySuccess(res.staffMessage || '已尝试补发');
+                                setRecent((prev) =>
+                                  prev.map((x) =>
+                                    x.id === r.id
+                                      ? {
+                                          ...x,
+                                          notify: {
+                                            enabled: res.enabled,
+                                            attempted: res.attempted,
+                                            customerBound: res.customerBound,
+                                            customerPushed: res.customerPushed,
+                                            customerChannels: res.customerChannels,
+                                            staffMessage: res.staffMessage,
+                                          },
+                                        }
+                                      : x,
+                                  ),
+                                );
+                                setResult((cur) =>
+                                  cur && cur.id === r.id
+                                    ? {
+                                        ...cur,
+                                        notify: {
+                                          enabled: res.enabled,
+                                          attempted: res.attempted,
+                                          customerBound: res.customerBound,
+                                          customerPushed: res.customerPushed,
+                                          customerChannels: res.customerChannels,
+                                          staffMessage: res.staffMessage,
+                                        },
+                                      }
+                                    : cur,
+                                );
+                              } catch (e: any) {
+                                notifyError(e?.message || '补发失败');
+                              }
+                            })();
+                          }}
+                        >
+                          补发
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </li>
               );
@@ -671,7 +829,12 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         </button>
       </form>
 
-      {result && <InboundSuccess result={result} />}
+      {result && (
+        <InboundSuccess
+          result={result}
+          onNotifyUpdate={(next) => setResult(next)}
+        />
+      )}
     </div>
   );
 };

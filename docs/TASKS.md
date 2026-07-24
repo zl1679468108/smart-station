@@ -772,7 +772,7 @@
 | B5 | 交接班 + 员工绩效 | 多店员轮班，谁入谁出、交接盘点、日结现金无汇总，只有事件轨迹 | admin / stats / parcel_events | 有价值：多店运营管理需求 | ✅ done（开班/交班快照 + 班次记录 + 员工绩效） |
 | B6 | 取件用户主动侧（订阅提醒 + 预约取件 + 到店导航） | 「有没有我的件」靠用户自查；跑空与滞留高 | query 门户 / notify | 有价值：提升留存、降跑空 | 🟡 partial（M50–M52：导航/预约/触达/代客/营业时段；订阅仍靠绑定通道） |
 
-> **首推顺序建议**：B1–B5 已落地；B6（M50–M52）与通知运营 M53 已落地。下一优先 **部署/试用打磨**。
+> **首推顺序建议**：B1–B5 已落地；B6 + 通知/入库运营（M50–M54）已落地。下一优先 **部署/试用打磨**。
 
 ---
 
@@ -816,4 +816,14 @@
 | M53.1 | P1 | 滞留单件「发提醒」 | overdue | done | POST `/api/overdue/:id/remind`；可随时补发 |
 | M53.2 | P1 | 通知记录今日/失败/类型筛选 | admin notify | done | query: todayOnly/status/templateCode |
 | M53.3 | P2 | 工作台深链今日通知 | Dashboard | done | `?tab=notify&filter=today` |
+
+---
+
+## M54 入库补发通知 + 取件码复制（入库/通知运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M54.1 | P1 | 补发到件通知 API | inbound | done | POST `/api/inbound/:id/resend-notice` |
+| M54.2 | P1 | 入库成功区/最近列表补发+复制 | inbound UI | done | 未绑定后绑定可再推 |
+| M54.3 | P2 | 库存详情补发/复制 | inventory detail | done | 在库/滞留可操作 |
 

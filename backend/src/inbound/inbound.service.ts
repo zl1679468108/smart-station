@@ -481,6 +481,75 @@ export class InboundService {
     };
   }
 
+
+  /**
+   * 入库后补发到件通知（运营打磨）
+   * - 客户后来绑定了微信 / 上次私信失败 / 未绑定时口头提醒后再次尝试
+   * - 仅在库/滞留可补发
+   */
+  async resendInboundNotice(stationId: string, parcelId: string) {
+    const { data: parcel, error } = await this.supabase
+      .getClient()
+      .from('ss_parcels')
+      .select(
+        'id, status, tracking_number, pickup_code, recipient_phone, recipient_name, station_id',
+      )
+      .eq('id', parcelId)
+      .eq('station_id', stationId)
+      .maybeSingle();
+    if (error) throw new Error(`查询包裹失败: ${error.message}`);
+    if (!parcel) throw new NotFoundException('包裹不存在');
+    if (!['in_stock', 'overdue'].includes(String(parcel.status))) {
+      throw new BadRequestException('仅在库/滞留包裹可补发到件通知');
+    }
+    if (!parcel.recipient_phone) {
+      throw new BadRequestException('包裹无收件手机号，无法发通知');
+    }
+    if (!parcel.pickup_code) {
+      throw new BadRequestException('包裹无取件码，无法发通知');
+    }
+
+    const station = await this.getStation(stationId);
+    if (!station.sms_enabled) {
+      return {
+        id: parcel.id,
+        enabled: false,
+        attempted: false,
+        customerBound: false,
+        customerPushed: false,
+        customerChannels: [] as string[],
+        staffMessage: '到件通知已关闭（系统管理可开启）',
+        trackingNumber: parcel.tracking_number,
+        pickupCode: parcel.pickup_code,
+      };
+    }
+
+    try {
+      const r = await this.notifyService.sendInboundNotice({
+        stationName: station.name,
+        phone: String(parcel.recipient_phone),
+        recipientName: parcel.recipient_name as string | null,
+        pickupCode: String(parcel.pickup_code),
+        parcelId: parcel.id,
+        stationId,
+      });
+      return {
+        id: parcel.id,
+        enabled: true,
+        attempted: r.attempted,
+        customerBound: r.customerBound,
+        customerPushed: r.customerPushed,
+        customerChannels: r.customerChannels,
+        staffMessage: r.staffMessage,
+        trackingNumber: parcel.tracking_number,
+        pickupCode: parcel.pickup_code,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new BadRequestException(`补发失败：${msg}`);
+    }
+  }
+
   private async getStation(stationId: string) {
     const { data, error } = await this.supabase
       .getClient()
