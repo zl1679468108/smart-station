@@ -8,6 +8,8 @@ import { canWrite } from '@/utils/permission';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import EmptyState from '@/components/ui/EmptyState';
 import PageHeader from '@/components/ui/PageHeader';
+import { copyText } from '@/utils/stationVisit';
+import { buildFacePickupScript } from '@/utils/staffScripts';
 import Pagination from '@/components/ui/Pagination';
 
 const LEVEL_TABS: { key: '' | OverdueLevel; label: string }[] = [
@@ -264,14 +266,34 @@ const OverduePage: React.FC = () => {
                 {writable && (
                   <div className="flex flex-wrap gap-2">
                     {item.returnStage !== 'returned' && (
-                      <button
-                        type="button"
-                        disabled={remindingId === item.id || batchReminding}
-                        className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-700 disabled:opacity-60"
-                        onClick={() => void onRemind(item.id)}
-                      >
-                        {remindingId === item.id ? '发送中…' : '发提醒'}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-xs text-orange-800 hover:bg-orange-50"
+                          onClick={() => {
+                            void (async () => {
+                              const ok = await copyText(
+                                buildFacePickupScript({
+                                  pickupCode: item.pickupCode,
+                                  recipientName: item.recipientName,
+                                }),
+                              );
+                              if (ok) notifySuccess('已复制当面话术（含取件码，勿发群）');
+                              else notifyError('复制失败');
+                            })();
+                          }}
+                        >
+                          复制当面话术
+                        </button>
+                        <button
+                          type="button"
+                          disabled={remindingId === item.id || batchReminding}
+                          className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-700 disabled:opacity-60"
+                          onClick={() => void onRemind(item.id)}
+                        >
+                          {remindingId === item.id ? '发送中…' : '发提醒'}
+                        </button>
+                      </>
                     )}
                     {item.returnStage !== 'returning' && item.returnStage !== 'returned' && (
                       <button

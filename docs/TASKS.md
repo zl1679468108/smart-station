@@ -876,3 +876,4 @@
 | M59.2 | P1 | 入库成功未绑定强提示 + 复制话术 | inbound | done | 当面报码 / 引导绑定 |
 | M59.3 | P1 | 工作台/通知记录复制绑定话术 | Dashboard + NotifyTab | done | 一键复制 |
 | M59.4 | P1 | 滞留本页批量发提醒 | overdue | done | POST /api/overdue/remind-batch 最多30 |
+| M59.5 | P2 | 库存详情/滞留/批量入库话术入口 | inventory+overdue+batch | done | 当面话术+绑定话术 |

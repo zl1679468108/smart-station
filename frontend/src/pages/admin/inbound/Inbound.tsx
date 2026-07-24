@@ -1119,9 +1119,26 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
               </div>
               {(result.notifySummary.customerUnbound > 0 ||
                 result.notifySummary.customerPushFailed > 0) && (
-                <p className="mt-2 text-[11px] opacity-90">
-                  未私信的可在下方列表点「补发」；客户绑定后也可一键补发未触达。
-                </p>
+                <div className="mt-2 space-y-2">
+                  <p className="text-[11px] opacity-90">
+                    未私信的：当面报取件码；可复制绑定引导；客户绑定后点「补发」或下方一键补发。
+                  </p>
+                  {result.notifySummary.customerUnbound > 0 && (
+                    <button
+                      type="button"
+                      className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+                      onClick={() => {
+                        void (async () => {
+                          const ok = await copyText(buildBindGuideScript());
+                          if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                          else notifyError('复制失败');
+                        })();
+                      }}
+                    >
+                      复制绑定话术
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}

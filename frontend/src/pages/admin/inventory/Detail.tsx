@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import * as inventoryService from '@/services/inventory';
 import * as inboundService from '@/services/inbound';
 import { notifyError, notifySuccess } from '@/utils/notification';
+import { copyText } from '@/utils/stationVisit';
+import { buildBindGuideScript, buildFacePickupScript } from '@/utils/staffScripts';
 import {
   useInvalidateInventoryDetail,
   useInvalidateInventoryList,
@@ -113,19 +115,39 @@ const ParcelDetailPage: React.FC = () => {
                   type="button"
                   className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
                   onClick={async () => {
-                    try {
-                      if (navigator.clipboard?.writeText) {
-                        await navigator.clipboard.writeText(detail.pickupCode);
-                        notifySuccess('取件码已复制');
-                      } else {
-                        notifyError('当前环境不支持复制');
-                      }
-                    } catch {
-                      notifyError('复制失败');
-                    }
+                    const ok = await copyText(detail.pickupCode);
+                    if (ok) notifySuccess('取件码已复制');
+                    else notifyError('复制失败');
                   }}
                 >
                   复制取件码
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-orange-200 bg-white px-3 py-1.5 text-xs text-orange-800 hover:bg-orange-50"
+                  onClick={async () => {
+                    const ok = await copyText(
+                      buildFacePickupScript({
+                        pickupCode: detail.pickupCode,
+                        recipientName: detail.recipientName,
+                      }),
+                    );
+                    if (ok) notifySuccess('已复制当面话术（含取件码，勿发群）');
+                    else notifyError('复制失败');
+                  }}
+                >
+                  复制当面话术
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-orange-200 bg-white px-3 py-1.5 text-xs text-orange-800 hover:bg-orange-50"
+                  onClick={async () => {
+                    const ok = await copyText(buildBindGuideScript());
+                    if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                    else notifyError('复制失败');
+                  }}
+                >
+                  复制绑定话术
                 </button>
                 <button
                   type="button"
