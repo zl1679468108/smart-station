@@ -1410,3 +1410,10 @@
 | M127.3 | P0 | 入库本会话统计私信失败+跳转补发 | inbound | done | scan/manual |
 | M127.4 | P1 | smoke-trial 扩展 notify-guide/send-code/前端 | scripts | done | |
 
+## M128 分享链接带驿站 + 入库会话内补发（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M128.1 | P0 | getQueryPortalUrl 自动带 stationId | queryPortal | done | 防多站串站 |
+| M128.2 | P0 | 查件/kiosk 优先读 URL stationId | kiosk service | done | 兼容 env |
+| M128.3 | P0 | 入库本会话一键补发私信失败 | inbound | done | 最近5条+通知页入口 |
+

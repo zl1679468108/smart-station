@@ -14,14 +14,23 @@ import type {
   AppointmentItem,
   AppointmentSlotsResult,
 } from '@/types/appointment';
+import { getQueryStationIdFromLocation } from '@/utils/queryPortal';
 
 /**
  * 当前 Kiosk / 查询门户绑定的驿站
- * - 无登录端通过环境变量 VITE_KIOSK_STATION_ID 指定
+ * - 优先 URL ?stationId=（店员分享链接防串站）
+ * - 其次环境变量 VITE_KIOSK_STATION_ID
  * - 未配置时后端回退第一个 active 驿站（单租户兼容）
  */
+function resolveKioskStationId(): string | undefined {
+  const fromUrl = getQueryStationIdFromLocation();
+  if (fromUrl) return fromUrl;
+  const fromEnv = String(import.meta.env.VITE_KIOSK_STATION_ID || '').trim();
+  return fromEnv || undefined;
+}
+
 function kioskStationQuery(): string {
-  const stationId = import.meta.env.VITE_KIOSK_STATION_ID as string | undefined;
+  const stationId = resolveKioskStationId();
   return stationId ? `?stationId=${encodeURIComponent(stationId)}` : '';
 }
 

@@ -691,6 +691,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     pushFailed: 0,
     unpaid: 0,
   });
+  const [sessionResending, setSessionResending] = useState(false);
   /**
    * 连续同收件人：成功后保留姓名/手机号/尺寸，只清空运单与金额
    * 晚高峰同一人多件时少打字
@@ -1168,15 +1169,101 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                 </>
               )}
               {sessionStats.pushFailed > 0 && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate('/admin/system?tab=notify&filter=push_failed&days=1')
-                  }
-                  className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100"
-                >
-                  去补发私信失败（{sessionStats.pushFailed}）
-                </button>
+                <>
+                  <button
+                    type="button"
+                    disabled={sessionResending}
+                    onClick={() => {
+                      void (async () => {
+                        const targets = recent.filter(
+                          (r) =>
+                            r.notify?.enabled &&
+                            r.notify?.customerBound &&
+                            !r.notify?.customerPushed,
+                        );
+                        if (targets.length === 0) {
+                          notifyError('最近 5 条里没有可补发的私信失败，请到通知页按今日筛选补发');
+                          return;
+                        }
+                        if (
+                          !window.confirm(
+                            `对本会话最近 ${targets.length} 条私信失败再发一次？\n\n会走自动短重试；成功后客户微信会收到取件码。`,
+                          )
+                        ) {
+                          return;
+                        }
+                        setSessionResending(true);
+                        let pushed = 0;
+                        let failed = 0;
+                        for (const item of targets) {
+                          try {
+                            const r = await inboundService.resendInboundNotice(item.id);
+                            if (r.customerPushed) {
+                              pushed += 1;
+                              setRecent((prev) =>
+                                prev.map((x) =>
+                                  x.id === item.id && x.notify
+                                    ? {
+                                        ...x,
+                                        notify: {
+                                          ...x.notify,
+                                          customerBound: r.customerBound,
+                                          customerPushed: r.customerPushed,
+                                          staffMessage: r.staffMessage,
+                                        },
+                                      }
+                                    : x,
+                                ),
+                              );
+                              setResult((prev) =>
+                                prev && prev.id === item.id && prev.notify
+                                  ? {
+                                      ...prev,
+                                      notify: {
+                                        ...prev.notify,
+                                        customerBound: r.customerBound,
+                                        customerPushed: r.customerPushed,
+                                        staffMessage: r.staffMessage,
+                                      },
+                                    }
+                                  : prev,
+                              );
+                            } else {
+                              failed += 1;
+                            }
+                          } catch {
+                            failed += 1;
+                          }
+                        }
+                        setSessionStats((prev) => ({
+                          ...prev,
+                          pushFailed: Math.max(0, prev.pushFailed - pushed),
+                        }));
+                        setSessionResending(false);
+                        notifySuccess(
+                          `本会话补发完成：成功私信 ${pushed}，仍失败 ${failed}` +
+                            (targets.length < recent.length || failed > 0
+                              ? '（若还有更早失败，请到通知页补发）'
+                              : ''),
+                        );
+                      })();
+                    }}
+                    className="rounded-md border border-amber-300 bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                  >
+                    {sessionResending
+                      ? '补发中…'
+                      : `一键补发本会话失败（${sessionStats.pushFailed}）`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate('/admin/system?tab=notify&filter=push_failed&days=1')
+                    }
+                    className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[11px] text-amber-900 hover:bg-amber-50"
+                  >
+                    通知页补发
+                  </button>
+                </>
               )}
               <button
                 type="button"
@@ -1194,7 +1281,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           <p className="mt-1 text-[11px] text-gray-500">
             只统计当前页面未刷新期间的入库，方便连续扫码时心里有数
             {sessionStats.pushFailed > 0
-              ? ' · 有私信失败请点「去补发私信失败」一键重试'
+              ? ' · 有私信失败可本页一键补发（最近5条）；更早的去通知页'
               : sessionStats.unbound > 0
                 ? ' · 有未绑定请当面报码，或复制清单逐个跟进'
                 : ''}
@@ -1426,6 +1513,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     pushFailed: 0,
     unpaid: 0,
   });
+  const [sessionResending, setSessionResending] = useState(false);
 
   // 按当前选择的 size 过滤可选货架（仅显示启用中的货架）
   const filteredShelves = shelves.filter((s) => s.status === 'active' && s.size_type === form.size);
@@ -1777,15 +1865,64 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                 </>
               )}
               {sessionStats.pushFailed > 0 && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate('/admin/system?tab=notify&filter=push_failed&days=1')
-                  }
-                  className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100"
-                >
-                  去补发私信失败（{sessionStats.pushFailed}）
-                </button>
+                <>
+                  <button
+                    type="button"
+                    disabled={sessionResending || !result}
+                    onClick={() => {
+                      void (async () => {
+                        if (!result?.id) {
+                          notifyError('没有可补发的入库结果');
+                          return;
+                        }
+                        if (!(result.notify?.customerBound && !result.notify?.customerPushed)) {
+                          notifyError('当前结果不是私信失败状态');
+                          return;
+                        }
+                        setSessionResending(true);
+                        try {
+                          const r = await inboundService.resendInboundNotice(result.id);
+                          if (r.customerPushed) {
+                            setResult((prev) =>
+                              prev && prev.notify
+                                ? {
+                                    ...prev,
+                                    notify: {
+                                      ...prev.notify,
+                                      customerBound: r.customerBound,
+                                      customerPushed: r.customerPushed,
+                                      staffMessage: r.staffMessage,
+                                    },
+                                  }
+                                : prev,
+                            );
+                            setSessionStats((prev) => ({
+                              ...prev,
+                              pushFailed: Math.max(0, prev.pushFailed - 1),
+                            }));
+                          }
+                          notifySuccess(r.staffMessage || '已尝试补发');
+                        } catch (e: any) {
+                          notifyError(e?.message || '补发失败');
+                        } finally {
+                          setSessionResending(false);
+                        }
+                      })();
+                    }}
+                    className="rounded-md border border-amber-300 bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                  >
+                    {sessionResending ? '补发中…' : `本页补发失败（${sessionStats.pushFailed}）`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate('/admin/system?tab=notify&filter=push_failed&days=1')
+                    }
+                    className="rounded-md border border-amber-200 bg-white px-2 py-1 text-[11px] text-amber-900 hover:bg-amber-50"
+                  >
+                    通知页补发
+                  </button>
+                </>
               )}
               <button
                 type="button"
@@ -1802,7 +1939,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           <p className="mt-1 text-[11px] text-gray-500">
             只统计当前页面未刷新期间的入库
             {sessionStats.pushFailed > 0
-              ? ' · 有私信失败请点「去补发私信失败」一键重试'
+              ? ' · 有私信失败可本页直接补发，或到通知页批量处理'
               : sessionStats.unbound > 0
                 ? ' · 未绑定请当面报码并引导绑定'
                 : ''}
