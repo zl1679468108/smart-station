@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import * as financeService from '@/services/finance';
 import type { CashDaySummary } from '@/types/finance';
 import { notifyError } from '@/utils/notification';
-// exportCashDay uses notifySuccess/Error internally
 import EmptyState from '@/components/ui/EmptyState';
 
 const money = (n: number) => `¥${Number(n || 0).toFixed(2)}`;
@@ -68,6 +67,13 @@ const CashDayPanel: React.FC = () => {
           className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-100"
         >
           查看在库待收款（{cashDay?.unpaidInStock ?? 0}）
+        </button>
+        <button
+          type="button"
+          onClick={() => void financeService.exportCashDay(cashDate || undefined)}
+          className="ml-auto rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+        >
+          导出 CSV
         </button>
       </div>
 
@@ -138,6 +144,7 @@ const CashDayPanel: React.FC = () => {
                     <th className="px-3 py-2">时间</th>
                     <th className="px-3 py-2">运单</th>
                     <th className="px-3 py-2">收件人</th>
+                    <th className="px-3 py-2">状态</th>
                     <th className="px-3 py-2 text-right">金额</th>
                     <th className="px-3 py-2">方式</th>
                   </tr>
@@ -152,11 +159,26 @@ const CashDayPanel: React.FC = () => {
                       </td>
                       <td className="px-3 py-2 font-medium text-gray-800">{it.trackingNumber}</td>
                       <td className="px-3 py-2 text-gray-700">{it.recipientName}</td>
+                      <td className="px-3 py-2">
+                        {it.collectStatus === 'waived' ? (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
+                            免收
+                          </span>
+                        ) : (
+                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-700">
+                            已收
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-right font-medium text-teal-700">
                         {money(it.amount)}
                       </td>
                       <td className="px-3 py-2 text-gray-600">
-                        {METHOD_LABEL[it.collectPaidMethod] || it.collectPaidMethod}
+                        {it.collectStatus === 'waived'
+                          ? it.collectNote || '免收'
+                          : METHOD_LABEL[it.collectPaidMethod || ''] ||
+                            it.collectPaidMethod ||
+                            '-'}
                       </td>
                     </tr>
                   ))}
