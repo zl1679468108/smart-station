@@ -428,3 +428,91 @@ export function printShippingReceipt(input: ShippingReceiptInput): boolean {
   win.document.close();
   return true;
 }
+
+export interface CashDayPrintInput {
+  stationName?: string | null;
+  date: string;
+  total: number;
+  freightTotal: number;
+  codTotal: number;
+  paidCount: number;
+  waivedCount?: number;
+  waivedTotal?: number;
+  unpaidInStock?: number;
+  byMethod: { cash: number; wechat: number; alipay: number; other: number };
+}
+
+/** 收款日结小票（交班对账用） */
+export function printCashDaySummary(input: CashDayPrintInput): boolean {
+  const station = escapeHtml(String(input.stationName || '智能快递驿站').trim() || '智能快递驿站');
+  const date = escapeHtml(String(input.date || '').trim() || '—');
+  const money = (n: number) => `¥${Number(n || 0).toFixed(2)}`;
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>收款日结</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 8px; color: #111;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #fff;
+    }
+    .slip {
+      width: 72mm; max-width: 100%; margin: 0 auto;
+      padding: 10px 6px 12px; border: 1px dashed #bbb;
+    }
+    .station { text-align: center; font-size: 13px; font-weight: 600; }
+    .title { margin-top: 2px; text-align: center; font-size: 12px; color: #0f766e; font-weight: 700; }
+    .date { margin: 8px 0; text-align: center; font-size: 14px; font-weight: 700; }
+    .total {
+      margin: 8px 0 10px; text-align: center; font-size: 22px; font-weight: 800; color: #0f766e;
+    }
+    .row {
+      display: flex; justify-content: space-between; gap: 8px;
+      margin-top: 4px; font-size: 11px; line-height: 1.4;
+    }
+    .row span { color: #666; }
+    .row strong { font-weight: 600; }
+    .tip {
+      margin-top: 10px; padding-top: 6px; border-top: 1px dashed #ccc;
+      text-align: center; font-size: 10px; color: #555;
+    }
+    @media print { body { padding: 0; } .slip { border: none; } }
+  </style>
+</head>
+<body>
+  <section class="slip">
+    <div class="station">${station}</div>
+    <div class="title">收款日结</div>
+    <div class="date">${date}</div>
+    <div class="total">${money(input.total)}</div>
+    <div class="row"><span>收款笔数</span><strong>${Number(input.paidCount || 0)}</strong></div>
+    <div class="row"><span>到付运费</span><strong>${money(input.freightTotal)}</strong></div>
+    <div class="row"><span>代收货款</span><strong>${money(input.codTotal)}</strong></div>
+    <div class="row"><span>现金</span><strong>${money(input.byMethod?.cash || 0)}</strong></div>
+    <div class="row"><span>微信</span><strong>${money(input.byMethod?.wechat || 0)}</strong></div>
+    <div class="row"><span>支付宝</span><strong>${money(input.byMethod?.alipay || 0)}</strong></div>
+    <div class="row"><span>其他</span><strong>${money(input.byMethod?.other || 0)}</strong></div>
+    <div class="row"><span>免收笔数</span><strong>${Number(input.waivedCount || 0)}</strong></div>
+    <div class="row"><span>免收金额</span><strong>${money(input.waivedTotal || 0)}</strong></div>
+    <div class="row"><span>在库待收款</span><strong>${Number(input.unpaidInStock || 0)} 件</strong></div>
+    <div class="tip">店内对账用 · 请与交班现金/扫码收款核对</div>
+  </section>
+  <script>
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        try { window.focus(); window.print(); } catch (e) {}
+      }, 80);
+    });
+  </script>
+</body>
+</html>`;
+  const win = window.open('', '_blank', 'noopener,noreferrer,width=480,height=720');
+  if (!win) return false;
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  return true;
+}

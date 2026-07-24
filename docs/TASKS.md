@@ -1359,3 +1359,15 @@
 | M119.1 | P1 | 未完结异常接入 OutboundBindNudge | exception | done | |
 | M119.2 | P1 | 异常卡可打印取件码小票 | exception | done | |
 
+## M120 滞留页小票打印与催取话术（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M120.1 | P0 | 滞留列表/本页打印小票 | overdue | done | |
+| M120.2 | P1 | 催取话术 buildOverdueRemindScript | staffScripts | done | 一对一勿发群 |
+
+## M121 收款日结打印与摘要（业务功能）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M121.1 | P0 | printCashDaySummary | print util | done | 交班对账 |
+| M121.2 | P0 | 日结复制摘要+打印 | CashDayPanel | done | |
+

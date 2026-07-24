@@ -10,8 +10,13 @@ import EmptyState from '@/components/ui/EmptyState';
 import PageHeader from '@/components/ui/PageHeader';
 import NotifyReachBar from '@/components/NotifyReachBar';
 import { copyText } from '@/utils/stationVisit';
-import { buildFacePickupScript, buildBindGuideScript } from '@/utils/staffScripts';
+import {
+  buildFacePickupScript,
+  buildBindGuideScript,
+  buildOverdueRemindScript,
+} from '@/utils/staffScripts';
 import OutboundBindNudge from '@/components/OutboundBindNudge';
+import { printPickupSlip, printPickupSlips } from '@/utils/printPickupSlip';
 import Pagination from '@/components/ui/Pagination';
 
 const LEVEL_TABS: { key: '' | OverdueLevel; label: string }[] = [
@@ -40,7 +45,9 @@ const levelLabel: Record<string, string> = {
 };
 
 const OverduePage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const writable = canWrite(user?.role);
@@ -164,7 +171,39 @@ const OverduePage: React.FC = () => {
     .map((it) => it.id)
     .slice(0, 30);
 
-  const onBatchRemind = async () => {
+    const toSlip = (item: OverdueItem) => ({
+    stationName,
+    pickupCode: item.pickupCode,
+    trackingNumber: item.trackingNumber,
+    shelfNumber: item.shelf?.number,
+    recipientName: item.recipientName,
+    recipientPhone: item.recipientPhone,
+    courierCompanyName: item.courier?.name,
+    inboundAt: item.inboundAt,
+  });
+
+  const onPrintItem = (item: OverdueItem) => {
+    if (!item.pickupCode) {
+      notifyError('该包裹没有取件码，无法打印');
+      return;
+    }
+    const ok = printPickupSlip(toSlip(item));
+    if (ok) notifySuccess('已打开打印预览');
+    else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+  };
+
+  const onPrintPageSlips = () => {
+    const slips = items.filter((it) => it.pickupCode).map(toSlip);
+    if (slips.length === 0) {
+      notifyError('本页没有可打印的取件码');
+      return;
+    }
+    const ok = printPickupSlips(slips);
+    if (ok) notifySuccess(`已打开本页 ${slips.length} 张小票打印预览`);
+    else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+  };
+
+const onBatchRemind = async () => {
     if (batchReminding || remindingId || remindableIds.length === 0) return;
     const ok = window.confirm(
       `对本页 ${remindableIds.length} 条滞留件批量发提醒？\n\n已绑定会私信取件码；未绑定仅旁路通知，不含取件码。`,
@@ -196,26 +235,36 @@ const OverduePage: React.FC = () => {
         title="滞留件管理"
         description={`阈值：预警 ${thresholds.warnDays} 天 · 提醒 ${thresholds.remindDays} 天 · 退回 ${thresholds.returnDays} 天`}
         actions={
-          writable && (
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void onBatchRemind()}
-                disabled={batchReminding || Boolean(remindingId) || remindableIds.length === 0}
-                className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100 disabled:opacity-60"
-              >
-                {batchReminding ? '批量提醒中…' : `本页发提醒${remindableIds.length ? `（${remindableIds.length}）` : ''}`}
-              </button>
-              <button
-                type="button"
-                onClick={onScan}
-                disabled={scanning || batchReminding}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
-              >
-                {scanning ? '扫描中…' : '立即扫描'}
-              </button>
-            </div>
-          )
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onPrintPageSlips}
+              disabled={!items.some((it) => it.pickupCode)}
+              className="rounded-lg border border-primary/30 bg-white px-4 py-2 text-sm font-medium text-primary hover:bg-orange-50 disabled:opacity-50"
+            >
+              打印本页小票
+            </button>
+            {writable && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void onBatchRemind()}
+                  disabled={batchReminding || Boolean(remindingId) || remindableIds.length === 0}
+                  className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100 disabled:opacity-60"
+                >
+                  {batchReminding ? '批量提醒中…' : `本页发提醒${remindableIds.length ? `（${remindableIds.length}）` : ''}`}
+                </button>
+                <button
+                  type="button"
+                  onClick={onScan}
+                  disabled={scanning || batchReminding}
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
+                >
+                  {scanning ? '扫描中…' : '立即扫描'}
+                </button>
+              </>
+            )}
+          </div>
         }
       />
 
@@ -422,6 +471,35 @@ const OverduePage: React.FC = () => {
                         >
                           复制当面话术
                         </button>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 hover:bg-amber-100"
+                          onClick={() => {
+                            void (async () => {
+                              const ok = await copyText(
+                                buildOverdueRemindScript({
+                                  pickupCode: item.pickupCode,
+                                  days: item.days,
+                                  recipientName: item.recipientName,
+                                  stationName,
+                                }),
+                              );
+                              if (ok) notifySuccess('已复制催取话术（含取件码，勿发群）');
+                              else notifyError('复制失败');
+                            })();
+                          }}
+                        >
+                          复制催取话术
+                        </button>
+                        {item.pickupCode && (
+                          <button
+                            type="button"
+                            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                            onClick={() => onPrintItem(item)}
+                          >
+                            打印小票
+                          </button>
+                        )}
                         <button
                           type="button"
                           disabled={remindingId === item.id || batchReminding}

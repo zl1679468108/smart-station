@@ -39,6 +39,24 @@ export function buildFacePickupScript(opts: {
 }
 
 /** 未绑定客户短提示（UI 展示用） */
+/** 滞留催取话术（含取件码，仅一对一面告/电话，勿发群） */
+export function buildOverdueRemindScript(opts: {
+  pickupCode: string;
+  days?: number | null;
+  stationName?: string;
+  recipientName?: string | null;
+}): string {
+  const who = opts.recipientName?.trim() ? `${opts.recipientName.trim()}，` : '';
+  const station = opts.stationName?.trim() || '驿站';
+  const days = Number(opts.days || 0);
+  const dayPart = days > 0 ? `已在店 ${days} 天，` : '';
+  return [
+    `${who}您的快递在${station}${dayPart}请尽快取件。`,
+    `取件码：${opts.pickupCode}。`,
+    '请凭码到店；若要微信自动收码，可在查件页绑定微信通知。',
+  ].join('');
+}
+
 export const UNBOUND_FACE_HINT =
   '客户还没绑定微信：请当面报取件码；也可引导查件页绑定——绑定后系统会自动补发取件码。';
 

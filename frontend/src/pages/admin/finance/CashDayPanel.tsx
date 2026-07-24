@@ -5,6 +5,8 @@ import type { CashDaySummary } from '@/types/finance';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import { buildBindGuideScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
+import { printCashDaySummary } from '@/utils/printPickupSlip';
+import { useAuth } from '@/utils/auth';
 import EmptyState from '@/components/ui/EmptyState';
 import NotifyReachBar from '@/components/NotifyReachBar';
 
@@ -26,6 +28,9 @@ const METHOD_LABEL: Record<string, string> = {
 
 /** 对用户收款日结（到付运费 + 代收货款） */
 const CashDayPanel: React.FC = () => {
+  const { stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const navigate = useNavigate();
   const [cashDate, setCashDate] = useState(todayBeijing);
   const [cashDay, setCashDay] = useState<CashDaySummary | null>(null);
@@ -105,6 +110,55 @@ const CashDayPanel: React.FC = () => {
           className="rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-sm text-orange-800 hover:bg-orange-50"
         >
           复制绑定话术
+        </button>
+        <button
+          type="button"
+          disabled={!cashDay}
+          onClick={() => {
+            if (!cashDay) return;
+            const lines = [
+              `【${stationName} 收款日结】`,
+              `日期：${cashDay.date}`,
+              `收款合计：¥${Number(cashDay.total || 0).toFixed(2)}（${cashDay.paidCount} 笔）`,
+              `到付运费 ¥${Number(cashDay.freightTotal || 0).toFixed(2)} · 代收货款 ¥${Number(cashDay.codTotal || 0).toFixed(2)}`,
+              `现金 ¥${Number(cashDay.byMethod?.cash || 0).toFixed(2)} · 微信 ¥${Number(cashDay.byMethod?.wechat || 0).toFixed(2)} · 支付宝 ¥${Number(cashDay.byMethod?.alipay || 0).toFixed(2)} · 其他 ¥${Number(cashDay.byMethod?.other || 0).toFixed(2)}`,
+              `免收 ${cashDay.waivedCount ?? 0} 笔 / ¥${Number(cashDay.waivedTotal || 0).toFixed(2)}`,
+              `在库待收款 ${cashDay.unpaidInStock ?? 0} 件`,
+              '（店内对账用，勿发客户群）',
+            ];
+            void (async () => {
+              const ok = await copyText(lines.join('\n'));
+              if (ok) notifySuccess('已复制日结摘要');
+              else notifyError('复制失败');
+            })();
+          }}
+          className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-sm font-medium text-teal-800 hover:bg-teal-100 disabled:opacity-50"
+        >
+          复制日结摘要
+        </button>
+        <button
+          type="button"
+          disabled={!cashDay}
+          onClick={() => {
+            if (!cashDay) return;
+            const ok = printCashDaySummary({
+              stationName,
+              date: cashDay.date,
+              total: cashDay.total,
+              freightTotal: cashDay.freightTotal,
+              codTotal: cashDay.codTotal,
+              paidCount: cashDay.paidCount,
+              waivedCount: cashDay.waivedCount,
+              waivedTotal: cashDay.waivedTotal,
+              unpaidInStock: cashDay.unpaidInStock,
+              byMethod: cashDay.byMethod,
+            });
+            if (ok) notifySuccess('已打开日结打印预览');
+            else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+          }}
+          className="rounded-lg border border-teal-200 bg-white px-3 py-1.5 text-sm font-medium text-teal-800 hover:bg-teal-50 disabled:opacity-50"
+        >
+          打印日结
         </button>
         <button
           type="button"
