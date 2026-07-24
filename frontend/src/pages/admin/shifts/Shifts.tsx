@@ -379,9 +379,20 @@ const ShiftsPage: React.FC = () => {
                       : ''}
                   </p>
                   <p className="mt-1 text-[11px] text-gray-600">
-                    交班时请告知接班：未绑定客户需当面报码；可复制绑定话术。
+                    交班时请告知接班：私信失败优先补发；未绑定需当面报码或发绑定链接。
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
+                    {notifyToday.customerPushFailed > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate('/admin/system?tab=notify&filter=push_failed&days=1')
+                        }
+                        className="rounded-md bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700"
+                      >
+                        补发私信失败（{notifyToday.customerPushFailed}）
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() =>
@@ -687,6 +698,18 @@ const ShiftsPage: React.FC = () => {
                 。接班后可按手机号跟进，或引导客户绑定后再补发。
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
+                {notifyToday.customerPushFailed > 0 && (
+                  <button
+                    type="button"
+                    className="rounded-md bg-amber-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-amber-700"
+                    onClick={() => {
+                      setCloseOpen(false);
+                      navigate('/admin/system?tab=notify&filter=push_failed&days=1');
+                    }}
+                  >
+                    先补发私信失败
+                  </button>
+                )}
                 <button
                   type="button"
                   className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
@@ -730,7 +753,7 @@ const ShiftsPage: React.FC = () => {
             {dashboard && (
               <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
                 <p className="text-xs text-gray-700">
-                  建议复制「交班跟进摘要」发给接班同事，含本班入出库/收款与未绑定待办。
+                  建议复制「交班跟进摘要」发给接班同事，含本班入出库/收款、私信失败与未绑定待办。
                 </p>
                 <button
                   type="button"

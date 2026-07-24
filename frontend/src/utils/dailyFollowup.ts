@@ -60,11 +60,26 @@ export function buildDailyFollowupItems(input: BuildFollowupInput): FollowItem[]
   if (pushFailed > 0) {
     list.push({
       key: 'push_failed',
-      priority: 15,
+      // 比未绑定更优先：客户已绑定，一键补发即可
+      priority: 8,
       title: '今日私信失败',
-      detail: '已绑定但发送失败，可在通知记录重试',
+      detail: '已绑定但没发到，优先一键补发（自动短重试）',
       count: pushFailed,
-      href: '/admin/system?tab=notify&filter=push_failed',
+      href: '/admin/system?tab=notify&filter=push_failed&days=1',
+      tone: 'danger',
+      actionLabel: '一键补发',
+    });
+  }
+
+  const sendFailed = notify?.sendFailed || 0;
+  if (sendFailed > 0) {
+    list.push({
+      key: 'send_failed',
+      priority: 9,
+      title: '今日发送失败',
+      detail: '整条通知发送失败，可在通知记录重发',
+      count: sendFailed,
+      href: '/admin/system?tab=notify&filter=failed&today=1&days=1',
       tone: 'danger',
       actionLabel: '去重发',
     });
@@ -239,10 +254,17 @@ export function buildDailyFollowupSummaryText(options: BuildSummaryOptions): str
 
   if (notify) {
     lines.push(
-      `到件触达：已私信 ${notify.customerPushed} · 未绑定 ${notify.customerUnbound} · 失败 ${notify.customerPushFailed}`,
+      `到件触达：已私信 ${notify.customerPushed} · 未绑定 ${notify.customerUnbound} · 私信失败 ${notify.customerPushFailed}` +
+        (notify.sendFailed > 0 ? ` · 发送失败 ${notify.sendFailed}` : ''),
     );
     if (notify.todayNewBindings != null) {
       lines.push(`今日新绑 ${notify.todayNewBindings} 人 · 累计绑定 ${notify.activeBindings}`);
+    }
+    if ((notify.customerPushFailed || 0) > 0) {
+      lines.push('交接：优先补发「私信失败」（客户已绑定，补发即可）');
+    }
+    if ((notify.customerUnbound || 0) > 0) {
+      lines.push('交接：未绑定请当面报码，或发绑定链接话术（勿发群）');
     }
   }
 

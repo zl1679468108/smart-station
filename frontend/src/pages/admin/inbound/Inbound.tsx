@@ -2011,7 +2011,7 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const [bulkResending, setBulkResending] = useState(false);
   const [rowResendingId, setRowResendingId] = useState<string | null>(null);
   /** 成功清单筛选：全部 / 未私信 / 已私信 */
-  const [successFilter, setSuccessFilter] = useState<'all' | 'unpushed' | 'pushed'>('all');
+  const [successFilter, setSuccessFilter] = useState<'all' | 'unpushed' | 'failed' | 'unbound' | 'pushed'>('all');
 
   type BatchItem = {
     trackingNumber: string;
@@ -2822,21 +2822,40 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                 result.notifySummary.customerPushFailed > 0) && (
                 <div className="mt-2 space-y-2">
                   <p className="text-[11px] font-semibold opacity-95">
-                    未私信必做：① 当面报码 ② 引导绑定 ③ 绑定后补发
+                    {result.notifySummary.customerPushFailed > 0 &&
+                    result.notifySummary.customerUnbound === 0
+                      ? '私信失败优先：下方点「一键补发私信失败」即可'
+                      : '未私信必做：① 失败先补发 ② 未绑定当面报码 ③ 引导绑定'}
                   </p>
                   <p className="text-[11px] opacity-90">
-                    可导出/复制未私信清单；也可打开近3日未绑定按手机号跟进。
+                    可导出/复制未私信清单；失败件优先本页补发，未绑定再跟进绑定。
                   </p>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigate('/admin/system?tab=notify&filter=unbound&view=byPhone&days=3')
-                    }
-                    className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-100"
-                  >
-                    近3日未绑定跟进
-                  </button>
                   <div className="flex flex-wrap gap-2">
+                    {result.notifySummary.customerPushFailed > 0 && (
+                      <button
+                        type="button"
+                        className="rounded-md bg-amber-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-amber-700"
+                        onClick={() => {
+                          setSuccessFilter('failed');
+                          document
+                            .getElementById('batch-success-list')
+                            ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        }}
+                      >
+                        看本批私信失败
+                      </button>
+                    )}
+                    {result.notifySummary.customerUnbound > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate('/admin/system?tab=notify&filter=unbound&view=byPhone&days=3')
+                        }
+                        className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-900 hover:bg-orange-100"
+                      >
+                        近3日未绑定跟进
+                      </button>
+                    )}
                     {result.notifySummary.customerUnbound > 0 && (
                       <button
                         type="button"
@@ -2857,10 +2876,11 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                       className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
                       onClick={() =>
                         navigate(
-                          result.notifySummary!.customerUnbound > 0 ||
-                            result.notifySummary!.customerPushFailed > 0
-                            ? '/admin/system?tab=notify&filter=unbound'
-                            : '/admin/system?tab=notify&filter=inbound',
+                          result.notifySummary!.customerPushFailed > 0
+                            ? '/admin/system?tab=notify&filter=push_failed&days=1'
+                            : result.notifySummary!.customerUnbound > 0
+                              ? '/admin/system?tab=notify&filter=unbound&view=byPhone'
+                              : '/admin/system?tab=notify&filter=inbound',
                         )
                       }
                     >
@@ -2890,6 +2910,22 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                       }`,
                     },
                     {
+                      key: 'failed' as const,
+                      label: `私信失败 ${
+                        result.successes.filter(
+                          (s) => s.notifyEnabled && s.customerBound && !s.customerPushed,
+                        ).length
+                      }`,
+                    },
+                    {
+                      key: 'unbound' as const,
+                      label: `未绑定 ${
+                        result.successes.filter(
+                          (s) => s.notifyEnabled && !s.customerBound,
+                        ).length
+                      }`,
+                    },
+                    {
                       key: 'pushed' as const,
                       label: `已私信 ${
                         result.successes.filter((s) => s.customerPushed).length
@@ -2914,7 +2950,10 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
               {result.successes.some(
                 (s) => s.id && s.notifyEnabled && !s.customerPushed,
               ) && (
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div
+                  id="batch-success-list"
+                  className="flex flex-wrap items-center justify-between gap-2"
+                >
                   <p className="text-[11px] text-gray-500">
                     未私信{' '}
                     {
@@ -2922,60 +2961,171 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                         (s) => s.id && s.notifyEnabled && !s.customerPushed,
                       ).length
                     }{' '}
-                    件（未绑定或发送失败）
+                    件（私信失败{' '}
+                    {
+                      result.successes.filter(
+                        (s) =>
+                          s.id && s.notifyEnabled && s.customerBound && !s.customerPushed,
+                      ).length
+                    }{' '}
+                    · 未绑定{' '}
+                    {
+                      result.successes.filter(
+                        (s) => s.id && s.notifyEnabled && !s.customerBound,
+                      ).length
+                    }
+                    ）
                   </p>
-                  <button
-                    type="button"
-                    disabled={bulkResending || !!rowResendingId}
-                    className="rounded-md border border-primary/30 bg-orange-50 px-3 py-1.5 text-xs text-primary hover:bg-orange-100 disabled:opacity-60"
-                    onClick={() => {
-                      void (async () => {
-                        const targets = (result.successes || []).filter(
-                          (s) => s.id && s.notifyEnabled && !s.customerPushed,
-                        );
-                        if (targets.length === 0) return;
-                        const ok = window.confirm(
-                          `对 ${targets.length} 件未私信包裹尝试补发到件通知？\n\n已绑定会私信取件码；仍未绑定则保持到店查件。`,
-                        );
-                        if (!ok) return;
-                        setBulkResending(true);
-                        let pushed = 0;
-                        let stillUnbound = 0;
-                        let failed = 0;
-                        const updates = new Map<string, (typeof targets)[0]>();
-                        for (const s of targets) {
-                          try {
-                            const r = await inboundService.resendInboundNotice(s.id);
-                            updates.set(s.id, {
-                              ...s,
-                              staffMessage: r.staffMessage,
-                              notifyEnabled: r.enabled,
-                              customerPushed: r.customerPushed,
-                              customerBound: r.customerBound,
+                  <div className="flex flex-wrap gap-2">
+                    {result.successes.some(
+                      (s) =>
+                        s.id && s.notifyEnabled && s.customerBound && !s.customerPushed,
+                    ) && (
+                      <button
+                        type="button"
+                        disabled={bulkResending || !!rowResendingId}
+                        className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                        onClick={() => {
+                          void (async () => {
+                            const targets = (result.successes || []).filter(
+                              (s) =>
+                                s.id &&
+                                s.notifyEnabled &&
+                                s.customerBound &&
+                                !s.customerPushed,
+                            );
+                            if (targets.length === 0) return;
+                            const ok = window.confirm(
+                              `对本批 ${targets.length} 条「私信失败」再发一次？\n\n会走自动短重试；成功后客户微信会收到取件码。`,
+                            );
+                            if (!ok) return;
+                            setBulkResending(true);
+                            let pushed = 0;
+                            let failed = 0;
+                            const updates = new Map<string, (typeof targets)[0]>();
+                            for (const s of targets) {
+                              try {
+                                const r = await inboundService.resendInboundNotice(s.id);
+                                updates.set(s.id, {
+                                  ...s,
+                                  staffMessage: r.staffMessage,
+                                  notifyEnabled: r.enabled,
+                                  customerPushed: r.customerPushed,
+                                  customerBound: r.customerBound,
+                                });
+                                if (r.customerPushed) pushed += 1;
+                                else failed += 1;
+                              } catch {
+                                failed += 1;
+                              }
+                            }
+                            setResult((prev) => {
+                              if (!prev?.successes) return prev;
+                              const successes = prev.successes.map(
+                                (x) => updates.get(x.id) || x,
+                              );
+                              const notifySummary = prev.notifySummary
+                                ? {
+                                    ...prev.notifySummary,
+                                    customerPushed: successes.filter((s) => s.customerPushed)
+                                      .length,
+                                    customerUnbound: successes.filter(
+                                      (s) => s.notifyEnabled && !s.customerBound,
+                                    ).length,
+                                    customerPushFailed: successes.filter(
+                                      (s) =>
+                                        s.notifyEnabled &&
+                                        s.customerBound &&
+                                        !s.customerPushed,
+                                    ).length,
+                                    staffMessage:
+                                      failed === 0 && pushed > 0
+                                        ? `本批补发完成：成功私信 ${pushed} 条`
+                                        : `本批补发：成功 ${pushed}，仍失败 ${failed}`,
+                                  }
+                                : prev.notifySummary;
+                              return { ...prev, successes, notifySummary };
                             });
-                            if (r.customerPushed) pushed += 1;
-                            else if (!r.customerBound) stillUnbound += 1;
-                            else failed += 1;
-                          } catch {
-                            failed += 1;
+                            setBulkResending(false);
+                            notifySuccess(
+                              `私信失败补发完成：成功 ${pushed}，仍失败 ${failed}`,
+                            );
+                          })();
+                        }}
+                      >
+                        {bulkResending ? '补发中…' : '一键补发私信失败'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={bulkResending || !!rowResendingId}
+                      className="rounded-md border border-primary/30 bg-orange-50 px-3 py-1.5 text-xs text-primary hover:bg-orange-100 disabled:opacity-60"
+                      onClick={() => {
+                        void (async () => {
+                          const targets = (result.successes || []).filter(
+                            (s) => s.id && s.notifyEnabled && !s.customerPushed,
+                          );
+                          if (targets.length === 0) return;
+                          const ok = window.confirm(
+                            `对 ${targets.length} 件未私信包裹尝试补发到件通知？\n\n已绑定会私信取件码；仍未绑定则保持到店查件。`,
+                          );
+                          if (!ok) return;
+                          setBulkResending(true);
+                          let pushed = 0;
+                          let stillUnbound = 0;
+                          let failed = 0;
+                          const updates = new Map<string, (typeof targets)[0]>();
+                          for (const s of targets) {
+                            try {
+                              const r = await inboundService.resendInboundNotice(s.id);
+                              updates.set(s.id, {
+                                ...s,
+                                staffMessage: r.staffMessage,
+                                notifyEnabled: r.enabled,
+                                customerPushed: r.customerPushed,
+                                customerBound: r.customerBound,
+                              });
+                              if (r.customerPushed) pushed += 1;
+                              else if (!r.customerBound) stillUnbound += 1;
+                              else failed += 1;
+                            } catch {
+                              failed += 1;
+                            }
                           }
-                        }
-                        setResult((prev) => {
-                          if (!prev?.successes) return prev;
-                          return {
-                            ...prev,
-                            successes: prev.successes.map((x) => updates.get(x.id) || x),
-                          };
-                        });
-                        setBulkResending(false);
-                        notifySuccess(
-                          `补发完成：已私信 ${pushed}，仍未绑定 ${stillUnbound}，失败 ${failed}`,
-                        );
-                      })();
-                    }}
-                  >
-                    {bulkResending ? '批量补发中…' : '一键补发未私信'}
-                  </button>
+                          setResult((prev) => {
+                            if (!prev?.successes) return prev;
+                            const successes = prev.successes.map(
+                              (x) => updates.get(x.id) || x,
+                            );
+                            const notifySummary = prev.notifySummary
+                              ? {
+                                  ...prev.notifySummary,
+                                  customerPushed: successes.filter((s) => s.customerPushed)
+                                    .length,
+                                  customerUnbound: successes.filter(
+                                    (s) => s.notifyEnabled && !s.customerBound,
+                                  ).length,
+                                  customerPushFailed: successes.filter(
+                                    (s) =>
+                                      s.notifyEnabled &&
+                                      s.customerBound &&
+                                      !s.customerPushed,
+                                  ).length,
+                                  staffMessage: `补发完成：已私信 ${pushed}，仍未绑定 ${stillUnbound}，失败 ${failed}`,
+                                }
+                              : prev.notifySummary;
+                            return { ...prev, successes, notifySummary };
+                          });
+                          setBulkResending(false);
+                          notifySuccess(
+                            `补发完成：已私信 ${pushed}，仍未绑定 ${stillUnbound}，失败 ${failed}`,
+                          );
+                        })();
+                      }}
+                    >
+                      {bulkResending ? '批量补发中…' : '一键补发全部未私信'}
+                    </button>
+                  </div>
                 </div>
               )}
               <div className="max-h-60 overflow-auto rounded-md border border-gray-200">
@@ -2993,9 +3143,17 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                       ? result.successes
                       : successFilter === 'pushed'
                         ? result.successes.filter((s) => s.customerPushed)
-                        : result.successes.filter(
-                            (s) => s.notifyEnabled && !s.customerPushed,
-                          )
+                        : successFilter === 'failed'
+                          ? result.successes.filter(
+                              (s) => s.notifyEnabled && s.customerBound && !s.customerPushed,
+                            )
+                          : successFilter === 'unbound'
+                            ? result.successes.filter(
+                                (s) => s.notifyEnabled && !s.customerBound,
+                              )
+                            : result.successes.filter(
+                                (s) => s.notifyEnabled && !s.customerPushed,
+                              )
                     ).map((s, i) => (
                       <tr key={`${s.id || s.trackingNumber}-${i}`}>
                         <td className="px-3 py-1.5 font-mono text-gray-700">{s.trackingNumber}</td>
