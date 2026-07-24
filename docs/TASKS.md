@@ -1301,3 +1301,11 @@
 | M110.2 | P1 | 后台预约回执分未绑定/已绑定 | appointments | done | OutboundBindNudge |
 | M110.3 | P2 | 未绑定近3日深链 | appointments | done | |
 
+## M111 入库取件码小票打印（业务功能）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M111.1 | P0 | 浏览器取件码小票打印工具 | printPickupSlip | done | 单张/批量，手机号脱敏 |
+| M111.2 | P0 | 扫码/手动入库成功打印 | inbound | done | 成功区 + 本会话 |
+| M111.3 | P1 | 批量入库成功打印 | inbound batch | done | 行内 + 成功清单 |
+| M111.4 | P1 | 库存详情补打小票 | inventory detail | done | 在库/滞留 |
+

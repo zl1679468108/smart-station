@@ -5,6 +5,8 @@ import * as overdueService from '@/services/overdue';
 import * as inboundService from '@/services/inbound';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import { copyText } from '@/utils/stationVisit';
+import { printPickupSlip } from '@/utils/printPickupSlip';
+import { useAuth } from '@/utils/auth';
 import { buildBindGuideScript, buildFacePickupScript } from '@/utils/staffScripts';
 import OutboundBindNudge from '@/components/OutboundBindNudge';
 import {
@@ -52,6 +54,9 @@ const OUTBOUND_METHOD_LABEL: Record<string, string> = {
 const ParcelDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const { data: detail, isLoading, error } = useParcelDetail(id);
   const invalidateDetail = useInvalidateInventoryDetail();
   const invalidateList = useInvalidateInventoryList();
@@ -127,6 +132,29 @@ const ParcelDetailPage: React.FC = () => {
                   }}
                 >
                   复制取件码
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                  onClick={() => {
+                    const ok = printPickupSlip({
+                      stationName,
+                      pickupCode: detail.pickupCode || '',
+                      trackingNumber: detail.trackingNumber,
+                      shelfNumber: detail.shelf?.number,
+                      shelfLayer: detail.shelfLayer,
+                      shelfPosition: detail.shelfPosition,
+                      recipientName: detail.recipientName,
+                      recipientPhone: detail.recipientPhone,
+                      courierCompanyName: detail.courier?.name,
+                      inboundAt: detail.inboundAt,
+                      collectDueAmount: detail.collectDueAmount,
+                    });
+                    if (ok) notifySuccess('已打开打印预览');
+                    else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+                  }}
+                >
+                  打印小票
                 </button>
                 <button
                   type="button"

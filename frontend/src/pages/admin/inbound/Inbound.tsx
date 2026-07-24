@@ -19,6 +19,8 @@ import {
   isSuccessBeepEnabled,
   setSuccessBeepEnabled,
 } from '@/utils/inboundOps';
+import { printPickupSlip, printPickupSlips } from '@/utils/printPickupSlip';
+import { useAuth } from '@/utils/auth';
 import { useCouriers, useInvalidateShelves, useShelves } from '@/hooks/useDictionary';
 import { useInvalidateDashboard } from '@/hooks/useDashboardData';
 import { useInvalidateInventoryList } from '@/hooks/useInventoryData';
@@ -373,8 +375,9 @@ const SizeSelector: React.FC<{
 // ============ 入库成功结果展示 ============
 const InboundSuccess: React.FC<{
   result: InboundResult;
+  stationName?: string;
   onNotifyUpdate?: (next: InboundResult) => void;
-}> = ({ result, onNotifyUpdate }) => {
+}> = ({ result, stationName, onNotifyUpdate }) => {
   const navigate = useNavigate();
   const n = result.notify;
   const [resending, setResending] = useState(false);
@@ -467,6 +470,28 @@ const InboundSuccess: React.FC<{
             className="mb-0.5 rounded-md border border-primary/30 bg-white px-2 py-1 text-xs text-primary hover:bg-orange-50"
           >
             {copied ? '已复制' : '复制取件码'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const ok = printPickupSlip({
+                stationName,
+                pickupCode: result.pickupCode,
+                trackingNumber: result.trackingNumber,
+                shelfNumber: result.shelfNumber,
+                shelfLayer: result.shelfLayer,
+                shelfPosition: result.shelfPosition,
+                recipientPhone: result.recipientPhone,
+                courierCompanyName: result.courierCompanyName,
+                inboundAt: result.inboundAt,
+                collectDueAmount: result.collectDueAmount,
+              });
+              if (ok) notifySuccess('已打开打印预览');
+              else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+            }}
+            className="mb-0.5 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 hover:border-primary hover:text-primary"
+          >
+            打印小票
           </button>
           <button
             type="button"
@@ -615,6 +640,9 @@ const InboundSuccess: React.FC<{
 
 // ============ 扫码入库 ============
 const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
+  const { stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const navigate = useNavigate();
   const invalidateShelves = useInvalidateShelves();
   const invalidateDashboard = useInvalidateDashboard();
@@ -1001,6 +1029,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       {result && (
         <InboundSuccess
           result={result}
+          stationName={stationName}
           onNotifyUpdate={(next) => {
             setResult(next);
             setRecent((prev) => prev.map((x) => (x.id === next.id ? next : x)));
@@ -1112,8 +1141,33 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
 
       {recent.length > 0 && (
         <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex items-center justify-between gap-2">
             <h3 className="text-sm font-medium text-gray-700">本会话最近入库</h3>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="rounded border border-gray-200 px-2 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50"
+                onClick={() => {
+                  const ok = printPickupSlips(
+                    recent.map((r) => ({
+                      stationName,
+                      pickupCode: r.pickupCode,
+                      trackingNumber: r.trackingNumber,
+                      shelfNumber: r.shelfNumber,
+                      shelfLayer: r.shelfLayer,
+                      shelfPosition: r.shelfPosition,
+                      recipientPhone: r.recipientPhone,
+                      courierCompanyName: r.courierCompanyName,
+                      inboundAt: r.inboundAt,
+                      collectDueAmount: r.collectDueAmount,
+                    })),
+                  );
+                  if (ok) notifySuccess(`已打开 ${recent.length} 张小票打印预览`);
+                  else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+                }}
+              >
+                打印本会话
+              </button>
             <span className="text-[11px] text-gray-400">
               最多 5 条
               {recent.filter((r) => r.notify?.enabled && !r.notify?.customerPushed).length > 0 && (
@@ -1123,6 +1177,7 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                 </span>
               )}
             </span>
+            </div>
           </div>
           <ul className="divide-y divide-gray-100">
             {recent.map((r) => {
@@ -1186,6 +1241,28 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                         }
                       >
                         复制码
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50"
+                        onClick={() => {
+                          const ok = printPickupSlip({
+                            stationName,
+                            pickupCode: r.pickupCode,
+                            trackingNumber: r.trackingNumber,
+                            shelfNumber: r.shelfNumber,
+                            shelfLayer: r.shelfLayer,
+                            shelfPosition: r.shelfPosition,
+                            recipientPhone: r.recipientPhone,
+                            courierCompanyName: r.courierCompanyName,
+                            inboundAt: r.inboundAt,
+                            collectDueAmount: r.collectDueAmount,
+                          });
+                          if (ok) notifySuccess('已打开打印预览');
+                          else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+                        }}
+                      >
+                        打印
                       </button>
                       {n?.enabled && (
                         <button
@@ -1251,6 +1328,9 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
 
 // ============ 手动录入 ============
 const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
+  const { stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const navigate = useNavigate();
   const invalidateShelves = useInvalidateShelves();
   const invalidateDashboard = useInvalidateDashboard();
@@ -1626,6 +1706,7 @@ const ManualInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       {result && (
         <InboundSuccess
           result={result}
+          stationName={stationName}
           onNotifyUpdate={(next) => setResult(next)}
         />
       )}
@@ -1651,6 +1732,9 @@ function escapeCsv(v: string | number | null | undefined) {
 }
 
 const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
+  const { stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const navigate = useNavigate();
   const invalidateShelves = useInvalidateShelves();
   const invalidateDashboard = useInvalidateDashboard();
@@ -2365,6 +2449,27 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                   导出成功清单
                 </button>
               )}
+              {result.successes && result.successes.some((s) => s.pickupCode) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const slips = (result.successes || [])
+                      .filter((s) => s.pickupCode)
+                      .map((s) => ({
+                        stationName,
+                        pickupCode: s.pickupCode,
+                        trackingNumber: s.trackingNumber,
+                        recipientPhone: s.recipientPhone,
+                      }));
+                    const ok = printPickupSlips(slips);
+                    if (ok) notifySuccess(`已打开 ${slips.length} 张小票打印预览`);
+                    else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+                  }}
+                  className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  打印成功小票
+                </button>
+              )}
               {result.successes &&
                 result.successes.some((s) => s.notifyEnabled && !s.customerPushed) && (
                   <>
@@ -2651,6 +2756,24 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                                 }
                               >
                                 复制码
+                              </button>
+                            )}
+                            {s.pickupCode && (
+                              <button
+                                type="button"
+                                className="rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50"
+                                onClick={() => {
+                                  const ok = printPickupSlip({
+                                    stationName,
+                                    pickupCode: s.pickupCode,
+                                    trackingNumber: s.trackingNumber,
+                                    recipientPhone: s.recipientPhone,
+                                  });
+                                  if (ok) notifySuccess('已打开打印预览');
+                                  else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+                                }}
+                              >
+                                打印
                               </button>
                             )}
                             {s.id && s.notifyEnabled && (
