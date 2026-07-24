@@ -78,6 +78,12 @@ const ExceptionPage: React.FC = () => {
 
   const [showCreate, setShowCreate] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [lastResend, setLastResend] = useState<{
+    parcelId: string;
+    message: string;
+    customerBound?: boolean;
+    customerPushed?: boolean;
+  } | null>(null);
   const [parcelKeyword, setParcelKeyword] = useState('');
   const [searching, setSearching] = useState(false);
   const [parcelOptions, setParcelOptions] = useState<ParcelListItem[]>([]);
@@ -223,8 +229,15 @@ const ExceptionPage: React.FC = () => {
 
       <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-orange-100 bg-orange-50/70 px-3 py-2">
         <p className="text-[11px] text-orange-900">
-          异常件常需联系客户：可看包裹详情、补发到件通知，或复制当面话术（勿发群）。
+          异常件常需联系客户：可看包裹详情、补发到件；失败可再发，或复制当面话术（勿发群）。
         </p>
+        <button
+          type="button"
+          onClick={() => navigate('/admin/system?tab=notify&filter=push_failed&days=1')}
+          className="rounded-md bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700"
+        >
+          补发失败私信
+        </button>
         <button
           type="button"
           onClick={() => navigate('/admin/system?tab=notify&filter=today')}
@@ -433,6 +446,12 @@ const ExceptionPage: React.FC = () => {
                                 setResendingId(pid);
                                 try {
                                   const r = await inboundService.resendInboundNotice(pid);
+                                  setLastResend({
+                                    parcelId: pid,
+                                    message: r.staffMessage || '已尝试补发',
+                                    customerBound: r.customerBound,
+                                    customerPushed: r.customerPushed,
+                                  });
                                   notifySuccess(r.staffMessage || '已尝试补发');
                                 } catch (e: any) {
                                   notifyError(e?.message || '补发失败');
@@ -449,6 +468,75 @@ const ExceptionPage: React.FC = () => {
                         )}
                     </div>
                   )}
+                  {lastResend &&
+                    lastResend.parcelId === (item.parcel?.id || item.parcelId) && (
+                      <div className="mt-2 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-950">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <p>补发回执：{lastResend.message}</p>
+                          <button
+                            type="button"
+                            className="underline"
+                            onClick={() => setLastResend(null)}
+                          >
+                            关闭
+                          </button>
+                        </div>
+                        {lastResend.customerBound && !lastResend.customerPushed && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              disabled={resendingId === lastResend.parcelId}
+                              className="rounded-md bg-amber-600 px-2 py-1 font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                              onClick={() => {
+                                const pid = lastResend.parcelId;
+                                void (async () => {
+                                  setResendingId(pid);
+                                  try {
+                                    const r = await inboundService.resendInboundNotice(pid);
+                                    setLastResend({
+                                      parcelId: pid,
+                                      message: r.staffMessage || '已再发',
+                                      customerBound: r.customerBound,
+                                      customerPushed: r.customerPushed,
+                                    });
+                                    notifySuccess(r.staffMessage || '已再发');
+                                  } catch (e: any) {
+                                    notifyError(e?.message || '再发失败');
+                                  } finally {
+                                    setResendingId(null);
+                                  }
+                                })();
+                              }}
+                            >
+                              {resendingId === lastResend.parcelId ? '再发中…' : '再发一次'}
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-md border border-amber-200 bg-white px-2 py-1 text-amber-900 hover:bg-amber-50"
+                              onClick={() =>
+                                navigate(
+                                  '/admin/system?tab=notify&filter=push_failed&days=1',
+                                )
+                              }
+                            >
+                              看今日私信失败
+                            </button>
+                          </div>
+                        )}
+                        {lastResend.customerBound === false && (
+                          <div className="mt-1.5">
+                            <p className="mb-1 text-orange-900">客户未绑定，可引导绑定后再补发。</p>
+                            <OutboundBindNudge
+                              phone={item.parcel?.recipientPhone}
+                              variant="admin"
+                            />
+                          </div>
+                        )}
+                        {lastResend.customerPushed && (
+                          <p className="mt-1 text-emerald-800">取件码已私信到客户微信。</p>
+                        )}
+                      </div>
+                    )}
                 </div>
                 {writable && item.status !== 'resolved' && item.status !== 'compensated' && (
                   <button

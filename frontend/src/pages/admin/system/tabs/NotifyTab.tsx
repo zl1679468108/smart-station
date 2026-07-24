@@ -84,6 +84,8 @@ const NotifyTab: React.FC = () => {
   const [error, setError] = useState('');
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [batchResending, setBatchResending] = useState(false);
+  const [phoneResending, setPhoneResending] = useState<string | null>(null);
+  const [phoneBatchResending, setPhoneBatchResending] = useState(false);
   const [resendTip, setResendTip] = useState('');
   const [reachToday, setReachToday] = useState<DashboardNotify | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -389,6 +391,37 @@ const NotifyTab: React.FC = () => {
     setBatchResending(false);
     await load();
   };
+
+
+  const onResendPhoneLogs = async (logIds: string[], phoneKey?: string) => {
+    const ids = (logIds || []).filter(Boolean);
+    if (ids.length === 0 || phoneBatchResending || batchResending || resendingId || phoneResending) {
+      return;
+    }
+    const ok = window.confirm(
+      `对该客户 ${ids.length} 条可补发记录重新发送？\n\n已绑定会再推取件码；未绑定仍只会旁路通知。`,
+    );
+    if (!ok) return;
+    if (phoneKey) setPhoneResending(phoneKey);
+    else setPhoneBatchResending(true);
+    setResendTip('');
+    let pushed = 0;
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        const r = await adminService.resendNotifyLog(id);
+        if (r.customerPushed) pushed += 1;
+        else failed += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    setResendTip(`补发完成：成功私信 ${pushed}，仍未私信/失败 ${failed}（共 ${ids.length}）`);
+    if (phoneKey) setPhoneResending(null);
+    else setPhoneBatchResending(false);
+    await load();
+  };
+
 
   const exportLogsCsv = () => {
     const escape = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
@@ -909,18 +942,49 @@ const NotifyTab: React.FC = () => {
             按手机号汇总{rangeDays === 1 ? '今日' : `近${rangeDays}日`}发送记录（已扫{' '}
             {phoneSummaryScanned} 条日志）。优先列出未私信/失败多的客户；勾选「只看仍未绑定」可做班中跟进清单。
           </p>
-          {unboundFollowupItems.length > 0 && (
+          {(unboundFollowupItems.length > 0 ||
+            phoneSummaries.some((r) => (r.resendLogIds || []).length > 0)) && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-orange-100 bg-orange-50/70 px-3 py-2">
               <p className="text-xs text-orange-900">
-                本页 {unboundFollowupItems.length} 个号码有未绑定/私信失败，可复制清单逐个当面跟进（含手机号，勿发群）。
+                本页可按客户补发：已绑定失败优先一键补发；未绑定可复制清单当面跟进（含手机号，勿发群）。
               </p>
-              <button
-                type="button"
-                onClick={() => void copyUnboundFollowup()}
-                className="min-h-[36px] rounded-md border border-orange-200 bg-white px-3 text-xs font-medium text-orange-900 hover:bg-orange-50"
-              >
-                复制跟进清单
-              </button>
+              <div className="flex flex-wrap gap-2">
+                {phoneSummaries.some((r) => (r.resendLogIds || []).length > 0) && (
+                  <button
+                    type="button"
+                    disabled={
+                      phoneBatchResending ||
+                      batchResending ||
+                      Boolean(resendingId) ||
+                      Boolean(phoneResending)
+                    }
+                    onClick={() => {
+                      const ids = phoneSummaries.flatMap((r) => r.resendLogIds || []).slice(0, 40);
+                      void onResendPhoneLogs(ids);
+                    }}
+                    className="min-h-[36px] rounded-md bg-amber-600 px-3 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                  >
+                    {phoneBatchResending
+                      ? '补发中…'
+                      : `一键补发本页客户（${Math.min(
+                          40,
+                          phoneSummaries.reduce(
+                            (n, r) => n + (r.resendLogIds || []).length,
+                            0,
+                          ),
+                        )}条）`}
+                  </button>
+                )}
+                {unboundFollowupItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void copyUnboundFollowup()}
+                    className="min-h-[36px] rounded-md border border-orange-200 bg-white px-3 text-xs font-medium text-orange-900 hover:bg-orange-50"
+                  >
+                    复制跟进清单
+                  </button>
+                )}
+              </div>
             </div>
           )}
           {phoneSummaries.length === 0 ? (
@@ -987,6 +1051,23 @@ const NotifyTab: React.FC = () => {
                           >
                             看明细
                           </button>
+                          {(row.resendLogIds || []).length > 0 && (
+                            <button
+                              type="button"
+                              disabled={
+                                phoneBatchResending ||
+                                batchResending ||
+                                Boolean(resendingId) ||
+                                phoneResending === row.phone
+                              }
+                              className="rounded-md bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                              onClick={() => void onResendPhoneLogs(row.resendLogIds || [], row.phone)}
+                            >
+                              {phoneResending === row.phone
+                                ? '补发中…'
+                                : `补发该客户（${(row.resendLogIds || []).length}）`}
+                            </button>
+                          )}
                           {(row.unbound > 0 || row.pushFailed > 0) && (
                             <button
                               type="button"

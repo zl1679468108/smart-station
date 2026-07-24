@@ -966,6 +966,8 @@ export class AdminService {
       lastReach: 'unbound' | 'pushed' | 'push_failed';
       lastReachLabel: string;
       hasBinding: boolean;
+      /** 可重发的到件/滞留日志 id（按时间近→远，最多 5 条） */
+      resendLogIds: string[];
     };
 
     const map = new Map<string, Agg>();
@@ -998,6 +1000,7 @@ export class AdminService {
           lastReach: customerReach,
           lastReachLabel: this.customerReachLabel(customerReach),
           hasBinding: false,
+          resendLogIds: [],
         };
         map.set(rawPhone, agg);
       }
@@ -1008,6 +1011,17 @@ export class AdminService {
       else if (customerReach === 'pushed') agg.pushed += 1;
       else agg.pushFailed += 1;
       // rows already ordered desc; first seen is latest
+      const templateCode = String(r.template_code || '');
+      const canResend =
+        templateCode === 'inbound_notice' || templateCode === 'overdue_remind';
+      const needResend =
+        customerReach === 'unbound' ||
+        customerReach === 'push_failed' ||
+        r.status === 'failed';
+      if (canResend && needResend && agg.resendLogIds.length < 5) {
+        const lid = String(r.id || '');
+        if (lid && !agg.resendLogIds.includes(lid)) agg.resendLogIds.push(lid);
+      }
     }
 
     const phones = Array.from(map.keys());

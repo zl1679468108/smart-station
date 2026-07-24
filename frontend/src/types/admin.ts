@@ -177,6 +177,8 @@ export interface NotifyPhoneSummaryItem {
   lastReachLabel?: string;
   /** 当前是否已有有效绑定 */
   hasBinding?: boolean;
+  /** 可重发日志 id（到件/滞留，最多 5 条） */
+  resendLogIds?: string[];
 }
 
 export interface NotifyLogItem {
