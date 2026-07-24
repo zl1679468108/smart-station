@@ -62,6 +62,9 @@ function shiftSnapshotCsv(s: ShiftItem, notify?: DashboardNotify | null) {
       ['今日私信失败', notify.customerPushFailed],
       ['今日发送失败', notify.sendFailed],
       ['当前已绑定客户', notify.activeBindings],
+      ['今日新绑', notify.todayNewBindings ?? 0],
+      ['今日到件人数', notify.uniqueRecipients ?? 0],
+      ['今日私信覆盖人数', notify.uniquePushedRecipients ?? 0],
     );
   }
   return rows.map((r) => r.map(escapeCsv).join(',')).join('\n');
@@ -338,6 +341,18 @@ const ShiftsPage: React.FC = () => {
                     今日到件触达：已私信 {notifyToday.customerPushed}
                     {notifyToday.inboundNotices > 0
                       ? ` / ${notifyToday.inboundNotices}`
+                      : ''}
+                    {typeof notifyToday.uniqueRecipients === 'number' &&
+                    notifyToday.uniqueRecipients > 0
+                      ? `，人数覆盖 ${Math.round(
+                          ((notifyToday.uniquePushedRecipients || 0) /
+                            notifyToday.uniqueRecipients) *
+                            100,
+                        )}%（${notifyToday.uniquePushedRecipients || 0}/${notifyToday.uniqueRecipients}）`
+                      : ''}
+                    {typeof notifyToday.todayNewBindings === 'number' &&
+                    notifyToday.todayNewBindings > 0
+                      ? `，今日新绑 ${notifyToday.todayNewBindings}`
                       : ''}
                     ，未绑定 {notifyToday.customerUnbound}
                     {notifyToday.customerPushFailed > 0

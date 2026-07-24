@@ -244,13 +244,24 @@ const WarehouseScreen: React.FC<WarehouseScreenProps> = ({
       parts.push(`压力最高 #${top.number}（${Math.round(top.ratio * 100)}%）`);
     }
     if (notify && notify.inboundNotices > 0) {
-      const rate =
-        notify.inboundNotices > 0
-          ? Math.round((notify.customerPushed / notify.inboundNotices) * 100)
-          : 0;
+      const rate = Math.round((notify.customerPushed / notify.inboundNotices) * 100);
       parts.push(
-        `到件私信率 ${rate}%（${notify.customerPushed}/${notify.inboundNotices}）`,
+        `件次私信率 ${rate}%（${notify.customerPushed}/${notify.inboundNotices}）`,
       );
+      if (
+        typeof notify.uniqueRecipients === 'number' &&
+        notify.uniqueRecipients > 0
+      ) {
+        const cover = Math.round(
+          ((notify.uniquePushedRecipients || 0) / notify.uniqueRecipients) * 100,
+        );
+        parts.push(
+          `人数覆盖 ${cover}%（${notify.uniquePushedRecipients || 0}/${notify.uniqueRecipients} 人）`,
+        );
+      }
+      if (typeof notify.todayNewBindings === 'number' && notify.todayNewBindings > 0) {
+        parts.push(`今日新绑 ${notify.todayNewBindings} 人`);
+      }
       if (notify.customerUnbound > 0) {
         parts.push(`未绑定 ${notify.customerUnbound} 次，需当面报码或引导绑定`);
       }
@@ -531,6 +542,26 @@ const WarehouseScreen: React.FC<WarehouseScreenProps> = ({
                     <span>私信失败</span>
                     <b style={{ color: '#f87171' }}>{notify.customerPushFailed}</b>
                   </button>
+                )}
+                <div className="ws-list-item" style={{ opacity: 0.9 }}>
+                  <span>已绑定 / 今日新绑</span>
+                  <b style={{ color: '#93c5fd' }}>
+                    {notify.activeBindings}
+                    {typeof notify.todayNewBindings === 'number' && notify.todayNewBindings > 0
+                      ? ` / +${notify.todayNewBindings}`
+                      : ''}
+                  </b>
+                </div>
+                {typeof notify.uniqueRecipients === 'number' && notify.uniqueRecipients > 0 && (
+                  <div className="ws-list-item" style={{ opacity: 0.9 }}>
+                    <span>人数覆盖</span>
+                    <b style={{ color: '#34d399' }}>
+                      {Math.round(
+                        ((notify.uniquePushedRecipients || 0) / notify.uniqueRecipients) * 100,
+                      )}
+                      %
+                    </b>
+                  </div>
                 )}
                 <div className="ws-list-item" style={{ opacity: 0.85 }}>
                   <span style={{ fontSize: 12, lineHeight: 1.4 }}>
