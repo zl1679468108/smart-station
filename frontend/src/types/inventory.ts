@@ -13,6 +13,8 @@ export interface ParcelListItem {
   status: ParcelStatus;
   size: ParcelSize | null;
   inboundAt: string;
+  /** 入库日起算在库天数 */
+  daysInStock?: number;
   outboundAt: string | null;
   note: string | null;
   courier: { id: string; name: string; code: string } | null;

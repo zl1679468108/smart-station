@@ -74,7 +74,7 @@ const ManualOutbound: React.FC = () => {
   // 确认出库（防连点 + 手机后4位身份核验）
   const handleConfirmOutbound = async (
     item: OutboundSearchItem,
-    verify: { phoneTail: string; verifyNote?: string },
+    verify: { phoneTail: string; verifyNote?: string; evidenceImageBase64?: string },
   ) => {
     if (confirmLoading) return;
     const tail = verify.phoneTail.replace(/\D/g, '');
@@ -89,6 +89,7 @@ const ManualOutbound: React.FC = () => {
         pickupCode: item.pickupCode || undefined,
         phoneTail: tail,
         verifyNote: verify.verifyNote,
+        evidenceImageBase64: verify.evidenceImageBase64,
       });
       invalidateShelves();
       invalidateDashboard();
@@ -389,12 +390,19 @@ const SearchResultList: React.FC<{
 const ConfirmDialog: React.FC<{
   item: OutboundSearchItem;
   loading?: boolean;
-  onConfirm: (verify: { phoneTail: string; verifyNote?: string }) => void;
+  onConfirm: (verify: {
+    phoneTail: string;
+    verifyNote?: string;
+    evidenceImageBase64?: string;
+  }) => void;
   onCancel: () => void;
 }> = ({ item, loading, onConfirm, onCancel }) => {
   const [phoneTail, setPhoneTail] = useState('');
   const [verifyNote, setVerifyNote] = useState('');
   const [localError, setLocalError] = useState('');
+  const [evidencePreview, setEvidencePreview] = useState<string | null>(null);
+  const [evidenceBase64, setEvidenceBase64] = useState<string | undefined>();
+  const [compressing, setCompressing] = useState(false);
 
   // 确认弹窗内不展示完整后4位，要求当面询问取件人
   // 确认弹窗故意不展示后 4 位，避免店员照抄屏幕
@@ -403,6 +411,63 @@ const ConfirmDialog: React.FC<{
     if (p.length >= 7) return `${p.slice(0, 3)}********`;
     return '***********';
   })();
+
+  const compressImage = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const maxSide = 1280;
+          let { width, height } = img;
+          if (width > maxSide || height > maxSide) {
+            const scale = maxSide / Math.max(width, height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('无法压缩图片'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          // jpeg 0.72，控制在约 400KB 内
+          resolve(canvas.toDataURL('image/jpeg', 0.72));
+        };
+        img.onerror = () => reject(new Error('图片读取失败'));
+        img.src = String(reader.result || '');
+      };
+      reader.onerror = () => reject(new Error('图片读取失败'));
+      reader.readAsDataURL(file);
+    });
+
+  const onPickEvidence = async (file: File | null) => {
+    if (!file) {
+      setEvidencePreview(null);
+      setEvidenceBase64(undefined);
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setLocalError('请选择图片文件');
+      return;
+    }
+    setCompressing(true);
+    setLocalError('');
+    try {
+      const dataUrl = await compressImage(file);
+      setEvidencePreview(dataUrl);
+      setEvidenceBase64(dataUrl);
+    } catch (e) {
+      setLocalError(e instanceof Error ? e.message : '图片处理失败');
+      setEvidencePreview(null);
+      setEvidenceBase64(undefined);
+    } finally {
+      setCompressing(false);
+    }
+  };
 
   const submit = () => {
     const tail = phoneTail.replace(/\D/g, '');
@@ -414,6 +479,7 @@ const ConfirmDialog: React.FC<{
     onConfirm({
       phoneTail: tail,
       verifyNote: verifyNote.trim() || undefined,
+      evidenceImageBase64: evidenceBase64,
     });
   };
 
@@ -443,10 +509,10 @@ const ConfirmDialog: React.FC<{
           <button
             type="button"
             onClick={submit}
-            disabled={loading || phoneTail.replace(/\D/g, '').length !== 4}
+            disabled={loading || compressing || phoneTail.replace(/\D/g, '').length !== 4}
             className="flex-1 rounded-md bg-primary py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
           >
-            {loading ? '出库中…' : '核验并出库'}
+            {loading ? '出库中…' : compressing ? '处理图片…' : '核验并出库'}
           </button>
         </>
       }
@@ -510,6 +576,41 @@ const ConfirmDialog: React.FC<{
             disabled={loading}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
           />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-gray-500">拍照留证（可选）</label>
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            disabled={loading || compressing}
+            onChange={(e) => void onPickEvidence(e.target.files?.[0] || null)}
+            className="block w-full text-xs text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-xs file:text-primary"
+          />
+          <p className="mt-1 text-[11px] text-gray-400">
+            建议拍取件人/面单；自动压缩。未配置云存储时仍可出库，仅跳过图片。
+          </p>
+          {evidencePreview && (
+            <div className="mt-2 flex items-start gap-2">
+              <img
+                src={evidencePreview}
+                alt="留证预览"
+                className="h-20 w-20 rounded-md border border-gray-200 object-cover"
+              />
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  setEvidencePreview(null);
+                  setEvidenceBase64(undefined);
+                }}
+                className="text-[11px] text-gray-500 hover:text-danger"
+              >
+                移除
+              </button>
+            </div>
+          )}
+          {compressing && <p className="mt-1 text-[11px] text-gray-500">图片压缩中…</p>}
         </div>
       </div>
     </Modal>

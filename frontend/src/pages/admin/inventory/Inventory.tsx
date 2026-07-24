@@ -225,7 +225,7 @@ const Inventory: React.FC = () => {
             type="text"
             value={filterForm.phone}
             onChange={(e) => setFilterForm({ ...filterForm, phone: e.target.value })}
-            placeholder="手机号"
+            placeholder="手机号或尾号4位"
             className="rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
           />
           <input
@@ -351,6 +351,7 @@ const Inventory: React.FC = () => {
                 <th className="px-3 py-2 text-left font-medium">取件码</th>
                 <th className="px-3 py-2 text-left font-medium">快递公司</th>
                 <th className="px-3 py-2 text-left font-medium">状态</th>
+                <th className="px-3 py-2 text-left font-medium">在库天数</th>
                 <th className="px-3 py-2 text-left font-medium">入库时间</th>
                 <th className="px-3 py-2 text-right font-medium">操作</th>
               </tr>
@@ -377,6 +378,23 @@ const Inventory: React.FC = () => {
                       {STATUS_META[item.status].label}
                     </span>
                   </td>
+                  <td className="px-3 py-2 text-xs">
+                    {item.status === 'in_stock' || item.status === 'overdue' ? (
+                      <span
+                        className={
+                          (item.daysInStock ?? 0) >= 7
+                            ? 'font-medium text-orange-600'
+                            : (item.daysInStock ?? 0) >= 3
+                              ? 'text-amber-600'
+                              : 'text-gray-600'
+                        }
+                      >
+                        {item.daysInStock ?? 0} 天
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-xs text-gray-500">
                     {item.inboundAt ? new Date(item.inboundAt).toLocaleString('zh-CN') : '-'}
                   </td>
@@ -398,7 +416,7 @@ const Inventory: React.FC = () => {
           title="暂无数据"
           description={
             appliedFilters.status === 'overdue'
-              ? '暂无滞留包裹（自动扫描将在 1.3 滞留件模块提供）'
+              ? '暂无滞留包裹，可在滞留件页立即扫描'
               : appliedFilters.status === 'exception'
                 ? '暂无异常包裹，可在列表中批量标记异常'
                 : '未查询到符合条件的包裹'

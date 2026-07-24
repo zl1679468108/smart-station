@@ -100,6 +100,12 @@ const ParcelDetailPage: React.FC = () => {
             label="入库时间"
             value={detail.inboundAt ? new Date(detail.inboundAt).toLocaleString('zh-CN') : '-'}
           />
+          {(detail.status === 'in_stock' || detail.status === 'overdue') && (
+            <InfoItem
+              label="在库天数"
+              value={`${detail.daysInStock ?? 0} 天`}
+            />
+          )}
           <InfoItem
             label="入库方式"
             value={detail.inboundMethod ? INBOUND_METHOD_LABEL[detail.inboundMethod] ?? detail.inboundMethod : '-'}
@@ -156,17 +162,29 @@ const ParcelDetailPage: React.FC = () => {
                 {ev.eventType === 'outbound' &&
                   ev.metadata &&
                   typeof ev.metadata === 'object' &&
-                  (ev.metadata as { verify?: { type?: string; phoneTail?: string; note?: string } })
+                  (ev.metadata as { verify?: { type?: string; phoneTail?: string; note?: string; evidenceUrl?: string } })
                     .verify?.type === 'phone_tail' && (
-                    <p className="mt-1 inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
-                      身份核验：手机后4位
-                      {(ev.metadata as { verify?: { phoneTail?: string } }).verify?.phoneTail
-                        ? ` · **${(ev.metadata as { verify?: { phoneTail?: string } }).verify?.phoneTail}`
-                        : ''}
-                      {(ev.metadata as { verify?: { note?: string } }).verify?.note
-                        ? ` · ${(ev.metadata as { verify?: { note?: string } }).verify?.note}`
-                        : ''}
-                    </p>
+                    <div className="mt-1 space-y-1">
+                      <p className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
+                        身份核验：手机后4位
+                        {(ev.metadata as { verify?: { phoneTail?: string } }).verify?.phoneTail
+                          ? ` · **${(ev.metadata as { verify?: { phoneTail?: string } }).verify?.phoneTail}`
+                          : ''}
+                        {(ev.metadata as { verify?: { note?: string } }).verify?.note
+                          ? ` · ${(ev.metadata as { verify?: { note?: string } }).verify?.note}`
+                          : ''}
+                      </p>
+                      {(ev.metadata as { verify?: { evidenceUrl?: string } }).verify?.evidenceUrl && (
+                        <a
+                          href={(ev.metadata as { verify?: { evidenceUrl?: string } }).verify?.evidenceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block text-[11px] text-primary hover:underline"
+                        >
+                          查看拍照留证
+                        </a>
+                      )}
+                    </div>
                   )}
                 {ev.operatorName && (
                   <p className="mt-0.5 text-xs text-gray-400">

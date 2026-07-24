@@ -21,6 +21,8 @@ export function manualOutbound(payload: {
   phoneTail: string;
   /** 可选核验备注 */
   verifyNote?: string;
+  /** 可选拍照留证 base64 */
+  evidenceImageBase64?: string;
 }): Promise<OutboundResult> {
   return post<OutboundResult>('/api/outbound/manual', payload, { successMessage: '包裹已出库' });
 }

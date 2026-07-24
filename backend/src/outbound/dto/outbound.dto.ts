@@ -32,6 +32,14 @@ export class ManualOutboundDto {
   @IsString()
   @MaxLength(100, { message: '核验备注最长 100 字' })
   verifyNote?: string;
+
+  /**
+   * 可选拍照留证（jpeg/png base64，可含 data URI 前缀）
+   * 上传到 Supabase Storage；失败不阻断出库
+   */
+  @IsOptional()
+  @IsString()
+  evidenceImageBase64?: string;
 }
 
 /**

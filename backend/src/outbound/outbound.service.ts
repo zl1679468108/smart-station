@@ -144,6 +144,17 @@ export class OutboundService {
       throw new BadRequestException('手机号后 4 位不正确，请向取件人重新确认');
     }
 
+    // 可选拍照留证（失败不阻断出库）
+    let evidenceUrl: string | undefined;
+    if (dto.evidenceImageBase64) {
+      evidenceUrl =
+        (await this.tryUploadEvidence(
+          ctx.stationId,
+          parcel.id,
+          dto.evidenceImageBase64,
+        )) || undefined;
+    }
+
     // 执行出库
     return this.executeOutbound(parcel, {
       stationId: ctx.stationId,
@@ -154,6 +165,7 @@ export class OutboundService {
         type: 'phone_tail',
         phoneTail: givenTail,
         note: (dto.verifyNote || '').trim() || undefined,
+        evidenceUrl,
       },
     });
   }
@@ -253,6 +265,7 @@ export class OutboundService {
         type: 'phone_tail' | 'none';
         phoneTail?: string;
         note?: string;
+        evidenceUrl?: string;
       };
     },
   ) {
@@ -276,6 +289,7 @@ export class OutboundService {
     }
     if (opts.verify?.type === 'phone_tail') {
       description += '（已核验手机后4位）';
+      if (opts.verify.evidenceUrl) description += '（已拍照留证）';
       if (opts.verify.note) description += `：${opts.verify.note}`;
     }
     await this.supabase.getClient().from('ss_parcel_events').insert({
@@ -293,6 +307,7 @@ export class OutboundService {
               // 仅存后4位，不落完整手机号
               phoneTail: opts.verify.phoneTail || null,
               note: opts.verify.note || null,
+              evidenceUrl: opts.verify.evidenceUrl || null,
               verifiedAt: new Date().toISOString(),
             }
           : { type: 'none' },
@@ -315,6 +330,53 @@ export class OutboundService {
       outboundAt: new Date().toISOString(),
       outboundMethod: opts.method,
     };
+  }
+
+
+  /** 拍照留证上传（可选，失败返回 null 不阻断出库） */
+  private async tryUploadEvidence(
+    stationId: string,
+    parcelId: string,
+    imageBase64: string,
+  ): Promise<string | null> {
+    try {
+      const raw = String(imageBase64 || '').trim();
+      if (!raw) return null;
+      const m = raw.match(/^data:(image\/(jpeg|jpg|png|webp));base64,(.+)$/i);
+      let contentType = 'image/jpeg';
+      let b64 = raw.replace(/^data:image\/\w+;base64,/, '');
+      if (m) {
+        contentType = m[1].toLowerCase().replace('jpg', 'jpeg');
+        b64 = m[3];
+      }
+      const buf = Buffer.from(b64, 'base64');
+      if (!buf.length) return null;
+      if (buf.length > 400 * 1024) {
+        console.warn('[Outbound] 留证图过大，已跳过上传', buf.length);
+        return null;
+      }
+      const ext = contentType.includes('png')
+        ? 'png'
+        : contentType.includes('webp')
+          ? 'webp'
+          : 'jpg';
+      const bucket = (process.env.SUPABASE_STORAGE_BUCKET || 'ss-evidence').trim();
+      const path = `outbound/${stationId}/${parcelId}/${Date.now()}.${ext}`;
+      const client = this.supabase.getClient();
+      const { error } = await client.storage.from(bucket).upload(path, buf, {
+        contentType,
+        upsert: false,
+      });
+      if (error) {
+        console.warn('[Outbound] 留证上传失败（不阻断出库）:', error.message);
+        return null;
+      }
+      const { data } = client.storage.from(bucket).getPublicUrl(path);
+      return data?.publicUrl || null;
+    } catch (err) {
+      console.warn('[Outbound] 留证上传异常（不阻断出库）:', err);
+      return null;
+    }
   }
 
   /** 检查取件码是否被锁定 */

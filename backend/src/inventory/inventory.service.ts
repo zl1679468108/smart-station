@@ -118,7 +118,12 @@ export class InventoryService {
       )
       .eq('station_id', stationId);
 
-    if (q.phone) query = query.eq('recipient_phone', q.phone);
+    if (q.phone) {
+      const phone = String(q.phone).replace(/\D/g, '');
+      if (phone.length === 11) query = query.eq('recipient_phone', phone);
+      else if (phone.length === 4) query = query.like('recipient_phone', `%${phone}`);
+      else if (phone.length > 0) query = query.like('recipient_phone', `%${phone}%`);
+    }
     if (q.trackingNumber) query = query.ilike('tracking_number', `%${q.trackingNumber.trim().toUpperCase()}%`);
     if (q.pickupCode) query = query.eq('pickup_code', q.pickupCode);
     if (q.courierCompanyId) query = query.eq('courier_company_id', q.courierCompanyId);
@@ -144,6 +149,7 @@ export class InventoryService {
         inboundAt: row.inbound_at,
         outboundAt: row.outbound_at,
         note: row.note,
+        daysInStock: this.daysSince(row.inbound_at),
         courier: row.courier
           ? { id: row.courier.id, name: row.courier.name, code: row.courier.code }
           : null,
@@ -206,6 +212,7 @@ export class InventoryService {
       shelfLayer: parcel.shelf_layer,
       shelfPosition: parcel.shelf_position,
       inboundAt: parcel.inbound_at,
+      daysInStock: this.daysSince(parcel.inbound_at),
       outboundAt: parcel.outbound_at,
       returnedAt: parcel.returned_at,
       returnTrackingNumber: parcel.return_tracking_number,
@@ -271,5 +278,13 @@ export class InventoryService {
       );
     }
     return { updated: updatedIds.length, skipped: ids.length - updatedIds.length };
+  }
+
+  /** 入库日起算自然日（与滞留规则一致：向下取整） */
+  private daysSince(inboundAt?: string | null): number {
+    if (!inboundAt) return 0;
+    const ms = new Date(inboundAt).getTime();
+    if (Number.isNaN(ms)) return 0;
+    return Math.max(0, Math.floor((Date.now() - ms) / 86400000));
   }
 }

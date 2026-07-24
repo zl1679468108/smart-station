@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import * as dotenv from 'dotenv';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -14,6 +15,10 @@ async function bootstrap(): Promise<void> {
   console.log(`[smart-station] 服务启动中，监听端口: ${port}`);
 
   const app = await NestFactory.create(AppModule);
+
+  // 出库拍照留证等 base64 可能超过默认 100kb
+  app.use(json({ limit: '2mb' }));
+  app.use(urlencoded({ extended: true, limit: '2mb' }));
 
   // 全局 API 前缀
   app.setGlobalPrefix('api');
