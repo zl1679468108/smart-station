@@ -61,6 +61,7 @@ const ParcelDetailPage: React.FC = () => {
   const [savingCollect, setSavingCollect] = useState(false);
   const [collectError, setCollectError] = useState('');
   const [resendingNotice, setResendingNotice] = useState(false);
+  const [lastNotify, setLastNotify] = useState<string>('');
   const [remindingOverdue, setRemindingOverdue] = useState(false);
   const [lastRemindHint, setLastRemindHint] = useState<string | null>(null);
 
@@ -154,6 +155,19 @@ const ParcelDetailPage: React.FC = () => {
                 </button>
                 <button
                   type="button"
+                  className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 hover:border-primary hover:text-primary"
+                  onClick={() => {
+                    const phone = (detail.recipientPhone || '').replace(/\D/g, '').slice(0, 11);
+                    const q = phone
+                      ? `tab=notify&phone=${encodeURIComponent(phone)}`
+                      : 'tab=notify&filter=inbound';
+                    navigate(`/admin/system?${q}`);
+                  }}
+                >
+                  看通知记录
+                </button>
+                <button
+                  type="button"
                   disabled={resendingNotice}
                   className="rounded-md border border-primary/30 bg-orange-50 px-3 py-1.5 text-xs text-primary hover:bg-orange-100 disabled:opacity-60"
                   onClick={async () => {
@@ -161,6 +175,7 @@ const ParcelDetailPage: React.FC = () => {
                     setResendingNotice(true);
                     try {
                       const r = await inboundService.resendInboundNotice(id);
+                      setLastNotify(r.staffMessage || '已尝试补发通知');
                       notifySuccess(r.staffMessage || '已尝试补发通知');
                     } catch (e: any) {
                       notifyError(e?.message || '补发失败');
@@ -201,6 +216,18 @@ const ParcelDetailPage: React.FC = () => {
                     {remindingOverdue ? '提醒中…' : '发滞留提醒'}
                   </button>
                 )}
+              </div>
+            )}
+            {lastNotify && (
+              <div className="mt-2 rounded-md border border-orange-100 bg-orange-50 px-3 py-2 text-xs text-orange-900">
+                到件通知回执：{lastNotify}
+                <button
+                  type="button"
+                  className="ml-2 underline"
+                  onClick={() => setLastNotify('')}
+                >
+                  关闭
+                </button>
               </div>
             )}
             {lastRemindHint && (

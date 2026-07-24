@@ -1080,3 +1080,10 @@
 | M79.1 | P1 | 成功清单「看包裹」/点取件码 | inbound batch | done | 深链库存详情 |
 | M79.2 | P1 | 成功清单全部/未私信/已私信筛选 | inbound batch | done | 空态提示 |
 | M79.3 | P2 | 通知摘要跳转通知记录 | inbound batch | done | unbound/inbound 筛选 |
+
+## M80 库存/预检通知深链（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M80.1 | P1 | 通知记录支持 ?phone= 深链 | NotifyTab | done | 库存详情跳转 |
+| M80.2 | P1 | 库存详情「看通知记录」+ 到件回执 | inventory detail | done | |
+| M80.3 | P2 | 批量预检已在库可「看包裹」 | inbound batch | done | |

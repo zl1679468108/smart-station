@@ -54,14 +54,15 @@ const NotifyTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [sub, setSub] = useState<'bindings' | 'logs' | 'byPhone'>('bindings');
-  const [phoneInput, setPhoneInput] = useState('');
-  const [phoneQuery, setPhoneQuery] = useState('');
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [batchResending, setBatchResending] = useState(false);
   const [resendTip, setResendTip] = useState('');
   const [reachToday, setReachToday] = useState<DashboardNotify | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const initialFilter = searchParams.get('filter') || '';
+  const initialPhone = (searchParams.get('phone') || '').replace(/\D/g, '').slice(0, 11);
+  const [phoneInput, setPhoneInput] = useState(initialPhone);
+  const [phoneQuery, setPhoneQuery] = useState(initialPhone);
   const [logFilter, setLogFilter] = useState<LogFilter>(
     isLogFilter(initialFilter) ? initialFilter : '',
   );
@@ -143,14 +144,21 @@ const NotifyTab: React.FC = () => {
   }, [load]);
 
   useEffect(() => {
-    if (logFilter && sub === 'bindings') setSub('logs');
-  }, [logFilter, sub]);
+    if ((logFilter || phoneQuery) && sub === 'bindings') setSub('logs');
+  }, [logFilter, phoneQuery, sub]);
 
-  // URL filter 变化时同步（工作台深链）
+  // URL filter/phone 变化时同步（工作台/库存详情深链）
   useEffect(() => {
     const f = searchParams.get('filter') || '';
     if (isLogFilter(f) && f !== logFilter) {
       setLogFilter(f);
+    }
+    const p = (searchParams.get('phone') || '').replace(/\D/g, '').slice(0, 11);
+    if (p && p !== phoneQuery) {
+      setPhoneInput(p);
+      setPhoneQuery(p);
+      setLogPage(1);
+      setSub('logs');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -168,13 +176,21 @@ const NotifyTab: React.FC = () => {
   const onSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setLogPage(1);
-    setPhoneQuery(phoneInput.replace(/\D/g, '').slice(0, 11));
+    const p = phoneInput.replace(/\D/g, '').slice(0, 11);
+    setPhoneQuery(p);
+    const next = new URLSearchParams(searchParams);
+    if (p) next.set('phone', p);
+    else next.delete('phone');
+    setSearchParams(next, { replace: true });
   };
 
   const onClearSearch = () => {
     setPhoneInput('');
     setPhoneQuery('');
     setLogPage(1);
+    const next = new URLSearchParams(searchParams);
+    next.delete('phone');
+    setSearchParams(next, { replace: true });
   };
 
   const onResend = async (log: NotifyLogItem) => {

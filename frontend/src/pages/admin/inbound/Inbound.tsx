@@ -1905,13 +1905,27 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                     .filter((x) => x.blocked)
                     .slice(0, 30)
                     .map((x) => (
-                      <li key={`${x.index}-${x.trackingNumber}`} className="px-2 py-1.5 font-mono text-[11px]">
-                        <span className="text-gray-800">{x.trackingNumber}</span>
-                        <span className="ml-2 text-amber-800">
-                          {x.exists
-                            ? `已在库${x.parcel?.pickupCode ? ` · 取件码 ${x.parcel.pickupCode}` : ''}`
-                            : x.message}
-                        </span>
+                      <li
+                        key={`${x.index}-${x.trackingNumber}`}
+                        className="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5 font-mono text-[11px]"
+                      >
+                        <div className="min-w-0">
+                          <span className="text-gray-800">{x.trackingNumber}</span>
+                          <span className="ml-2 text-amber-800">
+                            {x.exists
+                              ? `已在库${x.parcel?.pickupCode ? ` · 取件码 ${x.parcel.pickupCode}` : ''}`
+                              : x.message}
+                          </span>
+                        </div>
+                        {x.parcel?.id && (
+                          <button
+                            type="button"
+                            className="shrink-0 rounded border border-amber-200 bg-white px-1.5 py-0.5 text-[11px] text-amber-900 hover:bg-amber-100"
+                            onClick={() => navigate(`/admin/inventory/${x.parcel!.id}`)}
+                          >
+                            看包裹
+                          </button>
+                        )}
                       </li>
                     ))}
                 </ul>
