@@ -1324,35 +1324,91 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     inboundMethod: 'batch';
   };
 
+  const normalizeBatchLine = (raw: string): string[] => {
+    // 支持英文逗号 / 中文逗号 / Tab（Excel 粘贴）
+    const line = raw.replace(/^\uFEFF/, '').trim();
+    if (!line) return [];
+    let parts: string[];
+    if (line.includes('\t')) {
+      parts = line.split('\t');
+    } else if (line.includes('，')) {
+      parts = line.split('，');
+    } else {
+      parts = line.split(',');
+    }
+    return parts.map((s) => s.trim().replace(/^["']|["']$/g, ''));
+  };
+
+  const normalizePhone = (raw: string): string => {
+    let p = raw.replace(/[\s-]/g, '');
+    if (p.startsWith('+86')) p = p.slice(3);
+    if (p.startsWith('86') && p.length === 13) p = p.slice(2);
+    return p;
+  };
+
+  const isHeaderRow = (parts: string[]): boolean => {
+    const joined = parts.join('').toLowerCase();
+    return (
+      /运单|单号|tracking/.test(joined) &&
+      (/姓名|收件|name/.test(joined) || /手机|电话|phone/.test(joined))
+    );
+  };
+
   const parseCsvItems = (): {
     lines: string[];
     items: BatchItem[];
     parseErrors: Array<{ index: number; error: string; trackingNumber?: string }>;
   } | null => {
-    const lines = csvText.trim().split('\n').filter(Boolean);
-    if (lines.length === 0) {
+    const rawLines = csvText
+      .replace(/^\uFEFF/, '')
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (rawLines.length === 0) {
       setError('请粘贴至少一行数据');
+      return null;
+    }
+    // 自动跳过表头
+    let start = 0;
+    const firstParts = normalizeBatchLine(rawLines[0]);
+    if (firstParts.length >= 2 && isHeaderRow(firstParts)) {
+      start = 1;
+    }
+    const lines = rawLines.slice(start);
+    if (lines.length === 0) {
+      setError('只有表头，没有数据行');
       return null;
     }
     const items: BatchItem[] = [];
     const parseErrors: Array<{ index: number; error: string; trackingNumber?: string }> = [];
     lines.forEach((line, i) => {
-      const parts = line.split(',').map((s) => s.trim());
+      const parts = normalizeBatchLine(line);
       if (parts.length < 3) {
         parseErrors.push({
           index: i,
-          error: '字段不足，需至少 运单号,姓名,手机号',
+          error: '字段不足，需至少 运单号,姓名,手机号（可用逗号或 Tab）',
           trackingNumber: parts[0] || undefined,
         });
         return;
       }
-      const [trackingNumber, recipientName, recipientPhone, note] = parts;
+      const trackingNumber = parts[0];
+      const recipientName = parts[1];
+      const recipientPhone = normalizePhone(parts[2] || '');
+      const note = parts[3] || undefined;
       if (!trackingNumber || !recipientName || !recipientPhone) {
-        parseErrors.push({ index: i, error: '字段不能为空', trackingNumber: trackingNumber || undefined });
+        parseErrors.push({
+          index: i,
+          error: '字段不能为空',
+          trackingNumber: trackingNumber || undefined,
+        });
         return;
       }
       if (!/^1\d{10}$/.test(recipientPhone)) {
-        parseErrors.push({ index: i, error: '手机号格式不正确', trackingNumber });
+        parseErrors.push({
+          index: i,
+          error: '手机号格式不正确（需 11 位，可带 +86）',
+          trackingNumber,
+        });
         return;
       }
       items.push({
@@ -1372,6 +1428,41 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     }
     return { lines, items, parseErrors };
   };
+
+  /** 粘贴区实时统计（不提交） */
+  const pastePreview = (() => {
+    const rawLines = csvText
+      .replace(/^\uFEFF/, '')
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (rawLines.length === 0) return null;
+    let start = 0;
+    const firstParts = normalizeBatchLine(rawLines[0]);
+    if (firstParts.length >= 2 && isHeaderRow(firstParts)) start = 1;
+    const lines = rawLines.slice(start);
+    let ok = 0;
+    let bad = 0;
+    for (const line of lines) {
+      const parts = normalizeBatchLine(line);
+      if (parts.length < 3) {
+        bad += 1;
+        continue;
+      }
+      const phone = normalizePhone(parts[2] || '');
+      if (!parts[0] || !parts[1] || !/^1\d{10}$/.test(phone)) {
+        bad += 1;
+        continue;
+      }
+      ok += 1;
+    }
+    return {
+      total: lines.length,
+      ok,
+      bad,
+      skippedHeader: start === 1,
+    };
+  })();
 
   const buildReadyFromPrecheck = (
     items: BatchItem[],
@@ -1580,12 +1671,43 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-gray-200 bg-white p-5">
-        <h2 className="mb-2 text-sm font-medium text-gray-700">批量导入（CSV 粘贴）</h2>
-        <p className="mb-3 text-xs text-gray-500">
-          每行一条，字段用英文逗号分隔：<code className="rounded bg-gray-100 px-1">运单号,收件人姓名,手机号,备注</code>
+        <h2 className="mb-2 text-sm font-medium text-gray-700">批量导入（粘贴）</h2>
+        <p className="mb-2 text-xs text-gray-500">
+          每行一条：<code className="rounded bg-gray-100 px-1">运单号,姓名,手机号,备注</code>
+          。支持<strong>英文逗号 / 中文逗号 / Excel Tab</strong>；可带表头；手机号可带 +86。
           <br />
           备注可选。快递公司自动识别，货架按下方选择的包裹大小统一分配。
         </p>
+        <div className="mb-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={submitting || prechecking}
+            onClick={() => {
+              const sample =
+                '运单号,收件人姓名,手机号,备注\nSF1234567890,张三,13800001234,易碎\nZTO9876543210,李四,13900005678';
+              setCsvText(sample);
+              setPrecheck(null);
+              setResult(null);
+              setError('');
+            }}
+            className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          >
+            填入示例
+          </button>
+          <button
+            type="button"
+            disabled={submitting || prechecking || !csvText.trim()}
+            onClick={() => {
+              setCsvText('');
+              setPrecheck(null);
+              setResult(null);
+              setError('');
+            }}
+            className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          >
+            清空
+          </button>
+        </div>
         <div className="mb-3">
           <SizeSelector
             value={defaultSize}
@@ -1602,12 +1724,27 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           onChange={(e) => {
             setCsvText(e.target.value);
             setPrecheck(null);
+            setResult(null);
           }}
           rows={8}
-          placeholder={'SF1234567890,张三,13800001234,易碎品\nZTO9876543210,李四,13900005678'}
+          placeholder={'SF1234567890,张三,13800001234,易碎品\nZTO9876543210,李四,13900005678\n（也可从 Excel 直接粘贴）'}
           className="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm outline-none focus:border-primary"
           disabled={submitting}
+          spellCheck={false}
         />
+        {pastePreview && (
+          <p className="mt-2 text-[11px] text-gray-500">
+            预览：共 {pastePreview.total} 行
+            {pastePreview.skippedHeader ? '（已跳过表头）' : ''}
+            ，格式正确 <span className="text-success">{pastePreview.ok}</span>
+            {pastePreview.bad > 0 && (
+              <>
+                ，有问题 <span className="text-danger">{pastePreview.bad}</span>
+              </>
+            )}
+            。先点「仅预检」更稳妥。
+          </p>
+        )}
         {error && <div className="mt-3 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
         {precheck && (
           <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">

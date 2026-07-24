@@ -1016,3 +1016,14 @@
 | M72.2 | P1 | 扫码入库回车连续作业 | inbound scan | done | 同收件人扫完回车即入库 |
 | M72.3 | P2 | OCR 后光标落到缺项 | inbound scan | done | 补全姓名/手机 |
 | M72.4 | P2 | 本会话未私信计数 | inbound recent | done | 最近入库提示 |
+
+---
+
+## M73 滞留提醒触达面板 + 批量粘贴增强（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M73.1 | P1 | 滞留扫描/提醒触达回执面板 | overdue | done | 已私信/未绑定/失败 + 深链通知 |
+| M73.2 | P1 | 批量粘贴支持 Tab/中文逗号/表头 | inbound batch | done | Excel 友好 |
+| M73.3 | P2 | 手机号 +86 规范化 | inbound batch | done | normalizePhone |
+| M73.4 | P2 | 粘贴实时行数预览 + 示例 | inbound batch | done | pastePreview |

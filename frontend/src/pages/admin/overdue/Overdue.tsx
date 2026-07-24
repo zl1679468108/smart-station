@@ -52,6 +52,15 @@ const OverduePage: React.FC = () => {
   const [scanning, setScanning] = useState(false);
   const [remindingId, setRemindingId] = useState<string | null>(null);
   const [batchReminding, setBatchReminding] = useState(false);
+  /** 最近一次扫描/批量提醒触达回执，便于店员看清私信情况 */
+  const [lastReach, setLastReach] = useState<{
+    source: 'scan' | 'batch' | 'single';
+    title: string;
+    customerPushed: number;
+    customerUnbound: number;
+    failed?: number;
+    staffMessage: string;
+  } | null>(null);
   const pageSize = 20;
 
   const { data, isLoading, refetch } = useOverdueList({
@@ -81,13 +90,23 @@ const OverduePage: React.FC = () => {
     setScanning(true);
     try {
       const r = await overdueService.scanOverdue();
+      const pushed = Number(r.customerNotified || 0);
+      const unbound = Number(r.customerUnbound || 0);
       const extra =
         r.customerNotified != null
-          ? `；客户私信 ${r.customerNotified}，未绑定 ${r.customerUnbound ?? 0}`
+          ? `；客户私信 ${pushed}，未绑定 ${unbound}`
           : '';
-      notifySuccess(
-        `扫描完成：标记滞留 ${r.markedOverdue}，预警 ${r.warned}，提醒 ${r.reminded}，待退回 ${r.returnCandidates}${extra}`,
-      );
+      const msg = `扫描完成：标记滞留 ${r.markedOverdue}，预警 ${r.warned}，提醒 ${r.reminded}，待退回 ${r.returnCandidates}${extra}`;
+      notifySuccess(msg);
+      if (r.customerNotified != null || r.reminded > 0) {
+        setLastReach({
+          source: 'scan',
+          title: '本次扫描提醒触达',
+          customerPushed: pushed,
+          customerUnbound: unbound,
+          staffMessage: msg,
+        });
+      }
       await invalidateOverdue();
     } catch (e: any) {
       notifyError(e?.message || '扫描失败');
@@ -115,6 +134,14 @@ const OverduePage: React.FC = () => {
     try {
       const r = await overdueService.remindOverdue(id);
       notifySuccess(r.staffMessage || '提醒已发送');
+      setLastReach({
+        source: 'single',
+        title: '单件提醒触达',
+        customerPushed: r.customerPushed ? 1 : 0,
+        customerUnbound: r.customerBound ? 0 : 1,
+        failed: r.customerBound && !r.customerPushed ? 1 : 0,
+        staffMessage: r.staffMessage || '提醒已发送',
+      });
       await invalidateOverdue();
     } catch (e: any) {
       notifyError(e?.message || '发送失败');
@@ -138,6 +165,14 @@ const OverduePage: React.FC = () => {
     try {
       const r = await overdueService.remindOverdueBatch(remindableIds);
       notifySuccess(r.staffMessage || '批量提醒完成');
+      setLastReach({
+        source: 'batch',
+        title: `本页批量提醒触达（${r.total} 条）`,
+        customerPushed: r.pushed,
+        customerUnbound: r.unbound,
+        failed: r.failed,
+        staffMessage: r.staffMessage || '批量提醒完成',
+      });
       await invalidateOverdue();
     } catch (e: any) {
       notifyError(e?.message || '批量提醒失败');
@@ -174,6 +209,52 @@ const OverduePage: React.FC = () => {
           )
         }
       />
+
+
+      {lastReach && (
+        <div className="rounded-lg border border-sky-100 bg-sky-50 px-3 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium text-sky-900">{lastReach.title}</p>
+              <p className="mt-1 text-xs text-sky-900/90">{lastReach.staffMessage}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLastReach(null)}
+              className="text-[11px] text-sky-700 underline hover:text-sky-900"
+            >
+              关闭
+            </button>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+            <span className="rounded-md bg-white px-2.5 py-1 text-emerald-700">
+              已私信 {lastReach.customerPushed}
+            </span>
+            <span className="rounded-md bg-white px-2.5 py-1 text-orange-700">
+              未绑定 {lastReach.customerUnbound}
+            </span>
+            {typeof lastReach.failed === 'number' && lastReach.failed > 0 && (
+              <span className="rounded-md bg-white px-2.5 py-1 text-amber-700">
+                失败 {lastReach.failed}
+              </span>
+            )}
+          </div>
+          {(lastReach.customerUnbound > 0 || (lastReach.failed || 0) > 0) && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <p className="text-[11px] text-sky-900/80">
+                未私信请当面报码；客户绑定后可到通知记录补发滞留提醒。
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/admin/system?tab=notify&filter=overdue')}
+                className="rounded-md border border-sky-200 bg-white px-2.5 py-1 text-[11px] font-medium text-sky-800 hover:bg-sky-100/60"
+              >
+                查看滞留通知记录
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         {LEVEL_TABS.map((t) => {
