@@ -19,14 +19,21 @@ export function buildFacePickupScript(opts: {
   pickupCode: string;
   stationName?: string;
   recipientName?: string | null;
+  /** 到付/货款待收金额（元），有则提醒取件时当面付 */
+  collectDueAmount?: number | null;
 }): string {
   const who = opts.recipientName?.trim() ? `${opts.recipientName.trim()}，` : '';
   const station = opts.stationName?.trim() || '驿站';
-  return [
+  const parts = [
     `${who}您的快递已到${station}。`,
     `取件码：${opts.pickupCode}。`,
-    '请凭码到店取件。若要微信自动收码，可在查件页绑定微信通知。',
-  ].join('');
+  ];
+  const due = Number(opts.collectDueAmount || 0);
+  if (due > 0) {
+    parts.push(`取件时请当面付到付/货款 ¥${due.toFixed(2)}。`);
+  }
+  parts.push('请凭码到店取件。若要微信自动收码，可在查件页绑定微信通知。');
+  return parts.join('');
 }
 
 /** 未绑定客户短提示（UI 展示用） */

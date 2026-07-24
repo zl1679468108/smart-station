@@ -217,7 +217,7 @@ const NotifyBindCard: React.FC<{
 
   const wxGuide =
     guide.wxpusherGuide ||
-    '1. 填写收件手机号，获取验证码\n2. 点「生成二维码」\n3. 用微信扫一扫，按提示完成\n4. 绑定成功后，包裹到了会发到你的微信';
+    '1. 填收件手机号，点「验证码」\n2. 点「生成二维码」\n3. 微信扫一扫完成\n4. 以后有件，微信直接收码';
   const ppGuide =
     guide.pushplusGuide ||
     '适合已有其他推送工具的用户。\n1. 在对应网页用微信登录\n2. 复制你的「专属绑定码」\n3. 回到这里填写手机号和验证码，粘贴绑定码即可';
@@ -247,7 +247,7 @@ const NotifyBindCard: React.FC<{
             }}
             className="min-h-[44px] shrink-0 rounded-md bg-primary px-3 py-2 text-xs font-medium text-white hover:bg-primaryHover"
           >
-            {open ? '收起' : '绑定通知'}
+            {open ? '收起' : '扫一扫收码'}
           </button>
         )}
       </div>
@@ -274,14 +274,14 @@ const NotifyBindCard: React.FC<{
         </div>
 
         <div className="rounded-md border border-white/80 bg-white/80 p-3">
-          <p className="text-xs font-medium text-gray-700">微信收通知（推荐）</p>
+          <p className="text-xs font-medium text-gray-700">微信自动收码（推荐）</p>
           <p className="mt-1 text-xs text-gray-500">
-            绑定后，包裹到了会直接发到你的微信（含取件码，只有你能看到）。
-            没绑定的话，请到店查件或看货架。
+            绑定后，包裹到了会直接发到你的微信（只有你能看到取件码）。
+            没绑定就到店查件或看货架。
           </p>
           <ul className="mt-2 space-y-1 text-[11px] text-gray-500">
-            <li>· 点「绑定通知」→ 填手机号 → 微信扫一扫</li>
-            <li>· 绑定后有件自动提醒，不用反复查</li>
+            <li>· 点「扫一扫收码」→ 填手机号 → 微信扫一扫</li>
+            <li>· 下次有件不用反复查，微信直接告诉你</li>
           </ul>
         </div>
       </div>

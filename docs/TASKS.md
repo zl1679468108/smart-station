@@ -974,3 +974,14 @@
 | M68.1 | P1 | 导出失败清单 CSV | inbound batch | done | 行号/运单/原因，便于改 CSV |
 | M68.2 | P2 | 导出成功清单 CSV | inbound batch | done | 运单/取件码/通知状态 |
 | M68.3 | P2 | 失败表展示运单号 | inbound batch | done | 错误列表可读性 |
+
+---
+
+## M69 查件绑定降门槛 + 入库待收款醒目（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M69.1 | P1 | 查件成功/空结果绑定 CTA 白话 | query | done | 扫一扫收码 / 约1分钟 |
+| M69.2 | P1 | 绑定卡片按钮与步骤去技术词 | NotifyBindCard | done | 扫一扫收码 |
+| M69.3 | P1 | 入库成功待收款醒目 + 出库深链 | inbound | done | 金额条 + 去出库收款 |
+| M69.4 | P2 | 当面话术可带待收金额 | staffScripts | done | face script collectDue |

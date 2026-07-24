@@ -611,11 +611,11 @@ const ResultView: React.FC<{
           iconClassName="text-gray-300"
         />
         <div className="rounded-xl border border-gray-200 bg-white p-4 text-xs leading-relaxed text-gray-600 shadow-sm">
-          <p className="font-medium text-gray-800">温馨提示</p>
+          <p className="font-medium text-gray-800">还没查到包裹？</p>
           <p className="mt-1">
-            还没绑定微信通知时，包裹到了<strong className="text-gray-700">不会发到你微信</strong>
-            ，群里也<strong className="text-gray-700">不会公开取件码</strong>。
-            有件请到店查件或看货架。
+            可能还没到，或已经取走。也可以到店让店员帮你查。
+            没绑定微信时，<strong className="text-gray-700">不会发到你手机微信</strong>，
+            群里也<strong className="text-gray-700">不会公开取件码</strong>。
           </p>
           {showBindCta && (
             <button
@@ -623,7 +623,7 @@ const ResultView: React.FC<{
               onClick={onBindClick}
               className="mt-3 min-h-[44px] w-full rounded-md bg-primary px-3 text-sm font-medium text-white hover:bg-primaryHover"
             >
-              绑定微信，有件自动提醒（推荐）
+              扫一扫，有件自动收码
             </button>
           )}
         </div>
@@ -641,23 +641,23 @@ const ResultView: React.FC<{
       {/* 绑定转化 / 未绑定兜底 */}
       {bindStatus?.bound ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
-          已绑定微信通知，下次包裹到了会直接发到你的微信。
+          已开通微信收码：下次有件会直接发到你微信，不用反复查。
         </div>
       ) : (
-        <div className="rounded-xl border border-primary/25 bg-orange-50 px-4 py-3 shadow-sm">
-          <p className="text-sm font-semibold text-gray-800">绑定微信后，有件自动提醒</p>
+        <div className="rounded-xl border-2 border-primary/30 bg-orange-50 px-4 py-3 shadow-sm">
+          <p className="text-sm font-semibold text-gray-900">扫一扫，有件自动收码</p>
           <p className="mt-1 text-xs leading-relaxed text-gray-600">
             {lastQueryPhone ? `当前查询 ${phoneHint}。` : ''}
-            现在请先凭下方取件码到店取件。绑定后，下次不用反复查，微信会直接告诉你取件码。
-            群里不会公开你的取件码。
+            先记下下方取件码到店取件。再花 1 分钟绑定：下次包裹到了，微信直接告诉你取件码。
+            <span className="text-gray-500">（群里不会公开你的码）</span>
           </p>
           {showBindCta && (
             <button
               type="button"
               onClick={onBindClick}
-              className="mt-3 min-h-[44px] w-full rounded-md bg-primary px-3 text-sm font-medium text-white hover:bg-primaryHover sm:w-auto sm:px-5"
+              className="mt-3 min-h-[48px] w-full rounded-md bg-primary px-3 text-sm font-semibold text-white hover:bg-primaryHover sm:w-auto sm:min-w-[200px] sm:px-5"
             >
-              去绑定微信通知
+              现在绑定（约 1 分钟）
             </button>
           )}
         </div>

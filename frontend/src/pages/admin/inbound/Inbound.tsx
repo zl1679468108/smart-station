@@ -268,9 +268,14 @@ const InboundSuccess: React.FC<{
   result: InboundResult;
   onNotifyUpdate?: (next: InboundResult) => void;
 }> = ({ result, onNotifyUpdate }) => {
+  const navigate = useNavigate();
   const n = result.notify;
   const [resending, setResending] = useState(false);
   const [copied, setCopied] = useState(false);
+  const collectDue = Number(result.collectDueAmount || 0);
+  const needCollect =
+    collectDue > 0 &&
+    (result.collectStatus === 'unpaid' || !result.collectStatus);
   const notifyTone = !n
     ? 'border-gray-200 bg-gray-50 text-gray-600'
     : !n.enabled
@@ -319,6 +324,7 @@ const InboundSuccess: React.FC<{
   const onCopyFaceScript = async () => {
     const text = buildFacePickupScript({
       pickupCode: result.pickupCode,
+      collectDueAmount: needCollect ? collectDue : undefined,
     });
     const ok = await copyText(text);
     if (ok) notifySuccess('已复制当面话术（含取件码，勿发群）');
@@ -366,6 +372,34 @@ const InboundSuccess: React.FC<{
           </div>
         )}
       </div>
+
+      {needCollect && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2.5">
+          <div className="text-xs text-rose-900">
+            <p className="font-semibold">
+              待收款 ¥{collectDue.toFixed(2)}
+              {Number(result.freightCollectAmount || 0) > 0 &&
+                ` · 到付¥${Number(result.freightCollectAmount || 0).toFixed(2)}`}
+              {Number(result.codAmount || 0) > 0 &&
+                ` · 货款¥${Number(result.codAmount || 0).toFixed(2)}`}
+            </p>
+            <p className="mt-0.5 text-[11px] text-rose-800/90">
+              取件出库时当面收妥；可点右侧去出库收款。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              navigate(
+                `/admin/outbound?tracking=${encodeURIComponent(result.trackingNumber)}`,
+              )
+            }
+            className="shrink-0 rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700"
+          >
+            去出库收款
+          </button>
+        </div>
+      )}
 
       {n && (
         <div className={`mt-4 rounded-md border px-3 py-2.5 text-xs leading-relaxed ${notifyTone}`}>
@@ -722,6 +756,12 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                     <div className="text-gray-700">
                       {r.shelfNumber}-{r.shelfLayer}-{String(r.shelfPosition).padStart(4, '0')}
                     </div>
+                    {Number(r.collectDueAmount || 0) > 0 &&
+                      (r.collectStatus === 'unpaid' || !r.collectStatus) && (
+                        <div className="font-medium text-rose-700">
+                          待收¥{Number(r.collectDueAmount || 0).toFixed(2)}
+                        </div>
+                      )}
                     <div className={tipClass}>{tip}</div>
                     <div className="flex gap-1.5">
                       <button
