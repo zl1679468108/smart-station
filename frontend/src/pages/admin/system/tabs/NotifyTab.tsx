@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as adminService from '@/services/admin';
 import * as statsService from '@/services/stats';
@@ -116,6 +116,8 @@ const NotifyTab: React.FC = () => {
       : true;
   const [rangeDays, setRangeDays] = useState<1 | 3 | 7>(initialDays as 1 | 3 | 7);
   const [excludeBound, setExcludeBound] = useState(initialExcludeBound);
+  /** 无深链时按今日失败优先自动落地一次 */
+  const autoFailFirstApplied = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -267,6 +269,32 @@ const NotifyTab: React.FC = () => {
     }
     setSearchParams(next, { replace: true });
   };
+
+  // 无 filter/phone/view 深链时：失败优先自动落到可处理列表（仅首次）
+  useEffect(() => {
+    if (autoFailFirstApplied.current) return;
+    if (searchParams.get('filter') || searchParams.get('phone') || searchParams.get('view')) {
+      autoFailFirstApplied.current = true;
+      return;
+    }
+    if (!reachToday) return;
+    autoFailFirstApplied.current = true;
+    if ((reachToday.customerPushFailed || 0) > 0) {
+      setSub('logs');
+      applyLogFilter('push_failed');
+      return;
+    }
+    if ((reachToday.sendFailed || 0) > 0) {
+      setSub('logs');
+      applyLogFilter('failed');
+      return;
+    }
+    if ((reachToday.customerUnbound || 0) > 0) {
+      setSub('byPhone');
+      applyLogFilter('unbound');
+    }
+  }, [reachToday, searchParams]);
+
 
   const applyRangeDays = (d: 1 | 3 | 7) => {
     setRangeDays(d);
@@ -622,9 +650,15 @@ const NotifyTab: React.FC = () => {
               </div>
             </button>
           </div>
-          {(reachToday.customerUnbound > 0 || reachToday.customerPushFailed > 0) && (
+          {(reachToday.customerUnbound > 0 ||
+            reachToday.customerPushFailed > 0 ||
+            (reachToday.sendFailed || 0) > 0) && (
             <p className="mt-2 text-[11px] text-orange-900/80">
-              未私信：当面报码或复制绑定话术；客户绑定后可在下方记录一键补发。
+              {(reachToday.customerPushFailed || 0) > 0
+                ? '优先处理私信失败：点上方「私信失败」或下方一键补发（客户已绑定）。'
+                : (reachToday.sendFailed || 0) > 0
+                  ? '有发送失败记录，可先筛「发送失败」再补发。'
+                  : '未绑定：当面报码或复制绑定话术；客户绑定后可在下方记录一键补发。'}
             </p>
           )}
         </div>
