@@ -885,7 +885,7 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   const invalidateDashboard = useInvalidateDashboard();
   const invalidateInventoryList = useInvalidateInventoryList();
   const [csvText, setCsvText] = useState('');
-  const [defaultSize, setDefaultSize] = useState<ParcelSize>('small');
+  const [defaultSize, setDefaultSize] = useState<ParcelSize>(() => loadLastParcelSize('small'));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{
@@ -895,12 +895,18 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     errors: Array<{ index: number; error: string }>;
     notifySummary?: BatchNotifySummary;
     successes?: Array<{
+      id: string;
       trackingNumber: string;
       pickupCode: string;
       recipientPhone?: string;
       staffMessage?: string;
+      notifyEnabled?: boolean;
+      customerPushed?: boolean;
+      customerBound?: boolean;
     }>;
   } | null>(null);
+  const [bulkResending, setBulkResending] = useState(false);
+  const [rowResendingId, setRowResendingId] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (submitting) return;
@@ -962,14 +968,20 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
         errors: [...parseErrors, ...res.errors.map((e) => ({ index: e.index, error: e.error }))],
         notifySummary: res.notifySummary,
         successes: (res.results || []).map((row) => ({
+          id: row.result?.id || '',
           trackingNumber: row.result?.trackingNumber || '',
           pickupCode: row.result?.pickupCode || '',
           recipientPhone: row.result?.recipientPhone,
           staffMessage: row.result?.notify?.staffMessage,
+          notifyEnabled: row.result?.notify?.enabled,
+          customerPushed: row.result?.notify?.customerPushed,
+          customerBound: row.result?.notify?.customerBound,
         })),
       });
       if (res.succeeded > 0) {
         setCsvText('');
+        saveLastParcelSize(defaultSize);
+        playInboundSuccessBeep();
         invalidateShelves();
         invalidateDashboard();
         invalidateInventoryList();
@@ -991,7 +1003,15 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           备注可选。快递公司自动识别，货架按下方选择的包裹大小统一分配。
         </p>
         <div className="mb-3">
-          <SizeSelector value={defaultSize} onChange={setDefaultSize} disabled={submitting} shelves={shelves} />
+          <SizeSelector
+            value={defaultSize}
+            onChange={(s) => {
+              setDefaultSize(s);
+              saveLastParcelSize(s);
+            }}
+            disabled={submitting}
+            shelves={shelves}
+          />
         </div>
         <textarea
           value={csvText}
@@ -1058,35 +1078,161 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
               {(result.notifySummary.customerUnbound > 0 ||
                 result.notifySummary.customerPushFailed > 0) && (
                 <p className="mt-2 text-[11px] opacity-90">
-                  未收到私信的客户可到店查件；绑定微信后可在「系统管理 → 通知记录」里重发。
+                  未私信的可在下方列表点「补发」；客户绑定后也可一键补发未触达。
                 </p>
               )}
             </div>
           )}
           {result.successes && result.successes.length > 0 && (
-            <div className="mb-3 max-h-60 overflow-auto rounded-md border border-gray-200">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-gray-500">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium">运单号</th>
-                    <th className="px-3 py-2 text-left font-medium">取件码</th>
-                    <th className="px-3 py-2 text-left font-medium">通知</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {result.successes.map((s, i) => (
-                    <tr key={`${s.trackingNumber}-${i}`}>
-                      <td className="px-3 py-1.5 font-mono text-gray-700">{s.trackingNumber}</td>
-                      <td className="px-3 py-1.5 font-mono font-semibold text-primary">
-                        {s.pickupCode || '-'}
-                      </td>
-                      <td className="px-3 py-1.5 text-gray-500">
-                        {s.staffMessage || '—'}
-                      </td>
+            <div className="mb-3 space-y-2">
+              {result.successes.some(
+                (s) => s.id && s.notifyEnabled && !s.customerPushed,
+              ) && (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] text-gray-500">
+                    未私信{' '}
+                    {
+                      result.successes.filter(
+                        (s) => s.id && s.notifyEnabled && !s.customerPushed,
+                      ).length
+                    }{' '}
+                    件（未绑定或发送失败）
+                  </p>
+                  <button
+                    type="button"
+                    disabled={bulkResending || !!rowResendingId}
+                    className="rounded-md border border-primary/30 bg-orange-50 px-3 py-1.5 text-xs text-primary hover:bg-orange-100 disabled:opacity-60"
+                    onClick={() => {
+                      void (async () => {
+                        const targets = (result.successes || []).filter(
+                          (s) => s.id && s.notifyEnabled && !s.customerPushed,
+                        );
+                        if (targets.length === 0) return;
+                        const ok = window.confirm(
+                          `对 ${targets.length} 件未私信包裹尝试补发到件通知？\n\n已绑定会私信取件码；仍未绑定则保持到店查件。`,
+                        );
+                        if (!ok) return;
+                        setBulkResending(true);
+                        let pushed = 0;
+                        let stillUnbound = 0;
+                        let failed = 0;
+                        const updates = new Map<string, (typeof targets)[0]>();
+                        for (const s of targets) {
+                          try {
+                            const r = await inboundService.resendInboundNotice(s.id);
+                            updates.set(s.id, {
+                              ...s,
+                              staffMessage: r.staffMessage,
+                              notifyEnabled: r.enabled,
+                              customerPushed: r.customerPushed,
+                              customerBound: r.customerBound,
+                            });
+                            if (r.customerPushed) pushed += 1;
+                            else if (!r.customerBound) stillUnbound += 1;
+                            else failed += 1;
+                          } catch {
+                            failed += 1;
+                          }
+                        }
+                        setResult((prev) => {
+                          if (!prev?.successes) return prev;
+                          return {
+                            ...prev,
+                            successes: prev.successes.map((x) => updates.get(x.id) || x),
+                          };
+                        });
+                        setBulkResending(false);
+                        notifySuccess(
+                          `补发完成：已私信 ${pushed}，仍未绑定 ${stillUnbound}，失败 ${failed}`,
+                        );
+                      })();
+                    }}
+                  >
+                    {bulkResending ? '批量补发中…' : '一键补发未私信'}
+                  </button>
+                </div>
+              )}
+              <div className="max-h-60 overflow-auto rounded-md border border-gray-200">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 text-gray-500">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">运单号</th>
+                      <th className="px-3 py-2 text-left font-medium">取件码</th>
+                      <th className="px-3 py-2 text-left font-medium">通知</th>
+                      <th className="px-3 py-2 text-left font-medium">操作</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {result.successes.map((s, i) => (
+                      <tr key={`${s.id || s.trackingNumber}-${i}`}>
+                        <td className="px-3 py-1.5 font-mono text-gray-700">{s.trackingNumber}</td>
+                        <td className="px-3 py-1.5 font-mono font-semibold text-primary">
+                          {s.pickupCode || '-'}
+                        </td>
+                        <td className="px-3 py-1.5 text-gray-500">
+                          {s.staffMessage || '—'}
+                        </td>
+                        <td className="px-3 py-1.5">
+                          <div className="flex flex-wrap gap-1">
+                            {s.pickupCode && (
+                              <button
+                                type="button"
+                                className="rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50"
+                                onClick={() =>
+                                  void copyText(s.pickupCode).then((ok) =>
+                                    ok ? notifySuccess('取件码已复制') : notifyError('复制失败'),
+                                  )
+                                }
+                              >
+                                复制码
+                              </button>
+                            )}
+                            {s.id && s.notifyEnabled && (
+                              <button
+                                type="button"
+                                disabled={bulkResending || rowResendingId === s.id}
+                                className="rounded border border-primary/30 px-1.5 py-0.5 text-[11px] text-primary hover:bg-orange-50 disabled:opacity-60"
+                                onClick={() => {
+                                  void (async () => {
+                                    setRowResendingId(s.id);
+                                    try {
+                                      const r = await inboundService.resendInboundNotice(s.id);
+                                      notifySuccess(r.staffMessage || '已尝试补发');
+                                      setResult((prev) => {
+                                        if (!prev?.successes) return prev;
+                                        return {
+                                          ...prev,
+                                          successes: prev.successes.map((x) =>
+                                            x.id === s.id
+                                              ? {
+                                                  ...x,
+                                                  staffMessage: r.staffMessage,
+                                                  notifyEnabled: r.enabled,
+                                                  customerPushed: r.customerPushed,
+                                                  customerBound: r.customerBound,
+                                                }
+                                              : x,
+                                          ),
+                                        };
+                                      });
+                                    } catch (e: any) {
+                                      notifyError(e?.message || '补发失败');
+                                    } finally {
+                                      setRowResendingId(null);
+                                    }
+                                  })();
+                                }}
+                              >
+                                {rowResendingId === s.id ? '…' : s.customerPushed ? '再发' : '补发'}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
           {result.errors.length > 0 && (
