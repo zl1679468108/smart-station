@@ -1417,6 +1417,7 @@ function escapeCsv(v: string | number | null | undefined) {
 }
 
 const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
+  const navigate = useNavigate();
   const invalidateShelves = useInvalidateShelves();
   const invalidateDashboard = useInvalidateDashboard();
   const invalidateInventoryList = useInvalidateInventoryList();
@@ -1445,6 +1446,8 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   } | null>(null);
   const [bulkResending, setBulkResending] = useState(false);
   const [rowResendingId, setRowResendingId] = useState<string | null>(null);
+  /** 成功清单筛选：全部 / 未私信 / 已私信 */
+  const [successFilter, setSuccessFilter] = useState<'all' | 'unpushed' | 'pushed'>('all');
 
   type BatchItem = {
     trackingNumber: string;
@@ -1760,6 +1763,7 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     setSubmitting(true);
     try {
       const res = await inboundService.batchInbound(readyFinal);
+      setSuccessFilter('all');
       setResult({
         total: items.length + parseErrors.length,
         succeeded: res.succeeded,
@@ -2007,27 +2011,81 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                   <p className="text-[11px] opacity-90">
                     未私信的：当面报取件码；可复制绑定引导；客户绑定后点「补发」或下方一键补发。
                   </p>
-                  {result.notifySummary.customerUnbound > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {result.notifySummary.customerUnbound > 0 && (
+                      <button
+                        type="button"
+                        className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+                        onClick={() => {
+                          void (async () => {
+                            const ok = await copyText(buildBindGuideScript());
+                            if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                            else notifyError('复制失败');
+                          })();
+                        }}
+                      >
+                        复制绑定话术
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
-                      onClick={() => {
-                        void (async () => {
-                          const ok = await copyText(buildBindGuideScript());
-                          if (ok) notifySuccess('已复制绑定引导（不含取件码）');
-                          else notifyError('复制失败');
-                        })();
-                      }}
+                      onClick={() =>
+                        navigate(
+                          result.notifySummary!.customerUnbound > 0 ||
+                            result.notifySummary!.customerPushFailed > 0
+                            ? '/admin/system?tab=notify&filter=unbound'
+                            : '/admin/system?tab=notify&filter=inbound',
+                        )
+                      }
                     >
-                      复制绑定话术
+                      看通知记录
                     </button>
-                  )}
+                  </div>
                 </div>
               )}
             </div>
           )}
           {result.successes && result.successes.length > 0 && (
             <div className="mb-3 space-y-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-gray-500">成功清单</span>
+                {(
+                  [
+                    {
+                      key: 'all' as const,
+                      label: `全部 ${result.successes.length}`,
+                    },
+                    {
+                      key: 'unpushed' as const,
+                      label: `未私信 ${
+                        result.successes.filter(
+                          (s) => s.notifyEnabled && !s.customerPushed,
+                        ).length
+                      }`,
+                    },
+                    {
+                      key: 'pushed' as const,
+                      label: `已私信 ${
+                        result.successes.filter((s) => s.customerPushed).length
+                      }`,
+                    },
+                  ] as const
+                ).map((chip) => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() => setSuccessFilter(chip.key)}
+                    className={`rounded-full px-2.5 py-1 text-[11px] ${
+                      successFilter === chip.key
+                        ? 'bg-primary text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
               {result.successes.some(
                 (s) => s.id && s.notifyEnabled && !s.customerPushed,
               ) && (
@@ -2106,17 +2164,44 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {result.successes.map((s, i) => (
+                    {(successFilter === 'all'
+                      ? result.successes
+                      : successFilter === 'pushed'
+                        ? result.successes.filter((s) => s.customerPushed)
+                        : result.successes.filter(
+                            (s) => s.notifyEnabled && !s.customerPushed,
+                          )
+                    ).map((s, i) => (
                       <tr key={`${s.id || s.trackingNumber}-${i}`}>
                         <td className="px-3 py-1.5 font-mono text-gray-700">{s.trackingNumber}</td>
                         <td className="px-3 py-1.5 font-mono font-semibold text-primary">
-                          {s.pickupCode || '-'}
+                          {s.id && s.pickupCode ? (
+                            <button
+                              type="button"
+                              className="hover:underline"
+                              onClick={() => navigate(`/admin/inventory/${s.id}`)}
+                              title="打开库存详情"
+                            >
+                              {s.pickupCode}
+                            </button>
+                          ) : (
+                            s.pickupCode || '-'
+                          )}
                         </td>
                         <td className="px-3 py-1.5 text-gray-500">
                           {s.staffMessage || '—'}
                         </td>
                         <td className="px-3 py-1.5">
                           <div className="flex flex-wrap gap-1">
+                            {s.id && (
+                              <button
+                                type="button"
+                                className="rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50"
+                                onClick={() => navigate(`/admin/inventory/${s.id}`)}
+                              >
+                                看包裹
+                              </button>
+                            )}
                             {s.pickupCode && (
                               <button
                                 type="button"
@@ -2175,6 +2260,18 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                     ))}
                   </tbody>
                 </table>
+                {(successFilter === 'all'
+                  ? result.successes
+                  : successFilter === 'pushed'
+                    ? result.successes.filter((s) => s.customerPushed)
+                    : result.successes.filter(
+                        (s) => s.notifyEnabled && !s.customerPushed,
+                      )
+                ).length === 0 && (
+                  <p className="mt-2 text-center text-[11px] text-gray-400">
+                    当前筛选下没有包裹，可切换「全部」
+                  </p>
+                )}
               </div>
             </div>
           )}

@@ -1073,3 +1073,10 @@
 | M78.1 | P1 | 入库成功区「看包裹」 | InboundSuccess | done | 深链库存详情 |
 | M78.2 | P1 | 扫码最近列表取件码/按钮跳详情 | inbound scan | done | |
 | M78.3 | P2 | 手动入库本会话计数 | inbound manual | done | 与扫码一致 |
+
+## M79 批量入库结果深链与筛选（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M79.1 | P1 | 成功清单「看包裹」/点取件码 | inbound batch | done | 深链库存详情 |
+| M79.2 | P1 | 成功清单全部/未私信/已私信筛选 | inbound batch | done | 空态提示 |
+| M79.3 | P2 | 通知摘要跳转通知记录 | inbound batch | done | unbound/inbound 筛选 |
