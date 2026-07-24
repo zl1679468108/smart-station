@@ -17,6 +17,7 @@ import { canWrite } from '@/utils/permission';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import { buildBindGuideScript, buildShippingFaceScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
+import { printShippingReceipt } from '@/utils/printPickupSlip';
 import PageHeader from '@/components/ui/PageHeader';
 import NotifyReachBar from '@/components/NotifyReachBar';
 import EmptyState from '@/components/ui/EmptyState';
@@ -84,7 +85,9 @@ const EMPTY_ADDRESS = {
 };
 
 const ShippingPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const writable = canWrite(user?.role);
 
   const [tab, setTab] = useState<Tab>('orders');
@@ -131,7 +134,7 @@ const ShippingPage: React.FC = () => {
       </div>
 
       {tab === 'orders' ? (
-        <OrdersTab couriers={couriers} writable={writable} />
+        <OrdersTab stationName={stationName} couriers={couriers} writable={writable} />
       ) : (
         <AddressTab writable={writable} />
       )}
@@ -141,10 +144,11 @@ const ShippingPage: React.FC = () => {
 
 // ===== 寄件单 Tab =====
 
-const OrdersTab: React.FC<{ couriers: CourierCompany[]; writable: boolean }> = ({
-  couriers,
-  writable,
-}) => {
+const OrdersTab: React.FC<{
+  couriers: CourierCompany[];
+  writable: boolean;
+  stationName: string;
+}> = ({ couriers, writable, stationName }) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [lastTip, setLastTip] = useState<string | null>(null);
@@ -420,6 +424,32 @@ const OrdersTab: React.FC<{ couriers: CourierCompany[]; writable: boolean }> = (
                       }}
                     >
                       复制话术
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-800 hover:bg-sky-100"
+                      onClick={() => {
+                        const ok = printShippingReceipt({
+                          stationName,
+                          shippingNo: item.shippingNo,
+                          statusLabel: STATUS_LABEL[item.status],
+                          pickupTypeLabel: PICKUP_LABEL[item.pickupType],
+                          senderName: item.senderName,
+                          senderPhone: item.senderPhone,
+                          receiverName: item.receiverName,
+                          receiverPhone: item.receiverPhone,
+                          courierName: item.courier?.name,
+                          itemType: item.itemType,
+                          weight: item.weight,
+                          freight: item.freight,
+                          insuredAmount: item.insuredAmount,
+                          createdAt: item.createdAt,
+                        });
+                        if (ok) notifySuccess('已打开寄件回执打印预览');
+                        else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+                      }}
+                    >
+                      打印回执
                     </button>
                     <button
                       type="button"

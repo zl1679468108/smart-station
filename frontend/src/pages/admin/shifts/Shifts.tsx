@@ -9,9 +9,12 @@ import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import * as statsService from '@/services/stats';
-import type { DashboardNotify } from '@/types/stats';
+import type { DashboardData, DashboardNotify } from '@/types/stats';
 import { buildBindGuideScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
+import DailyFollowupCard from '@/components/DailyFollowupCard';
+import { buildDailyFollowupSummaryText } from '@/utils/dailyFollowup';
+import { useAuth } from '@/utils/auth';
 
 type Tab = 'duty' | 'history' | 'performance';
 
@@ -97,6 +100,10 @@ const ShiftsPage: React.FC = () => {
   const [tab, setTab] = useState<Tab>('duty');
   const [current, setCurrent] = useState<ShiftItem | null>(null);
   const [notifyToday, setNotifyToday] = useState<DashboardNotify | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const { stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const [loadingCurrent, setLoadingCurrent] = useState(true);
   const [openingNote, setOpeningNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -126,6 +133,7 @@ const ShiftsPage: React.FC = () => {
         statsService.fetchDashboard().catch(() => null),
       ]);
       setCurrent(s);
+      setDashboard(dash);
       setNotifyToday(dash?.notify ?? null);
     } catch (e: any) {
       notifyError(e?.message || '加载当前班次失败');
@@ -217,6 +225,17 @@ const ShiftsPage: React.FC = () => {
       />
 
       <NotifyReachBar className="mb-0" context="shifts" />
+
+      {tab === 'duty' && dashboard && (
+        <DailyFollowupCard
+          data={dashboard}
+          currentShift={loadingCurrent ? undefined : current}
+          stationName={stationName}
+          title="交班跟进"
+          description="交班前先处理这些；可复制摘要发给接班同事"
+          includeShiftSnapshot
+        />
+      )}
 
       <div className="flex gap-2 border-b border-gray-200">
         {(
@@ -708,6 +727,34 @@ const ShiftsPage: React.FC = () => {
             />
           </div>
           <div>
+            {dashboard && (
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="text-xs text-gray-700">
+                  建议复制「交班跟进摘要」发给接班同事，含本班入出库/收款与未绑定待办。
+                </p>
+                <button
+                  type="button"
+                  className="mt-2 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-800 hover:bg-white"
+                  onClick={() => {
+                    void (async () => {
+                      const textSummary = buildDailyFollowupSummaryText({
+                        data: dashboard,
+                        currentShift: current,
+                        stationName,
+                        shiftSnapshot: current,
+                        title: `【${stationName} 交班跟进】`,
+                      });
+                      const ok = await copyText(textSummary);
+                      if (ok) notifySuccess('已复制交班跟进摘要');
+                      else notifyError('复制失败');
+                    })();
+                  }}
+                >
+                  复制交班跟进摘要
+                </button>
+              </div>
+            )}
+
             <label className="mb-1 block text-xs text-gray-500">交班备注（可选）</label>
             <input
               type="text"

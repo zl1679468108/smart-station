@@ -321,3 +321,110 @@ export function printOutboundReceipt(input: OutboundReceiptInput): boolean {
   win.document.close();
   return true;
 }
+
+export interface ShippingReceiptInput {
+  stationName?: string | null;
+  shippingNo: string;
+  statusLabel?: string | null;
+  pickupTypeLabel?: string | null;
+  senderName?: string | null;
+  senderPhone?: string | null;
+  receiverName?: string | null;
+  receiverPhone?: string | null;
+  courierName?: string | null;
+  itemType?: string | null;
+  weight?: number | null;
+  freight?: number | null;
+  insuredAmount?: number | null;
+  createdAt?: string | null;
+}
+
+/** 寄件回执（店内留存 / 交给客户，手机号脱敏） */
+export function printShippingReceipt(input: ShippingReceiptInput): boolean {
+  const station = escapeHtml(String(input.stationName || '智能快递驿站').trim() || '智能快递驿站');
+  const no = escapeHtml(String(input.shippingNo || '').trim() || '—');
+  const status = escapeHtml(String(input.statusLabel || '已登记').trim());
+  const pickup = escapeHtml(String(input.pickupTypeLabel || '').trim() || '—');
+  const sender = escapeHtml(`${maskName(input.senderName)} ${maskPhone(input.senderPhone)}`.trim());
+  const receiver = escapeHtml(`${maskName(input.receiverName)} ${maskPhone(input.receiverPhone)}`.trim());
+  const courier = escapeHtml(String(input.courierName || '').trim() || '—');
+  const itemType = escapeHtml(String(input.itemType || '').trim() || '—');
+  const weight = input.weight != null ? `${Number(input.weight)}kg` : '—';
+  const freight = input.freight != null ? `¥${Number(input.freight).toFixed(2)}` : '—';
+  const insured =
+    input.insuredAmount != null && Number(input.insuredAmount) > 0
+      ? `¥${Number(input.insuredAmount).toFixed(2)}`
+      : '—';
+  const time = escapeHtml(String(input.createdAt || '').trim() || '—');
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>寄件回执</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 8px; color: #111;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #fff;
+    }
+    .slip {
+      width: 72mm; max-width: 100%; margin: 0 auto;
+      padding: 10px 6px 12px; border: 1px dashed #bbb;
+    }
+    .station { text-align: center; font-size: 13px; font-weight: 600; }
+    .title { margin-top: 2px; text-align: center; font-size: 12px; color: #0369a1; font-weight: 700; }
+    .code {
+      margin: 10px 0 8px; text-align: center; font-size: 20px; font-weight: 800;
+      letter-spacing: 0.06em; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      word-break: break-all;
+    }
+    .badge {
+      margin: 0 auto 8px; width: fit-content; padding: 3px 10px; border-radius: 999px;
+      background: #e0f2fe; color: #0369a1; font-size: 11px; font-weight: 700;
+    }
+    .row {
+      display: flex; justify-content: space-between; gap: 8px;
+      margin-top: 4px; font-size: 11px; line-height: 1.4;
+    }
+    .row span { color: #666; flex-shrink: 0; }
+    .row strong { text-align: right; font-weight: 600; word-break: break-all; }
+    .tip {
+      margin-top: 10px; padding-top: 6px; border-top: 1px dashed #ccc;
+      text-align: center; font-size: 10px; color: #555; line-height: 1.4;
+    }
+    @media print { body { padding: 0; } .slip { border: none; } }
+  </style>
+</head>
+<body>
+  <section class="slip">
+    <div class="station">${station}</div>
+    <div class="title">寄件回执</div>
+    <div class="code">${no}</div>
+    <div class="badge">${status}</div>
+    <div class="row"><span>取件方式</span><strong>${pickup}</strong></div>
+    <div class="row"><span>快递公司</span><strong>${courier}</strong></div>
+    <div class="row"><span>寄件人</span><strong>${sender}</strong></div>
+    <div class="row"><span>收件人</span><strong>${receiver}</strong></div>
+    <div class="row"><span>物品/重量</span><strong>${itemType} · ${weight}</strong></div>
+    <div class="row"><span>运费</span><strong>${freight}</strong></div>
+    <div class="row"><span>保价</span><strong>${insured}</strong></div>
+    <div class="row"><span>登记时间</span><strong>${time}</strong></div>
+    <div class="tip">请妥善保管 · 查询进度请到店出示寄件单号</div>
+  </section>
+  <script>
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        try { window.focus(); window.print(); } catch (e) {}
+      }, 80);
+    });
+  </script>
+</body>
+</html>`;
+  const win = window.open('', '_blank', 'noopener,noreferrer,width=480,height=720');
+  if (!win) return false;
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  return true;
+}
