@@ -1371,3 +1371,9 @@
 | M121.1 | P0 | printCashDaySummary | print util | done | 交班对账 |
 | M121.2 | P0 | 日结复制摘要+打印 | CashDayPanel | done | |
 
+## M122 预约到店凭条打印（业务功能）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M122.1 | P1 | printAppointmentSlip | print util | done | 脱敏 |
+| M122.2 | P1 | 预约列表打印凭条 | appointments | done | |
+

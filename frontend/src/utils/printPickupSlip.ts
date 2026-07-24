@@ -516,3 +516,84 @@ export function printCashDaySummary(input: CashDayPrintInput): boolean {
   win.document.close();
   return true;
 }
+
+export interface AppointmentSlipInput {
+  stationName?: string | null;
+  slotDate: string;
+  slotLabel: string;
+  recipientName?: string | null;
+  recipientPhone?: string | null;
+  statusLabel?: string | null;
+}
+
+/** 预约到店凭条（店内/客户留存，手机号脱敏） */
+export function printAppointmentSlip(input: AppointmentSlipInput): boolean {
+  const station = escapeHtml(String(input.stationName || '智能快递驿站').trim() || '智能快递驿站');
+  const date = escapeHtml(String(input.slotDate || '').trim() || '—');
+  const slot = escapeHtml(String(input.slotLabel || '').trim() || '—');
+  const name = escapeHtml(maskName(input.recipientName));
+  const phone = escapeHtml(maskPhone(input.recipientPhone));
+  const status = escapeHtml(String(input.statusLabel || '已预约').trim());
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>预约到店凭条</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 8px; color: #111;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #fff;
+    }
+    .slip {
+      width: 72mm; max-width: 100%; margin: 0 auto;
+      padding: 10px 6px 12px; border: 1px dashed #bbb;
+    }
+    .station { text-align: center; font-size: 13px; font-weight: 600; }
+    .title { margin-top: 2px; text-align: center; font-size: 12px; color: #6d28d9; font-weight: 700; }
+    .slot {
+      margin: 12px 0 8px; text-align: center; font-size: 18px; font-weight: 800; line-height: 1.3;
+    }
+    .badge {
+      margin: 0 auto 10px; width: fit-content; padding: 3px 10px; border-radius: 999px;
+      background: #f3e8ff; color: #6d28d9; font-size: 11px; font-weight: 700;
+    }
+    .row {
+      display: flex; justify-content: space-between; gap: 8px;
+      margin-top: 4px; font-size: 11px; line-height: 1.4;
+    }
+    .row span { color: #666; flex-shrink: 0; }
+    .row strong { text-align: right; font-weight: 600; word-break: break-all; }
+    .tip {
+      margin-top: 10px; padding-top: 6px; border-top: 1px dashed #ccc;
+      text-align: center; font-size: 10px; color: #555; line-height: 1.4;
+    }
+    @media print { body { padding: 0; } .slip { border: none; } }
+  </style>
+</head>
+<body>
+  <section class="slip">
+    <div class="station">${station}</div>
+    <div class="title">预约到店凭条</div>
+    <div class="slot">${date}<br/>${slot}</div>
+    <div class="badge">${status}</div>
+    <div class="row"><span>预约人</span><strong>${name} ${phone}</strong></div>
+    <div class="tip">请按预约时段到店 · 取件码以查件/货架为准 · 群里不会公开取件码</div>
+  </section>
+  <script>
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        try { window.focus(); window.print(); } catch (e) {}
+      }, 80);
+    });
+  </script>
+</body>
+</html>`;
+  const win = window.open('', '_blank', 'noopener,noreferrer,width=480,height=720');
+  if (!win) return false;
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  return true;
+}

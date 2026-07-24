@@ -19,6 +19,8 @@ import {
 } from '@/utils/staffScripts';
 import OutboundBindNudge from '@/components/OutboundBindNudge';
 import { copyText } from '@/utils/stationVisit';
+import { printAppointmentSlip } from '@/utils/printPickupSlip';
+import { useAuth } from '@/utils/auth';
 
 function todayBeijing(): string {
   const now = new Date(Date.now() + 8 * 3600 * 1000);
@@ -45,6 +47,9 @@ const statusTone: Record<string, string> = {
 };
 
 const AppointmentsPage: React.FC = () => {
+  const { stations, currentStationId } = useAuth();
+  const stationName =
+    stations.find((s) => s.id === currentStationId)?.name || '智能快递驿站';
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialStatus = searchParams.get('status') || '';
@@ -501,6 +506,24 @@ const AppointmentsPage: React.FC = () => {
                           className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
                         >
                           复制话术
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const ok = printAppointmentSlip({
+                              stationName,
+                              slotDate: row.slotDate,
+                              slotLabel: row.slotLabel || `${row.slotStart}-${row.slotEnd}`,
+                              recipientName: row.recipientName,
+                              recipientPhone: row.recipientPhoneFull || row.recipientPhone,
+                              statusLabel: row.statusLabel,
+                            });
+                            if (ok) notifySuccess('已打开预约凭条打印预览');
+                            else notifyError('无法打开打印窗口，请检查浏览器是否拦截弹窗');
+                          }}
+                          className="rounded border border-violet-200 bg-violet-50 px-2 py-1 text-xs font-medium text-violet-800 hover:bg-violet-100"
+                        >
+                          打印凭条
                         </button>
                         <button
                           type="button"
