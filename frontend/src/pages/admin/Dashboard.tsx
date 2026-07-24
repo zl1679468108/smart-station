@@ -12,6 +12,8 @@ import { copyText } from '@/utils/stationVisit';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import * as shiftService from '@/services/shift';
 import type { ShiftItem } from '@/types/shift';
+import * as financeService from '@/services/finance';
+import type { CashDaySummary } from '@/types/finance';
 
 const WarehouseScreen = React.lazy(() =>
   import('@/components/warehouse3d').then((m) => ({ default: m.WarehouseScreen })),
@@ -40,6 +42,7 @@ const Dashboard: React.FC = () => {
   const layoutConfig = layoutRes?.layoutConfig ?? null;
   const layoutLoading = layoutQueryLoading && !layoutRes;
   const [currentShift, setCurrentShift] = useState<ShiftItem | null | undefined>(undefined);
+  const [cashToday, setCashToday] = useState<CashDaySummary | null | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +52,14 @@ const Dashboard: React.FC = () => {
         if (!cancelled) setCurrentShift(s);
       } catch {
         if (!cancelled) setCurrentShift(null);
+      }
+    })();
+    void (async () => {
+      try {
+        const c = await financeService.getCashDay();
+        if (!cancelled) setCashToday(c);
+      } catch {
+        if (!cancelled) setCashToday(null);
       }
     })();
     return () => {
@@ -525,9 +536,25 @@ const Dashboard: React.FC = () => {
             >
               <div className="flex w-full items-center justify-between">
                 <span className="text-sm text-gray-600">今日收款日结</span>
-                <span className="text-lg font-bold text-teal-700">→</span>
+                <span className="text-lg font-bold text-teal-700">
+                  {cashToday === undefined
+                    ? '…'
+                    : cashToday
+                      ? `¥${Number(cashToday.total || 0).toFixed(2)}`
+                      : '→'}
+                </span>
               </div>
-              <span className="mt-1 text-xs text-teal-700/80">到付/货款按收款方式汇总</span>
+              {cashToday ? (
+                <span className="mt-1 text-xs text-teal-700/80">
+                  已收 {cashToday.paidCount || 0} 笔
+                  {Number(cashToday.unpaidInStock || 0) > 0
+                    ? ` · 在库待收 ${cashToday.unpaidInStock} 件`
+                    : ''}
+                  {' · 点此看明细'}
+                </span>
+              ) : (
+                <span className="mt-1 text-xs text-teal-700/80">到付/货款按收款方式汇总</span>
+              )}
             </button>
             <button
               type="button"

@@ -32,3 +32,51 @@ export function buildFacePickupScript(opts: {
 /** 未绑定客户短提示（UI 展示用） */
 export const UNBOUND_FACE_HINT =
   '客户还没绑定微信：请当面报取件码，或复制话术告知；引导扫码绑定后可再点补发。';
+
+const METHOD_LABEL: Record<string, string> = {
+  cash: '现金',
+  wechat: '微信',
+  alipay: '支付宝',
+  other: '其他',
+};
+
+/** 收款出库后给客户的确认话术（可复制微信/当面说） */
+export function buildCollectReceiptScript(opts: {
+  amount: number;
+  method?: string | null;
+  trackingNumber?: string | null;
+  pickupCode?: string | null;
+  stationName?: string;
+  recipientName?: string | null;
+}): string {
+  const who = opts.recipientName?.trim() ? `${opts.recipientName.trim()}，` : '';
+  const station = opts.stationName?.trim() || '驿站';
+  const amount = Number(opts.amount || 0).toFixed(2);
+  const method =
+    (opts.method && METHOD_LABEL[opts.method]) ||
+    (opts.method?.trim() ? opts.method.trim() : '当面');
+  const parts = [
+    `${who}您已在${station}取件。`,
+    `已收妥到付/货款 ¥${amount}（${method}）。`,
+  ];
+  if (opts.trackingNumber?.trim()) {
+    parts.push(`运单 ${opts.trackingNumber.trim()}。`);
+  } else if (opts.pickupCode?.trim()) {
+    parts.push(`取件码 ${opts.pickupCode.trim()}。`);
+  }
+  parts.push('请妥善保管包裹，祝您生活愉快。');
+  return parts.join('');
+}
+
+/** 免收说明（仅店员留痕/对客解释，勿群发完整隐私） */
+export function buildCollectWaiveScript(opts: {
+  amount: number;
+  note?: string | null;
+  stationName?: string;
+}): string {
+  const station = opts.stationName?.trim() || '驿站';
+  const amount = Number(opts.amount || 0).toFixed(2);
+  const note = opts.note?.trim() ? `原因：${opts.note.trim()}。` : '';
+  return `【${station}】本件原应收 ¥${amount}，已按店内规则免收。${note}如有疑问请到店咨询。`;
+}
+

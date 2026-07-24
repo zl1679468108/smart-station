@@ -954,3 +954,13 @@
 | M66.1 | P1 | 交班待收款跳转出库 | shifts | done | unpaid=1 与工作台一致 |
 | M66.2 | P1 | 库存详情/列表去出库收款 | inventory | done | tracking 深链 |
 | M66.3 | P1 | 出库页运单号 URL 自动查询 | outbound | done | ?tracking= 优先于 unpaid |
+
+---
+
+## M67 收款话术 + 工作台今日收款金额（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M67.1 | P1 | 收款/免收白话话术 | staffScripts | done | buildCollectReceipt/WaiveScript |
+| M67.2 | P1 | 出库成功展示并可复制话术 | outbound | done | 确认前预览 + 成功横幅 |
+| M67.3 | P2 | 工作台今日收款金额 | dashboard | done | cash-day 汇总进待办卡 |

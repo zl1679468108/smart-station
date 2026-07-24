@@ -6,7 +6,12 @@ import { useInvalidateShelves } from '@/hooks/useDictionary';
 import { useInvalidateDashboard } from '@/hooks/useDashboardData';
 import { useInvalidateInventoryDetail, useInvalidateInventoryList } from '@/hooks/useInventoryData';
 import { useInvalidateOutboundRecords, useOutboundRecords } from '@/hooks/useOutboundData';
-import { notifyError } from '@/utils/notification';
+import { notifyError, notifySuccess } from '@/utils/notification';
+import { copyText } from '@/utils/stationVisit';
+import {
+  buildCollectReceiptScript,
+  buildCollectWaiveScript,
+} from '@/utils/staffScripts';
 import type {
   OutboundRecordQuery,
   OutboundSearchItem,
@@ -99,6 +104,11 @@ const ManualOutbound: React.FC = () => {
   const [loadingUnpaid, setLoadingUnpaid] = useState(false);
   const [confirming, setConfirming] = useState<OutboundSearchItem | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [lastReceipt, setLastReceipt] = useState<{
+    title: string;
+    script: string;
+    amountText: string;
+  } | null>(null);
   const unpaidAutoLoadKey = searchParams.get('unpaid');
   const trackingAutoKey = (searchParams.get('tracking') || '').trim();
 
@@ -249,6 +259,42 @@ const ManualOutbound: React.FC = () => {
       invalidateInventoryDetail();
       invalidateInventoryList();
       invalidateOutboundRecords();
+
+      const due = Number(item.collectDueAmount || 0);
+      const needCollect =
+        (item.collectStatus === 'unpaid' || (!item.collectStatus && due > 0)) && due > 0;
+      if (needCollect) {
+        if (verify.collectAction === 'waive') {
+          const script = buildCollectWaiveScript({
+            amount: due,
+            note: verify.collectNote,
+          });
+          setLastReceipt({
+            title: '已免收并出库',
+            script,
+            amountText: `原应收 ¥${due.toFixed(2)}（已免收）`,
+          });
+          notifySuccess(`已免收 ¥${due.toFixed(2)} 并出库`);
+        } else {
+          const script = buildCollectReceiptScript({
+            amount: due,
+            method: verify.collectPaidMethod,
+            trackingNumber: item.trackingNumber,
+            pickupCode: item.pickupCode,
+            recipientName: item.recipientName,
+          });
+          setLastReceipt({
+            title: '收款出库成功',
+            script,
+            amountText: `已收 ¥${due.toFixed(2)}`,
+          });
+          notifySuccess(`收款 ¥${due.toFixed(2)} 出库成功，可复制话术给客户`);
+        }
+      } else {
+        setLastReceipt(null);
+        notifySuccess('出库成功');
+      }
+
       // 从列表移除
       setItems((prev) => (prev ? prev.filter((i) => i.id !== item.id) : prev));
       setConfirming(null);
@@ -272,6 +318,38 @@ const ManualOutbound: React.FC = () => {
           {loadingUnpaid ? '加载中…' : '加载在库待收款'}
         </button>
       </div>
+
+      {lastReceipt && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium text-emerald-900">{lastReceipt.title}</p>
+              <p className="mt-0.5 text-xs text-emerald-800">{lastReceipt.amountText}</p>
+              <p className="mt-2 text-xs leading-relaxed text-emerald-900/90">{lastReceipt.script}</p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = await copyText(lastReceipt.script);
+                  if (ok) notifySuccess('已复制收款话术');
+                  else notifyError('复制失败，请长按文字手动复制');
+                }}
+                className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+              >
+                复制话术
+              </button>
+              <button
+                type="button"
+                onClick={() => setLastReceipt(null)}
+                className="rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs text-emerald-900 hover:bg-emerald-100/50"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* 查询方式 Tab */}
       <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
         {([
@@ -1023,6 +1101,41 @@ const ConfirmDialog: React.FC<{
                     ，可继续核验出库
                   </span>
                 </label>
+              {collectPaidMethod && (
+                <div className="mt-2 rounded-md border border-rose-100 bg-white/80 px-3 py-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-[11px] leading-relaxed text-rose-900/90">
+                      {buildCollectReceiptScript({
+                        amount: collectDue,
+                        method: collectPaidMethod,
+                        trackingNumber: item.trackingNumber,
+                        pickupCode: item.pickupCode,
+                        recipientName: item.recipientName,
+                      })}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const ok = await copyText(
+                          buildCollectReceiptScript({
+                            amount: collectDue,
+                            method: collectPaidMethod,
+                            trackingNumber: item.trackingNumber,
+                            pickupCode: item.pickupCode,
+                            recipientName: item.recipientName,
+                          }),
+                        );
+                        if (ok) notifySuccess('已复制收款话术');
+                        else notifyError('复制失败');
+                      }}
+                      className="shrink-0 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-800 hover:bg-rose-100"
+                    >
+                      复制
+                    </button>
+                  </div>
+                </div>
+              )}
+
               </>
             ) : (
               <>
