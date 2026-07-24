@@ -9,10 +9,10 @@ import { useInvalidateOutboundRecords, useOutboundRecords } from '@/hooks/useOut
 import { notifyError, notifySuccess } from '@/utils/notification';
 import { copyText } from '@/utils/stationVisit';
 import {
-  buildBindGuideScript,
   buildCollectReceiptScript,
   buildCollectWaiveScript,
 } from '@/utils/staffScripts';
+import OutboundBindNudge from '@/components/OutboundBindNudge';
 import type {
   OutboundRecordQuery,
   OutboundSearchItem,
@@ -364,9 +364,7 @@ const ManualOutbound: React.FC = () => {
                   {lastReceipt.script}
                 </p>
               )}
-              <p className="mt-2 text-[11px] text-emerald-900/70">
-                取件时顺带引导绑定：下次到件微信自动收码，少跑空。
-              </p>
+              <OutboundBindNudge phone={lastReceipt.phone} variant="admin" />
             </div>
             <div className="flex shrink-0 flex-wrap justify-end gap-2">
               {lastReceipt.script && (
@@ -388,19 +386,6 @@ const ManualOutbound: React.FC = () => {
                 className="rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs text-emerald-900 hover:bg-emerald-100/50"
               >
                 看包裹
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void (async () => {
-                    const ok = await copyText(buildBindGuideScript());
-                    if (ok) notifySuccess('已复制绑定引导（不含取件码，可发客户）');
-                    else notifyError('复制失败');
-                  })();
-                }}
-                className="rounded-md border border-orange-200 bg-white px-3 py-1.5 text-xs font-medium text-orange-800 hover:bg-orange-50"
-              >
-                复制绑定话术
               </button>
               {lastReceipt.phone && (
                 <button
