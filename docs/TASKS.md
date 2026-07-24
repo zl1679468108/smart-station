@@ -1201,3 +1201,10 @@
 | M96.1 | P1 | 事件 API 附带 customerReach | stats events | done | pushed/unbound/push_failed |
 | M96.2 | P1 | 入库动态文案 · 已私信/未绑定 | stats normalize | done | 未绑定 tone=warn |
 | M96.3 | P2 | 工作台动态徽章与深链 | Dashboard | done | 未绑定跳按手机跟进 |
+
+## M97 交班触达条 + 未绑定跟进清单（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M97.1 | P1 | 交班页 NotifyReachBar | shifts | done | 交班交接未绑定 |
+| M97.2 | P1 | 未绑定跟进清单话术 | staffScripts | done | 含手机号仅店内 |
+| M97.3 | P1 | 通知记录一键复制清单 | NotifyTab | done | 按手机号/发送记录 |

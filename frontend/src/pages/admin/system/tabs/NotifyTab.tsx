@@ -7,7 +7,7 @@ import type { NotifyBindingItem, NotifyLogItem, NotifyPhoneSummaryItem } from '@
 import { formatBeijingTimestamp } from '@/utils/date';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
-import { buildBindGuideScript } from '@/utils/staffScripts';
+import { buildBindGuideScript, buildUnboundFollowupScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 import { notifyError, notifySuccess } from '@/utils/notification';
 
@@ -42,6 +42,31 @@ function isLogFilter(v: string): v is LogFilter {
  * - 支持手机号/尾号查询
  * - 触达筛选：未私信 / 已私信 / 私信失败
  */
+
+function collectUnboundFromPhoneSummaries(rows: NotifyPhoneSummaryItem[]) {
+  return rows.filter((r) => Number(r.unbound || 0) > 0 || Number(r.pushFailed || 0) > 0);
+}
+
+function collectUnboundFromLogs(rows: NotifyLogItem[]) {
+  const map = new Map<string, { phone: string; phoneMasked?: string; recipientName?: string | null; unbound: number; pushFailed: number }>();
+  for (const log of rows) {
+    if (log.customerReach !== 'unbound' && log.customerReach !== 'push_failed') continue;
+    const phone = String(log.phone || '').trim();
+    if (!phone) continue;
+    const cur = map.get(phone) || {
+      phone,
+      phoneMasked: log.phoneMasked,
+      recipientName: log.recipientName,
+      unbound: 0,
+      pushFailed: 0,
+    };
+    if (log.customerReach === 'unbound') cur.unbound += 1;
+    else cur.pushFailed += 1;
+    map.set(phone, cur);
+  }
+  return Array.from(map.values());
+}
+
 const NotifyTab: React.FC = () => {
   const navigate = useNavigate();
   const [bindings, setBindings] = useState<NotifyBindingItem[]>([]);
@@ -341,7 +366,26 @@ const NotifyTab: React.FC = () => {
     notifySuccess(`已导出本页 ${logs.length} 条`);
   };
 
-    const filterChips: { key: LogFilter; label: string }[] = [
+  const unboundFollowupItems =
+    sub === 'byPhone'
+      ? collectUnboundFromPhoneSummaries(phoneSummaries)
+      : collectUnboundFromLogs(logs);
+
+  const copyUnboundFollowup = async () => {
+    if (unboundFollowupItems.length === 0) {
+      notifyError('当前没有未绑定/私信失败客户可复制');
+      return;
+    }
+    const text = buildUnboundFollowupScript(unboundFollowupItems);
+    const ok = await copyText(text);
+    if (ok) {
+      notifySuccess(`已复制 ${unboundFollowupItems.length} 人跟进清单（含绑定话术，勿发群）`);
+    } else {
+      notifyError('复制失败');
+    }
+  };
+
+  const filterChips: { key: LogFilter; label: string }[] = [
     { key: '', label: '全部' },
     { key: 'today', label: '今日' },
     { key: 'failed', label: '发送失败' },
@@ -367,6 +411,17 @@ const NotifyTab: React.FC = () => {
           >
             {sub === 'byPhone' ? '导出聚合 CSV' : '导出本页 CSV'}
           </button>
+          {(sub === 'byPhone' || sub === 'logs') && (
+            <button
+              type="button"
+              onClick={() => void copyUnboundFollowup()}
+              disabled={unboundFollowupItems.length === 0}
+              className="min-h-[40px] rounded-md border border-orange-200 bg-orange-50 px-3 text-xs font-medium text-orange-900 hover:bg-orange-100 disabled:opacity-50"
+            >
+              复制跟进清单
+              {unboundFollowupItems.length > 0 ? `（${unboundFollowupItems.length}）` : ''}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void load()}
@@ -589,6 +644,15 @@ const NotifyTab: React.FC = () => {
             >
               复制绑定话术
             </button>
+            {unboundFollowupItems.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void copyUnboundFollowup()}
+                className="min-h-[36px] rounded-md border border-orange-300 bg-white px-3 text-xs font-medium text-orange-900 hover:bg-orange-50"
+              >
+                复制跟进清单（{unboundFollowupItems.length}）
+              </button>
+            )}
             {resendableOnPage.length > 0 && (
               <button
                 type="button"
@@ -662,6 +726,20 @@ const NotifyTab: React.FC = () => {
           <p className="text-[11px] text-gray-500">
             按手机号汇总最近发送记录（已扫 {phoneSummaryScanned} 条日志）。优先列出未私信/失败多的客户，点手机号可筛选明细。
           </p>
+          {unboundFollowupItems.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-orange-100 bg-orange-50/70 px-3 py-2">
+              <p className="text-xs text-orange-900">
+                本页 {unboundFollowupItems.length} 个号码有未绑定/私信失败，可复制清单逐个当面跟进（含手机号，勿发群）。
+              </p>
+              <button
+                type="button"
+                onClick={() => void copyUnboundFollowup()}
+                className="min-h-[36px] rounded-md border border-orange-200 bg-white px-3 text-xs font-medium text-orange-900 hover:bg-orange-50"
+              >
+                复制跟进清单
+              </button>
+            </div>
+          )}
           {phoneSummaries.length === 0 ? (
             <EmptyState
               title={phoneQuery ? '未找到匹配客户' : '暂无聚合数据'}

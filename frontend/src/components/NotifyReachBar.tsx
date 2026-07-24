@@ -5,7 +5,7 @@ import { buildBindGuideScript } from '@/utils/staffScripts';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import { copyText } from '@/utils/stationVisit';
 
-export type NotifyReachBarContext = 'inbound' | 'inventory' | 'overdue' | 'exception' | 'outbound' | 'appointments' | 'shipping' | 'generic';
+export type NotifyReachBarContext = 'inbound' | 'inventory' | 'overdue' | 'exception' | 'outbound' | 'appointments' | 'shipping' | 'shifts' | 'generic';
 
 /**
  * 运营触达条：与工作台同源的今日到件私信/未绑定/失败，
@@ -51,7 +51,9 @@ const NotifyReachBar: React.FC<{
                 ? '本站全天数据。确认预约前可看未绑定；未绑定请当面/电话告知时段。'
                 : context === 'shipping'
                   ? '本站全天数据。寄件进度通知依赖客户绑定；未绑定请当面告知。'
-                  : '本站全天数据。未绑定客户收不到微信取件码，请当面报码或引导绑定。';
+                  : context === 'shifts'
+                    ? '本站全天数据。交班时把未绑定/私信失败交接给下一班当面跟进。'
+                    : '本站全天数据。未绑定客户收不到微信取件码，请当面报码或引导绑定。';
 
   return (
     <div

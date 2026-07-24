@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import * as shiftService from '@/services/shift';
 import type { ShiftItem, StaffPerformanceItem } from '@/types/shift';
 import PageHeader from '@/components/ui/PageHeader';
+import NotifyReachBar from '@/components/NotifyReachBar';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
 import Modal from '@/components/ui/Modal';
@@ -211,6 +212,8 @@ const ShiftsPage: React.FC = () => {
         title="交接班"
         description="开班上岗、交班盘点；按员工看入库/出库/收款绩效。"
       />
+
+      <NotifyReachBar className="mb-0" context="shifts" />
 
       <div className="flex gap-2 border-b border-gray-200">
         {(

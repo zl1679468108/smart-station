@@ -127,3 +127,43 @@ export function buildShippingFaceScript(opts: {
   return parts.join('');
 }
 
+/** 店内未绑定/私信失败跟进清单（含完整手机号，仅内部用，勿发群） */
+export function buildUnboundFollowupScript(
+  items: Array<{
+    phone: string;
+    phoneMasked?: string | null;
+    recipientName?: string | null;
+    unbound?: number;
+    pushFailed?: number;
+  }>,
+  opts?: { stationName?: string },
+): string {
+  const need = (items || []).filter(
+    (i) => Number(i.unbound || 0) > 0 || Number(i.pushFailed || 0) > 0,
+  );
+  const station = opts?.stationName?.trim() || '本驿站';
+  if (need.length === 0) {
+    return [
+      `【${station}·跟进清单】当前没有未绑定/私信失败客户。`,
+      buildBindGuideScript({ stationName: station }),
+    ].join('\n');
+  }
+  const lines = need.map((i, idx) => {
+    const phone = String(i.phone || i.phoneMasked || '').trim() || '未知号码';
+    const name = i.recipientName?.trim() ? ` ${i.recipientName.trim()}` : '';
+    const parts: string[] = [];
+    if (Number(i.unbound || 0) > 0) parts.push(`未绑定${i.unbound}次`);
+    if (Number(i.pushFailed || 0) > 0) parts.push(`私信失败${i.pushFailed}次`);
+    return `${idx + 1}. ${phone}${name}（${parts.join('，') || '需跟进'}）`;
+  });
+  return [
+    `【${station}·未绑定/私信失败跟进清单】共 ${need.length} 人（仅店内使用，勿发群）`,
+    ...lines,
+    '',
+    '跟进方式：当面报码 / 电话告知；并引导客户在查件页绑定微信，下次自动收码。',
+    '',
+    '通用绑定引导（不含取件码，可一对一发客户）：',
+    buildBindGuideScript({ stationName: station }),
+  ].join('\n');
+}
+
