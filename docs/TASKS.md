@@ -865,3 +865,14 @@
 | M58.1 | P1 | 通知记录 reach 筛选 | admin notify API | done | unbound/pushed/push_failed + customerReach 中文 |
 | M58.2 | P1 | NotifyTab 触达 chips + 本页一键补发 | NotifyTab | done | 默认今日到件；未私信/私信失败可补发 |
 | M58.3 | P1 | 工作台「今日到件触达」标签深链 | Dashboard | done | stopPropagation 到对应 filter |
+
+---
+
+## M59 未绑定话术 + 滞留批量提醒（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M59.1 | P1 | 店员白话话术工具 | staffScripts | done | 当面含码 / 绑定引导不含码 |
+| M59.2 | P1 | 入库成功未绑定强提示 + 复制话术 | inbound | done | 当面报码 / 引导绑定 |
+| M59.3 | P1 | 工作台/通知记录复制绑定话术 | Dashboard + NotifyTab | done | 一键复制 |
+| M59.4 | P1 | 滞留本页批量发提醒 | overdue | done | POST /api/overdue/remind-batch 最多30 |

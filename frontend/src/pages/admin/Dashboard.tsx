@@ -7,6 +7,9 @@ import { useDashboard } from '@/hooks/useDashboardData';
 import { useLayoutConfig } from '@/hooks/useSystemAdmin';
 import { useAuth } from '@/utils/auth';
 import PageHeader from '@/components/ui/PageHeader';
+import { buildBindGuideScript } from '@/utils/staffScripts';
+import { copyText } from '@/utils/stationVisit';
+import { notifyError, notifySuccess } from '@/utils/notification';
 
 const WarehouseScreen = React.lazy(() =>
   import('@/components/warehouse3d').then((m) => ({ default: m.WarehouseScreen })),
@@ -294,9 +297,27 @@ const Dashboard: React.FC = () => {
             </button>
           </div>
           {data.notify.customerUnbound > 0 && (
-            <p className="mt-2 text-[11px] text-orange-800/80">
-              未绑定客户不会收到微信私信，可提醒到店查件或扫码绑定；绑定后可在通知记录重发。
-            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <p className="text-[11px] text-orange-800/80">
+                未绑定客户不会收到微信私信，可当面报码或复制话术引导绑定；绑定后可在通知记录重发。
+              </p>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void (async () => {
+                    const ok = await copyText(
+                      buildBindGuideScript({ stationName }),
+                    );
+                    if (ok) notifySuccess('已复制绑定引导话术（不含取件码）');
+                    else notifyError('复制失败');
+                  })();
+                }}
+                className="rounded-md border border-orange-200 bg-white px-2 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+              >
+                复制绑定话术
+              </button>
+            </div>
           )}
         </div>
       )}

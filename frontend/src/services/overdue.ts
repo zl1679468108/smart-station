@@ -45,3 +45,23 @@ export function remindOverdue(id: string): Promise<{
   });
 }
 
+/** 本页批量补发滞留提醒（最多 30 条） */
+export function remindOverdueBatch(ids: string[]): Promise<{
+  total: number;
+  pushed: number;
+  unbound: number;
+  failed: number;
+  staffMessage: string;
+  results: Array<{
+    id: string;
+    ok: boolean;
+    customerBound?: boolean;
+    customerPushed?: boolean;
+    staffMessage: string;
+  }>;
+}> {
+  return post('/api/overdue/remind-batch', { ids }, {
+    successMessage: false,
+  });
+}
+

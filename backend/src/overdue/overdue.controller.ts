@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/co
 import { OverdueService } from './overdue.service';
 import { OverdueQueryDto } from './dto/overdue-query.dto';
 import { ReturnActionDto } from './dto/return-action.dto';
+import { RemindBatchDto } from './dto/remind-batch.dto';
 import { TokenAuthGuard } from '../common/guards/token-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -22,6 +23,13 @@ export class OverdueController {
   @Post('scan')
   async scan(@StationId() stationId: string) {
     return this.overdueService.scan(stationId);
+  }
+
+  /** 本页批量补发滞留提醒（最多 30 条） */
+  @Roles('admin', 'clerk')
+  @Post('remind-batch')
+  async remindBatch(@StationId() stationId: string, @Body() dto: RemindBatchDto) {
+    return this.overdueService.remindBatch(stationId, dto.ids || []);
   }
 
   /** 单件补发滞留提醒 */

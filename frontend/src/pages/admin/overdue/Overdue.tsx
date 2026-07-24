@@ -49,6 +49,7 @@ const OverduePage: React.FC = () => {
   const [submittedKeyword, setSubmittedKeyword] = useState(searchParams.get('keyword') || '');
   const [scanning, setScanning] = useState(false);
   const [remindingId, setRemindingId] = useState<string | null>(null);
+  const [batchReminding, setBatchReminding] = useState(false);
   const pageSize = 20;
 
   const { data, isLoading, refetch } = useOverdueList({
@@ -103,7 +104,7 @@ const OverduePage: React.FC = () => {
   };
 
   const onRemind = async (id: string) => {
-    if (remindingId) return;
+    if (remindingId || batchReminding) return;
     const ok = window.confirm(
       '向该客户补发滞留提醒？\n\n已绑定微信会私信取件码；未绑定仅通知群/管理员旁路（不含取件码）。',
     );
@@ -120,6 +121,29 @@ const OverduePage: React.FC = () => {
     }
   };
 
+  const remindableIds = items
+    .filter((it) => it.returnStage !== 'returned')
+    .map((it) => it.id)
+    .slice(0, 30);
+
+  const onBatchRemind = async () => {
+    if (batchReminding || remindingId || remindableIds.length === 0) return;
+    const ok = window.confirm(
+      `对本页 ${remindableIds.length} 条滞留件批量发提醒？\n\n已绑定会私信取件码；未绑定仅旁路通知，不含取件码。`,
+    );
+    if (!ok) return;
+    setBatchReminding(true);
+    try {
+      const r = await overdueService.remindOverdueBatch(remindableIds);
+      notifySuccess(r.staffMessage || '批量提醒完成');
+      await invalidateOverdue();
+    } catch (e: any) {
+      notifyError(e?.message || '批量提醒失败');
+    } finally {
+      setBatchReminding(false);
+    }
+  };
+
   return (
     <div className="w-full space-y-4">
       <PageHeader
@@ -127,14 +151,24 @@ const OverduePage: React.FC = () => {
         description={`阈值：预警 ${thresholds.warnDays} 天 · 提醒 ${thresholds.remindDays} 天 · 退回 ${thresholds.returnDays} 天`}
         actions={
           writable && (
-            <button
-              type="button"
-              onClick={onScan}
-              disabled={scanning}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
-            >
-              {scanning ? '扫描中…' : '立即扫描'}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void onBatchRemind()}
+                disabled={batchReminding || Boolean(remindingId) || remindableIds.length === 0}
+                className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100 disabled:opacity-60"
+              >
+                {batchReminding ? '批量提醒中…' : `本页发提醒${remindableIds.length ? `（${remindableIds.length}）` : ''}`}
+              </button>
+              <button
+                type="button"
+                onClick={onScan}
+                disabled={scanning || batchReminding}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
+              >
+                {scanning ? '扫描中…' : '立即扫描'}
+              </button>
+            </div>
           )
         }
       />
@@ -232,7 +266,7 @@ const OverduePage: React.FC = () => {
                     {item.returnStage !== 'returned' && (
                       <button
                         type="button"
-                        disabled={remindingId === item.id}
+                        disabled={remindingId === item.id || batchReminding}
                         className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-700 disabled:opacity-60"
                         onClick={() => void onRemind(item.id)}
                       >

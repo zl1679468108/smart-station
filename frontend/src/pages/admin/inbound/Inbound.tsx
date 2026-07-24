@@ -2,6 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import * as inboundService from '@/services/inbound';
 import { notifyError, notifySuccess } from '@/utils/notification';
 import {
+  UNBOUND_FACE_HINT,
+  buildBindGuideScript,
+  buildFacePickupScript,
+} from '@/utils/staffScripts';
+import {
   loadLastParcelSize,
   playInboundSuccessBeep,
   saveLastParcelSize,
@@ -189,6 +194,22 @@ const InboundSuccess: React.FC<{
     }
   };
 
+  const onCopyFaceScript = async () => {
+    const text = buildFacePickupScript({
+      pickupCode: result.pickupCode,
+    });
+    const ok = await copyText(text);
+    if (ok) notifySuccess('已复制当面话术（含取件码，勿发群）');
+    else notifyError('复制失败，请手动抄取件码');
+  };
+
+  const onCopyBindScript = async () => {
+    const text = buildBindGuideScript();
+    const ok = await copyText(text);
+    if (ok) notifySuccess('已复制绑定引导（不含取件码，可发客户）');
+    else notifyError('复制失败');
+  };
+
   return (
     <div className="rounded-lg border border-success/40 bg-success/5 p-5">
       <h3 className="mb-3 flex items-center gap-1.5 text-base font-medium text-success">
@@ -231,8 +252,11 @@ const InboundSuccess: React.FC<{
               <p className="font-medium">通知状态</p>
               <p className="mt-1">{n.staffMessage}</p>
               {!n.customerBound && n.enabled && (
+                <p className="mt-1 text-[11px] opacity-90">{UNBOUND_FACE_HINT}</p>
+              )}
+              {n.customerBound && !n.customerPushed && n.enabled && (
                 <p className="mt-1 text-[11px] opacity-90">
-                  可提醒客户打开查件页绑定微信；绑定后点「补发通知」再推一次取件码。
+                  客户已绑定但私信未成功，可点「补发通知」再试一次。
                 </p>
               )}
             </div>
@@ -247,6 +271,24 @@ const InboundSuccess: React.FC<{
               </button>
             )}
           </div>
+          {!n.customerBound && n.enabled && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void onCopyFaceScript()}
+                className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+              >
+                复制当面话术（含取件码）
+              </button>
+              <button
+                type="button"
+                onClick={() => void onCopyBindScript()}
+                className="rounded-md border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-medium text-orange-800 hover:bg-orange-50"
+              >
+                复制绑定引导（不含码）
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

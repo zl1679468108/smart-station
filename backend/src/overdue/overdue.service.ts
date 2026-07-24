@@ -203,6 +203,65 @@ export class OverdueService {
     };
   }
 
+  /**
+   * 批量补发滞留提醒（运营打磨）
+   * - 单条失败不阻断其余
+   * - 最多 30 条
+   */
+  async remindBatch(stationId: string, ids: string[]) {
+    const unique = Array.from(new Set((ids || []).map((x) => String(x || '').trim()).filter(Boolean)));
+    if (unique.length === 0) {
+      throw new BadRequestException('请选择要提醒的包裹');
+    }
+    if (unique.length > 30) {
+      throw new BadRequestException('一次最多提醒 30 条');
+    }
+
+    const results: Array<{
+      id: string;
+      ok: boolean;
+      customerBound?: boolean;
+      customerPushed?: boolean;
+      staffMessage: string;
+    }> = [];
+
+    let pushed = 0;
+    let unbound = 0;
+    let failed = 0;
+
+    for (const id of unique) {
+      try {
+        const r = await this.remindOne(stationId, id);
+        results.push({
+          id,
+          ok: true,
+          customerBound: r.customerBound,
+          customerPushed: r.customerPushed,
+          staffMessage: r.staffMessage,
+        });
+        if (r.customerPushed) pushed += 1;
+        else if (!r.customerBound) unbound += 1;
+        else failed += 1;
+      } catch (e: any) {
+        failed += 1;
+        results.push({
+          id,
+          ok: false,
+          staffMessage: e?.message || '发送失败',
+        });
+      }
+    }
+
+    return {
+      total: unique.length,
+      pushed,
+      unbound,
+      failed,
+      staffMessage: `批量提醒完成：已私信 ${pushed}，未绑定 ${unbound}，失败 ${failed}（共 ${unique.length} 条）`,
+      results,
+    };
+  }
+
   async returnAction(stationId: string, parcelId: string, dto: ReturnActionDto, operatorId: string) {
     const client = this.supabase.getClient();
     const { data: parcel, error } = await client

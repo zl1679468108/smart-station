@@ -4,6 +4,9 @@ import * as adminService from '@/services/admin';
 import type { NotifyBindingItem, NotifyLogItem } from '@/types/admin';
 import { formatBeijingTimestamp } from '@/utils/date';
 import EmptyState from '@/components/ui/EmptyState';
+import { buildBindGuideScript } from '@/utils/staffScripts';
+import { copyText } from '@/utils/stationVisit';
+import { notifyError, notifySuccess } from '@/utils/notification';
 
 type LogFilter =
   | ''
@@ -298,19 +301,38 @@ const NotifyTab: React.FC = () => {
         ))}
       </div>
 
-      {sub === 'logs' && resendableOnPage.length > 0 && (
+      {sub === 'logs' && (resendableOnPage.length > 0 || logFilter === 'unbound') && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-orange-100 bg-orange-50/70 px-3 py-2">
           <p className="text-xs text-orange-900">
-            本页有 {resendableOnPage.length} 条可补发（未私信/私信失败）
+            {resendableOnPage.length > 0
+              ? `本页有 ${resendableOnPage.length} 条可补发（未私信/私信失败）`
+              : '未私信客户请当面报码，或复制绑定引导话术'}
           </p>
-          <button
-            type="button"
-            onClick={() => void onBatchResend()}
-            disabled={batchResending || Boolean(resendingId)}
-            className="min-h-[36px] rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primaryHover disabled:opacity-60"
-          >
-            {batchResending ? '补发中…' : '一键补发未私信'}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                void (async () => {
+                  const ok = await copyText(buildBindGuideScript());
+                  if (ok) notifySuccess('已复制绑定引导（不含取件码）');
+                  else notifyError('复制失败');
+                })();
+              }}
+              className="min-h-[36px] rounded-md border border-orange-200 bg-white px-3 text-xs font-medium text-orange-800 hover:bg-orange-50"
+            >
+              复制绑定话术
+            </button>
+            {resendableOnPage.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void onBatchResend()}
+                disabled={batchResending || Boolean(resendingId)}
+                className="min-h-[36px] rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primaryHover disabled:opacity-60"
+              >
+                {batchResending ? '补发中…' : '一键补发未私信'}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
