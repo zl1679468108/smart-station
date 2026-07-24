@@ -1254,6 +1254,8 @@ export class AdminService {
     ok?: boolean;
     mode?: string;
     error?: string;
+    attempts?: number;
+    retried?: boolean;
   }): { key: string; ok: boolean; label: string } {
     const raw = String(c.channel || '');
     let name = raw;
@@ -1265,8 +1267,15 @@ export class AdminService {
 
     const ok = Boolean(c.ok);
     const mode = this.modeLabel(c.mode);
-    const status = ok ? '成功' : '失败';
-    const label = mode ? `${name}：${status}（${mode}）` : `${name}：${status}`;
+    const attempts = Number(c.attempts || 0);
+    const retried = Boolean(c.retried) || attempts > 1;
+    let status = ok ? '成功' : '失败';
+    if (retried && ok) status = '重试后成功';
+    else if (retried && !ok) status = '重试后仍失败';
+    const bits = [status];
+    if (mode) bits.push(mode);
+    if (attempts > 1) bits.push(`试了${attempts}次`);
+    const label = `${name}：${bits.join(' · ')}`;
     return { key: raw || name, ok, label };
   }
 

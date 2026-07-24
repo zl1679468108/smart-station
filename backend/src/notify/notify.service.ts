@@ -13,7 +13,7 @@ import { SupabaseService } from '../supabase/supabase.service';
  *   - 备选 pushplus：客户填写 token 一对一
  *   - 兼容 serverchan：历史 SendKey 绑定
  *
- * 失败不阻断主流程；日志写 ss_sms_logs。
+ * 失败不阻断主流程；外部通道瞬时失败自动短退避重试（最多 3 次）；日志写 ss_sms_logs。
  */
 
 type OpsChannel = 'console' | 'wecom' | 'serverchan';
@@ -37,6 +37,10 @@ export type NotifyChannelResult = {
   ok: boolean;
   error?: string;
   mode?: string;
+  /** 实际尝试次数（含首次；>1 表示发生过自动重试） */
+  attempts?: number;
+  /** 是否至少重试过一次 */
+  retried?: boolean;
 };
 
 /** 入库/通知扇出回执（给店员看的运营反馈） */
@@ -237,6 +241,77 @@ export class NotifyService {
     });
   }
 
+  /** 免费通道瞬时失败退避：400ms → 1000ms，最多 3 次 */
+  private static readonly RETRY_DELAYS_MS = [400, 1000];
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** 配置缺失/参数错误不重试；其余外部错误（网络/5xx/限流/未知）可短退避重试 */
+  private isRetryableNotifyError(err: unknown): boolean {
+    const msg = (err instanceof Error ? err.message : String(err || '')).toLowerCase();
+    if (!msg.trim()) return true;
+    // 配置/绑定问题：立即失败
+    if (
+      msg.includes('未配置') ||
+      msg.includes('为空') ||
+      msg.includes('unsupported') ||
+      msg.includes('invalid token')
+    ) {
+      return false;
+    }
+    // 多数 4xx 不重试；408/429 可重试
+    if (/http 4\d\d/.test(msg) && !msg.includes('http 408') && !msg.includes('http 429')) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * 对外部 HTTP 通道做短退避重试。
+   * 成功返回 attempts；失败抛出 Error，并带 attempts / retried 字段。
+   */
+  private async withNotifyRetry(
+    label: string,
+    fn: () => Promise<void>,
+  ): Promise<{ attempts: number; retried: boolean }> {
+    const maxAttempts = NotifyService.RETRY_DELAYS_MS.length + 1;
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await fn();
+        if (attempt > 1) {
+          // eslint-disable-next-line no-console
+          console.warn(`[Notify/${label}] 第 ${attempt} 次尝试成功`);
+        }
+        return { attempts: attempt, retried: attempt > 1 };
+      } catch (err) {
+        lastErr = err;
+        const retryable = this.isRetryableNotifyError(err);
+        if (!retryable || attempt >= maxAttempts) {
+          const msg = err instanceof Error ? err.message : String(err);
+          const wrapped = new Error(msg) as Error & { attempts?: number; retried?: boolean };
+          wrapped.attempts = attempt;
+          wrapped.retried = attempt > 1;
+          throw wrapped;
+        }
+        const delay = NotifyService.RETRY_DELAYS_MS[attempt - 1] || 1000;
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[Notify/${label}] 第 ${attempt} 次失败，${delay}ms 后重试:`,
+          err instanceof Error ? err.message : String(err),
+        );
+        await this.sleep(delay);
+      }
+    }
+    const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+    const wrapped = new Error(msg) as Error & { attempts?: number; retried?: boolean };
+    wrapped.attempts = maxAttempts;
+    wrapped.retried = true;
+    throw wrapped;
+  }
+
   /**
    * 扇出：
    * 1) ops console → 完整
@@ -253,25 +328,55 @@ export class NotifyService {
       try {
         if (channel === 'console') {
           await this.sendConsole(payload.content, payload);
-          results.push({ channel, ok: true, mode: 'full' });
+          results.push({ channel, ok: true, mode: 'full', attempts: 1 });
         } else if (channel === 'wecom') {
           // 验证码 / 空摘要：不进共享群
           if (payload.templateCode === 'kiosk_code' || !publicText.trim()) {
-            results.push({ channel, ok: true, mode: 'skipped_private' });
+            results.push({ channel, ok: true, mode: 'skipped_private', attempts: 1 });
             continue;
           }
-          await this.sendWecom(payload.title, publicText);
-          results.push({ channel, ok: true, mode: 'public' });
+          const { attempts, retried } = await this.withNotifyRetry('wecom', () =>
+            this.sendWecom(payload.title, publicText),
+          );
+          results.push({
+            channel,
+            ok: true,
+            mode: 'public',
+            attempts,
+            retried,
+          });
         } else if (channel === 'serverchan') {
           // 环境变量 SendKey = 管理员个人旁路，可收完整内容（仅你自己）
-          await this.sendServerChan(payload.title, payload.content, process.env.SERVERCHAN_SENDKEY);
-          results.push({ channel, ok: true, mode: 'admin_full' });
+          const { attempts, retried } = await this.withNotifyRetry('serverchan', () =>
+            this.sendServerChan(payload.title, payload.content, process.env.SERVERCHAN_SENDKEY),
+          );
+          results.push({
+            channel,
+            ok: true,
+            mode: 'admin_full',
+            attempts,
+            retried,
+          });
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        const attempts =
+          typeof (err as { attempts?: number })?.attempts === 'number'
+            ? (err as { attempts: number }).attempts
+            : 1;
+        const retried =
+          typeof (err as { retried?: boolean })?.retried === 'boolean'
+            ? (err as { retried: boolean }).retried
+            : attempts > 1;
         // eslint-disable-next-line no-console
         console.error(`[Notify/${channel}] 发送失败:`, msg);
-        results.push({ channel, ok: false, error: msg });
+        results.push({
+          channel,
+          ok: false,
+          error: msg,
+          attempts,
+          retried,
+        });
       }
     }
 
@@ -279,43 +384,56 @@ export class NotifyService {
     try {
       const bindings = await this.listActiveBindings(payload.phone, payload.stationId);
       for (const b of bindings) {
+        const channelKey = `binding:${b.channel}:${b.id.slice(0, 8)}`;
         try {
+          let attempts = 1;
+          let retried = false;
           if (b.channel === 'wxpusher') {
-            await this.sendWxPusher(payload.title, payload.content, [b.target]);
-            results.push({
-              channel: `binding:wxpusher:${b.id.slice(0, 8)}`,
-              ok: true,
-              mode: 'customer_full',
-            });
+            ({ attempts, retried } = await this.withNotifyRetry(channelKey, () =>
+              this.sendWxPusher(payload.title, payload.content, [b.target]),
+            ));
           } else if (b.channel === 'pushplus') {
-            await this.sendPushPlus(payload.title, payload.content, b.target);
-            results.push({
-              channel: `binding:pushplus:${b.id.slice(0, 8)}`,
-              ok: true,
-              mode: 'customer_full',
-            });
+            ({ attempts, retried } = await this.withNotifyRetry(channelKey, () =>
+              this.sendPushPlus(payload.title, payload.content, b.target),
+            ));
           } else if (b.channel === 'serverchan') {
-            await this.sendServerChan(payload.title, payload.content, b.target);
-            results.push({
-              channel: `binding:serverchan:${b.id.slice(0, 8)}`,
-              ok: true,
-              mode: 'customer_full',
-            });
+            ({ attempts, retried } = await this.withNotifyRetry(channelKey, () =>
+              this.sendServerChan(payload.title, payload.content, b.target),
+            ));
           } else {
             results.push({
               channel: `binding:${b.channel}`,
               ok: false,
               error: `unsupported channel ${b.channel}`,
+              attempts: 1,
             });
+            continue;
           }
+          results.push({
+            channel: channelKey,
+            ok: true,
+            mode: 'customer_full',
+            attempts,
+            retried,
+          });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
+          const attempts =
+            typeof (err as { attempts?: number })?.attempts === 'number'
+              ? (err as { attempts: number }).attempts
+              : 1;
+          const retried =
+            typeof (err as { retried?: boolean })?.retried === 'boolean'
+              ? (err as { retried: boolean }).retried
+              : attempts > 1;
           // eslint-disable-next-line no-console
           console.error(`[Notify/binding] 发送失败:`, msg);
           results.push({
-            channel: `binding:${b.channel}`,
+            channel: channelKey,
             ok: false,
             error: msg,
+            attempts,
+            retried,
           });
         }
       }
@@ -323,7 +441,7 @@ export class NotifyService {
       const msg = err instanceof Error ? err.message : String(err);
       // eslint-disable-next-line no-console
       console.error('[Notify] 查询客户绑定失败:', msg);
-      results.push({ channel: 'bindings_lookup', ok: false, error: msg });
+      results.push({ channel: 'bindings_lookup', ok: false, error: msg, attempts: 1 });
     }
 
     const anyOk = results.some((r) => r.ok);
@@ -400,12 +518,24 @@ export class NotifyService {
           : '客户未绑定微信，取件码未私信（请当面报码；客户在查件页绑定后会自动补发）',
       );
     } else if (opts.customerPushed) {
-      parts.push(isAppt ? '预约提醒已私信到客户微信' : '取件码已私信到客户微信');
+      const customerOk = opts.results.filter(
+        (r) => String(r.channel).startsWith('binding:') && r.ok,
+      );
+      const retriedOk = customerOk.some((r) => (r.attempts || 1) > 1 || r.retried);
+      if (retriedOk) {
+        parts.push(
+          isAppt
+            ? '预约提醒已私信到客户微信（自动重试后成功）'
+            : '取件码已私信到客户微信（自动重试后成功）',
+        );
+      } else {
+        parts.push(isAppt ? '预约提醒已私信到客户微信' : '取件码已私信到客户微信');
+      }
     } else {
       parts.push(
         isAppt
-          ? '客户已绑定但预约提醒发送失败，请核对绑定'
-          : '客户已绑定但私信发送失败，请核对绑定或让客户现场查码',
+          ? '客户已绑定但预约提醒发送失败（已自动重试），请核对绑定'
+          : '客户已绑定但私信发送失败（已自动重试），请核对绑定或让客户现场查码',
       );
     }
     return parts.join('；');

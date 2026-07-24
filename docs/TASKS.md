@@ -1395,3 +1395,10 @@
 | M125.2 | P0 | buildBindShareScript 含链接话术 | staffScripts | done | 不含取件码 |
 | M125.3 | P0 | 入库预检/成功/触达条等接入 | NotifyBindHint+全站复制 | done | |
 
+## M126 通知瞬时失败自动重试（运营打磨）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M126.1 | P0 | 外部通道短退避重试（最多3次） | notify.service | done | 400ms/1000ms；配置错误不重试 |
+| M126.2 | P0 | 店员回执/通道中文标注重试 | notify+admin | done | 重试后成功 / 试了N次 |
+| M126.3 | P1 | 试用清单补充重试说明 | TRIAL-CHECKLIST | done | |
+
