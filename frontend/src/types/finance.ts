@@ -89,7 +89,9 @@ export interface CashDayItem {
   freightCollectAmount: number;
   codAmount: number;
   amount: number;
-  collectPaidMethod: string;
+  collectStatus?: string;
+  collectPaidMethod: string | null;
+  collectNote?: string | null;
   collectPaidAt: string;
   outboundAt: string | null;
 }
@@ -101,6 +103,8 @@ export interface CashDaySummary {
   codTotal: number;
   byMethod: { cash: number; wechat: number; alipay: number; other: number };
   paidCount: number;
+  waivedCount?: number;
+  waivedTotal?: number;
   unpaidInStock: number;
   items: CashDayItem[];
 }

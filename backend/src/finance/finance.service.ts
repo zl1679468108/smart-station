@@ -507,18 +507,18 @@ export class FinanceService {
     const endUtc = new Date(`${day}T23:59:59.999+08:00`).toISOString();
 
     const client = this.supabase.getClient();
-    const [paidRes, unpaidRes] = await Promise.all([
+    const [settledRes, unpaidRes] = await Promise.all([
       client
         .from('ss_parcels')
         .select(
-          'id, tracking_number, recipient_name, pickup_code, freight_collect_amount, cod_amount, collect_paid_method, collect_paid_at, outbound_at',
+          'id, tracking_number, recipient_name, pickup_code, freight_collect_amount, cod_amount, collect_status, collect_paid_method, collect_paid_at, collect_note, outbound_at',
         )
         .eq('station_id', stationId)
-        .eq('collect_status', 'paid')
+        .in('collect_status', ['paid', 'waived'])
         .gte('collect_paid_at', startUtc)
         .lte('collect_paid_at', endUtc)
         .order('collect_paid_at', { ascending: false })
-        .limit(200),
+        .limit(300),
       client
         .from('ss_parcels')
         .select('id', { count: 'exact', head: true })
@@ -526,7 +526,7 @@ export class FinanceService {
         .eq('collect_status', 'unpaid')
         .in('status', ['in_stock', 'overdue']),
     ]);
-    if (paidRes.error) throw new Error(`查询收款日结失败: ${paidRes.error.message}`);
+    if (settledRes.error) throw new Error(`查询收款日结失败: ${settledRes.error.message}`);
     if (unpaidRes.error) throw new Error(`查询待收款失败: ${unpaidRes.error.message}`);
 
     const byMethod: Record<string, number> = {
@@ -538,16 +538,26 @@ export class FinanceService {
     let total = 0;
     let freightTotal = 0;
     let codTotal = 0;
-    const items = (paidRes.data || []).map((r: any) => {
+    let waivedTotal = 0;
+    let paidCount = 0;
+    let waivedCount = 0;
+    const items = (settledRes.data || []).map((r: any) => {
       const freight = Number(r.freight_collect_amount || 0);
       const cod = Number(r.cod_amount || 0);
       const amount = Math.round((freight + cod) * 100) / 100;
-      total += amount;
-      freightTotal += freight;
-      codTotal += cod;
-      const method = (r.collect_paid_method as string) || 'other';
-      if (byMethod[method] !== undefined) byMethod[method] += amount;
-      else byMethod.other += amount;
+      const status = (r.collect_status as string) || 'paid';
+      if (status === 'waived') {
+        waivedCount += 1;
+        waivedTotal += amount;
+      } else {
+        paidCount += 1;
+        total += amount;
+        freightTotal += freight;
+        codTotal += cod;
+        const method = (r.collect_paid_method as string) || 'other';
+        if (byMethod[method] !== undefined) byMethod[method] += amount;
+        else byMethod.other += amount;
+      }
       return {
         id: r.id,
         trackingNumber: r.tracking_number,
@@ -556,7 +566,9 @@ export class FinanceService {
         freightCollectAmount: freight,
         codAmount: cod,
         amount,
-        collectPaidMethod: method,
+        collectStatus: status,
+        collectPaidMethod: r.collect_paid_method || null,
+        collectNote: r.collect_note || null,
         collectPaidAt: r.collect_paid_at,
         outboundAt: r.outbound_at,
       };
@@ -565,6 +577,7 @@ export class FinanceService {
     total = Math.round(total * 100) / 100;
     freightTotal = Math.round(freightTotal * 100) / 100;
     codTotal = Math.round(codTotal * 100) / 100;
+    waivedTotal = Math.round(waivedTotal * 100) / 100;
     for (const k of Object.keys(byMethod)) {
       byMethod[k] = Math.round(byMethod[k] * 100) / 100;
     }
@@ -575,10 +588,72 @@ export class FinanceService {
       freightTotal,
       codTotal,
       byMethod,
-      paidCount: items.length,
+      paidCount,
+      waivedCount,
+      waivedTotal,
       unpaidInStock: unpaidRes.count || 0,
       items,
     };
+  }
+
+  /** 收款日结 CSV（UTF-8 BOM，Excel 可打开） */
+  async exportCashDayCsv(stationId: string, date?: string): Promise<string> {
+    const data = await this.getCashDay(stationId, date);
+    const methodLabel: Record<string, string> = {
+      cash: '现金',
+      wechat: '微信',
+      alipay: '支付宝',
+      other: '其他',
+    };
+    const statusLabel: Record<string, string> = {
+      paid: '已收款',
+      waived: '已免收',
+    };
+    const lines: string[] = [];
+    lines.push(
+      [
+        '日期',
+        '运单号',
+        '取件码',
+        '收件人',
+        '到付运费',
+        '代收货款',
+        '合计',
+        '状态',
+        '收款方式',
+        '备注',
+        '处理时间',
+      ].join(','),
+    );
+    for (const it of data.items) {
+      const row = [
+        data.date,
+        it.trackingNumber,
+        it.pickupCode || '',
+        it.recipientName,
+        Number(it.freightCollectAmount || 0).toFixed(2),
+        Number(it.codAmount || 0).toFixed(2),
+        Number(it.amount || 0).toFixed(2),
+        statusLabel[it.collectStatus] || it.collectStatus || '',
+        it.collectPaidMethod ? methodLabel[it.collectPaidMethod] || it.collectPaidMethod : '',
+        (it.collectNote || '').replace(/[\n\r,]/g, ' '),
+        it.collectPaidAt || '',
+      ];
+      lines.push(row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','));
+    }
+    lines.push('');
+    lines.push(`"汇总收款合计","${data.total.toFixed(2)}"`);
+    lines.push(`"汇总到付","${data.freightTotal.toFixed(2)}"`);
+    lines.push(`"汇总货款","${data.codTotal.toFixed(2)}"`);
+    lines.push(`"收款笔数","${data.paidCount}"`);
+    lines.push(`"免收笔数","${data.waivedCount}"`);
+    lines.push(`"免收金额","${data.waivedTotal.toFixed(2)}"`);
+    lines.push(`"在库待收款","${data.unpaidInStock}"`);
+    lines.push(`"现金","${data.byMethod.cash.toFixed(2)}"`);
+    lines.push(`"微信","${data.byMethod.wechat.toFixed(2)}"`);
+    lines.push(`"支付宝","${data.byMethod.alipay.toFixed(2)}"`);
+    lines.push(`"其他","${data.byMethod.other.toFixed(2)}"`);
+    return '\uFEFF' + lines.join('\n');
   }
 
   private beijingToday(): string {

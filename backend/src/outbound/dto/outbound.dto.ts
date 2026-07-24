@@ -58,11 +58,19 @@ export class ManualOutboundDto {
   @IsIn(['cash', 'wechat', 'alipay', 'other'], { message: '收款方式不合法' })
   collectPaidMethod?: 'cash' | 'wechat' | 'alipay' | 'other';
 
-  /** 收款备注（如：少收、已线下结清） */
+  /** 收款备注（如：少收、已线下结清；免收时必填原因） */
   @IsOptional()
   @IsString()
   @MaxLength(100, { message: '收款备注最长 100 字' })
   collectNote?: string;
+
+  /**
+   * 待收款处理：pay 收款出库（默认）/ waive 免收出库
+   */
+  @IsOptional()
+  @IsString()
+  @IsIn(['pay', 'waive'], { message: '收款处理方式不合法' })
+  collectAction?: 'pay' | 'waive';
 }
 
 /**

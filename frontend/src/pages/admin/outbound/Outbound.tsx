@@ -81,6 +81,7 @@ const ManualOutbound: React.FC = () => {
       signatureImageBase64?: string;
       collectPaidMethod?: 'cash' | 'wechat' | 'alipay' | 'other';
       collectNote?: string;
+      collectAction?: 'pay' | 'waive';
     },
   ) => {
     if (confirmLoading) return;
@@ -100,6 +101,7 @@ const ManualOutbound: React.FC = () => {
         signatureImageBase64: verify.signatureImageBase64,
         collectPaidMethod: verify.collectPaidMethod,
         collectNote: verify.collectNote,
+        collectAction: verify.collectAction,
       });
       invalidateShelves();
       invalidateDashboard();
@@ -412,6 +414,7 @@ const ConfirmDialog: React.FC<{
     signatureImageBase64?: string;
     collectPaidMethod?: 'cash' | 'wechat' | 'alipay' | 'other';
     collectNote?: string;
+    collectAction?: 'pay' | 'waive';
   }) => void;
   onCancel: () => void;
 }> = ({ item, loading, onConfirm, onCancel }) => {
@@ -427,6 +430,7 @@ const ConfirmDialog: React.FC<{
     '' | 'cash' | 'wechat' | 'alipay' | 'other'
   >('');
   const [collectNote, setCollectNote] = useState('');
+  const [collectAction, setCollectAction] = useState<'pay' | 'waive'>('pay');
   const sigCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const hasDrawnRef = useRef(false);
@@ -598,8 +602,12 @@ const ConfirmDialog: React.FC<{
       setLocalError('请输入 4 位数字');
       return;
     }
-    if (needCollect && !collectPaidMethod) {
+    if (needCollect && collectAction === 'pay' && !collectPaidMethod) {
       setLocalError('该件需收款，请选择收款方式');
+      return;
+    }
+    if (needCollect && collectAction === 'waive' && !collectNote.trim()) {
+      setLocalError('免收须填写原因');
       return;
     }
     // 提交前再导出一次签名，避免最后一笔未 flush
@@ -613,8 +621,10 @@ const ConfirmDialog: React.FC<{
       verifyNote: verifyNote.trim() || undefined,
       evidenceImageBase64: evidenceBase64,
       signatureImageBase64: hasDrawnRef.current ? sig : undefined,
-      collectPaidMethod: needCollect ? collectPaidMethod || undefined : undefined,
+      collectPaidMethod:
+        needCollect && collectAction === 'pay' ? collectPaidMethod || undefined : undefined,
       collectNote: needCollect ? collectNote.trim() || undefined : undefined,
+      collectAction: needCollect ? collectAction : undefined,
     });
   };
 
@@ -648,7 +658,8 @@ const ConfirmDialog: React.FC<{
               loading ||
               compressing ||
               phoneTail.replace(/\D/g, '').length !== 4 ||
-              (needCollect && !collectPaidMethod)
+              (needCollect && collectAction === 'pay' && !collectPaidMethod) ||
+              (needCollect && collectAction === 'waive' && !collectNote.trim())
             }
             className="flex-1 rounded-md bg-primary py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
           >
@@ -698,42 +709,91 @@ const ConfirmDialog: React.FC<{
                 </span>
               )}
             </p>
-            <p className="text-[11px] text-rose-700/80">请先向取件人收款，再选择下方收款方式后出库。</p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {(
-                [
-                  { v: 'cash', l: '现金' },
-                  { v: 'wechat', l: '微信' },
-                  { v: 'alipay', l: '支付宝' },
-                  { v: 'other', l: '其他' },
-                ] as const
-              ).map((m) => (
-                <button
-                  key={m.v}
-                  type="button"
-                  disabled={loading}
-                  onClick={() => {
-                    setCollectPaidMethod(m.v);
-                    setLocalError('');
-                  }}
-                  className={`rounded-md border px-2 py-2 text-xs ${
-                    collectPaidMethod === m.v
-                      ? 'border-primary bg-primary text-white'
-                      : 'border-rose-200 bg-white text-gray-700 hover:border-primary/50'
-                  }`}
-                >
-                  {m.l}
-                </button>
-              ))}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  setCollectAction('pay');
+                  setLocalError('');
+                }}
+                className={`flex-1 rounded-md border px-2 py-1.5 text-xs ${
+                  collectAction === 'pay'
+                    ? 'border-primary bg-primary text-white'
+                    : 'border-rose-200 bg-white text-gray-700'
+                }`}
+              >
+                已收款
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  setCollectAction('waive');
+                  setCollectPaidMethod('');
+                  setLocalError('');
+                }}
+                className={`flex-1 rounded-md border px-2 py-1.5 text-xs ${
+                  collectAction === 'waive'
+                    ? 'border-amber-500 bg-amber-500 text-white'
+                    : 'border-rose-200 bg-white text-gray-700'
+                }`}
+              >
+                免收
+              </button>
             </div>
-            <input
-              type="text"
-              value={collectNote}
-              onChange={(e) => setCollectNote(e.target.value.slice(0, 100))}
-              placeholder="收款备注（可选）"
-              disabled={loading}
-              className="w-full rounded-md border border-rose-200 bg-white px-3 py-1.5 text-xs outline-none focus:border-primary disabled:opacity-60"
-            />
+            {collectAction === 'pay' ? (
+              <>
+                <p className="text-[11px] text-rose-700/80">请先向取件人收款，再选择收款方式后出库。</p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {(
+                    [
+                      { v: 'cash', l: '现金' },
+                      { v: 'wechat', l: '微信' },
+                      { v: 'alipay', l: '支付宝' },
+                      { v: 'other', l: '其他' },
+                    ] as const
+                  ).map((m) => (
+                    <button
+                      key={m.v}
+                      type="button"
+                      disabled={loading}
+                      onClick={() => {
+                        setCollectPaidMethod(m.v);
+                        setLocalError('');
+                      }}
+                      className={`rounded-md border px-2 py-2 text-xs ${
+                        collectPaidMethod === m.v
+                          ? 'border-primary bg-primary text-white'
+                          : 'border-rose-200 bg-white text-gray-700 hover:border-primary/50'
+                      }`}
+                    >
+                      {m.l}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={collectNote}
+                  onChange={(e) => setCollectNote(e.target.value.slice(0, 100))}
+                  placeholder="收款备注（可选）"
+                  disabled={loading}
+                  className="w-full rounded-md border border-rose-200 bg-white px-3 py-1.5 text-xs outline-none focus:border-primary disabled:opacity-60"
+                />
+              </>
+            ) : (
+              <>
+                <p className="text-[11px] text-amber-800/90">免收须填写原因，便于店长复核。</p>
+                <input
+                  type="text"
+                  value={collectNote}
+                  onChange={(e) => setCollectNote(e.target.value.slice(0, 100))}
+                  placeholder="免收原因（必填）"
+                  disabled={loading}
+                  className="w-full rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-primary disabled:opacity-60"
+                />
+              </>
+            )}
           </div>
         )}
         <div>

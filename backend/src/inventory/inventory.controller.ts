@@ -3,12 +3,14 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import { InventoryQueryDto } from './dto/inventory-query.dto';
+import { UpdateCollectDto } from './dto/update-collect.dto';
 import { TokenAuthGuard } from '../common/guards/token-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -58,6 +60,18 @@ export class InventoryController {
   @Get(':id([0-9a-fA-F-]{36})')
   async detail(@StationId() stationId: string, @Param('id') id: string) {
     return this.inventoryService.detail(stationId, id);
+  }
+
+  /** 在库改价：调整到付/代收货款 */
+  @Roles('admin', 'clerk')
+  @Patch(':id([0-9a-fA-F-]{36})/collect')
+  async updateCollect(
+    @Param('id') id: string,
+    @Body() dto: UpdateCollectDto,
+    @CurrentUser() user: UserPayload,
+    @StationId() stationId: string,
+  ) {
+    return this.inventoryService.updateCollect(stationId, id, dto, user.id);
   }
 
   @Roles('admin', 'clerk')

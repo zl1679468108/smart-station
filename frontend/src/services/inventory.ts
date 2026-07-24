@@ -1,5 +1,5 @@
 // 库存 API 服务
-import { get, post } from './api';
+import { get, patch, post } from './api';
 import type {
   InventoryQuery,
   InventoryListResult,
@@ -50,5 +50,16 @@ export function fetchParcelDetail(id: string): Promise<ParcelDetail> {
 export function batchMarkException(ids: string[], reason: string): Promise<{ updated: number; skipped: number }> {
   return post<{ updated: number; skipped: number }>('/api/inventory/batch-exception', { ids, reason }, {
     successMessage: '异常标记已提交',
+  });
+}
+
+
+/** 在库改价：调整到付/代收货款 */
+export function updateCollect(
+  id: string,
+  body: { freightCollectAmount?: number; codAmount?: number; note?: string },
+): Promise<ParcelDetail> {
+  return patch<ParcelDetail>(`/api/inventory/${id}/collect`, body, {
+    successMessage: '收款金额已更新',
   });
 }

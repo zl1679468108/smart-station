@@ -1,6 +1,12 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useParcelDetail } from '@/hooks/useInventoryData';
+import * as inventoryService from '@/services/inventory';
+import {
+  useInvalidateInventoryDetail,
+  useInvalidateInventoryList,
+  useParcelDetail,
+} from '@/hooks/useInventoryData';
+import { useInvalidateDashboard } from '@/hooks/useDashboardData';
 import type { ParcelStatus } from '@/types/inventory';
 
 const STATUS_META: Record<ParcelStatus, { label: string; cls: string }> = {
@@ -41,6 +47,25 @@ const ParcelDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: detail, isLoading, error } = useParcelDetail(id);
+  const invalidateDetail = useInvalidateInventoryDetail();
+  const invalidateList = useInvalidateInventoryList();
+  const invalidateDashboard = useInvalidateDashboard();
+  const [freightInput, setFreightInput] = useState('');
+  const [codInput, setCodInput] = useState('');
+  const [collectNoteInput, setCollectNoteInput] = useState('');
+  const [savingCollect, setSavingCollect] = useState(false);
+  const [collectError, setCollectError] = useState('');
+
+  useEffect(() => {
+    if (!detail) return;
+    setFreightInput(
+      Number(detail.freightCollectAmount || 0) > 0
+        ? String(detail.freightCollectAmount)
+        : '',
+    );
+    setCodInput(Number(detail.codAmount || 0) > 0 ? String(detail.codAmount) : '');
+    setCollectNoteInput(detail.collectNote || '');
+  }, [detail?.id, detail?.freightCollectAmount, detail?.codAmount, detail?.collectNote]);
 
   if (isLoading) return <div className="py-10 text-center text-sm text-gray-500">加载中...</div>;
   if (error) {
@@ -178,6 +203,85 @@ const ParcelDetailPage: React.FC = () => {
             <div className="text-sm text-gray-700">{detail.note}</div>
           </div>
         )}
+        {(detail.status === 'in_stock' || detail.status === 'overdue') &&
+          (detail.collectStatus === 'none' || detail.collectStatus === 'unpaid') && (
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <h3 className="mb-2 text-sm font-medium text-gray-700">改价（到付 / 代收货款）</h3>
+              <p className="mb-3 text-[11px] text-gray-400">
+                仅未出库且未收款时可改。金额清零则变为「无需收款」。
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs text-gray-500">到付运费（元）</label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.01"
+                    value={freightInput}
+                    onChange={(e) => setFreightInput(e.target.value)}
+                    disabled={savingCollect}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-gray-500">代收货款（元）</label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.01"
+                    value={codInput}
+                    onChange={(e) => setCodInput(e.target.value)}
+                    disabled={savingCollect}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+              <div className="mt-3">
+                <label className="mb-1 block text-xs text-gray-500">改价备注（可选）</label>
+                <input
+                  type="text"
+                  value={collectNoteInput}
+                  onChange={(e) => setCollectNoteInput(e.target.value.slice(0, 100))}
+                  disabled={savingCollect}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary"
+                  placeholder="如：面单金额更正"
+                />
+              </div>
+              {collectError && <p className="mt-2 text-xs text-danger">{collectError}</p>}
+              <button
+                type="button"
+                disabled={savingCollect || !id}
+                onClick={async () => {
+                  if (!id) return;
+                  setSavingCollect(true);
+                  setCollectError('');
+                  try {
+                    await inventoryService.updateCollect(id, {
+                      freightCollectAmount: freightInput.trim()
+                        ? Number(freightInput)
+                        : 0,
+                      codAmount: codInput.trim() ? Number(codInput) : 0,
+                      note: collectNoteInput.trim() || undefined,
+                    });
+                    invalidateDetail();
+                    invalidateList();
+                    invalidateDashboard();
+                  } catch (e) {
+                    setCollectError(e instanceof Error ? e.message : '改价失败');
+                  } finally {
+                    setSavingCollect(false);
+                  }
+                }}
+                className="mt-3 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primaryHover disabled:opacity-60"
+              >
+                {savingCollect ? '保存中…' : '保存收款金额'}
+              </button>
+            </div>
+          )}
       </section>
 
       {/* 状态轨迹时间线 */}

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import * as financeService from '@/services/finance';
 import type { CashDaySummary } from '@/types/finance';
 import { notifyError } from '@/utils/notification';
+// exportCashDay uses notifySuccess/Error internally
 import EmptyState from '@/components/ui/EmptyState';
 
 const money = (n: number) => `¥${Number(n || 0).toFixed(2)}`;
@@ -94,6 +95,20 @@ const CashDayPanel: React.FC = () => {
             <div className="rounded-lg border border-gray-200 bg-white p-3">
               <div className="text-xs text-gray-500">收款笔数</div>
               <div className="mt-1 text-lg font-semibold text-gray-800">{cashDay.paidCount}</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-amber-100 bg-amber-50/60 p-3">
+              <div className="text-xs text-amber-800/80">免收笔数</div>
+              <div className="mt-1 text-lg font-semibold text-amber-800">
+                {cashDay.waivedCount ?? 0}
+              </div>
+            </div>
+            <div className="rounded-lg border border-amber-100 bg-amber-50/60 p-3">
+              <div className="text-xs text-amber-800/80">免收金额</div>
+              <div className="mt-1 text-lg font-semibold text-amber-800">
+                {money(cashDay.waivedTotal ?? 0)}
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">

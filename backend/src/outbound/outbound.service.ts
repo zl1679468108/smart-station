@@ -167,19 +167,34 @@ export class OutboundService {
         }
       | undefined;
     if (collectStatus === 'unpaid' && collectDue > 0) {
-      if (!dto.collectPaidMethod) {
-        throw new BadRequestException(
-          `该件待收款 ¥${collectDue.toFixed(2)}（到付/代收货款），请选择收款方式后再出库`,
-        );
+      const action = dto.collectAction === 'waive' ? 'waive' : 'pay';
+      if (action === 'waive') {
+        const reason = (dto.collectNote || '').trim();
+        if (!reason) {
+          throw new BadRequestException('免收出库须填写原因（如：公司协议免收 / 店长批准）');
+        }
+        collectPayment = {
+          status: 'waived',
+          amount: collectDue,
+          freight,
+          cod,
+          note: reason,
+        };
+      } else {
+        if (!dto.collectPaidMethod) {
+          throw new BadRequestException(
+            `该件待收款 ¥${collectDue.toFixed(2)}（到付/代收货款），请选择收款方式后再出库`,
+          );
+        }
+        collectPayment = {
+          status: 'paid',
+          method: dto.collectPaidMethod,
+          amount: collectDue,
+          freight,
+          cod,
+          note: (dto.collectNote || '').trim() || undefined,
+        };
       }
-      collectPayment = {
-        status: 'paid',
-        method: dto.collectPaidMethod,
-        amount: collectDue,
-        freight,
-        cod,
-        note: (dto.collectNote || '').trim() || undefined,
-      };
     } else if (collectStatus === 'paid') {
       collectPayment = {
         status: 'paid',
@@ -362,6 +377,12 @@ export class OutboundService {
       if (opts.collectPayment.note) {
         updatePayload.collect_note = opts.collectPayment.note;
       }
+    } else if (opts.collectPayment?.status === 'waived') {
+      updatePayload.collect_status = 'waived';
+      updatePayload.collect_paid_at = new Date().toISOString();
+      updatePayload.collect_paid_method = null;
+      updatePayload.collect_paid_operator_id = opts.operatorId;
+      updatePayload.collect_note = opts.collectPayment.note || null;
     }
 
     const { error } = await this.supabase
@@ -394,6 +415,10 @@ export class OutboundService {
         ? methodLabel[opts.collectPayment.method] || opts.collectPayment.method
         : '';
       description += `（已收款¥${opts.collectPayment.amount.toFixed(2)}${m ? '/' + m : ''}）`;
+    } else if (opts.collectPayment?.status === 'waived' && opts.collectPayment.amount > 0) {
+      description += `（已免收¥${opts.collectPayment.amount.toFixed(2)}`;
+      if (opts.collectPayment.note) description += `：${opts.collectPayment.note}`;
+      description += '）';
     }
     await this.supabase.getClient().from('ss_parcel_events').insert({
       parcel_id: parcel.id,

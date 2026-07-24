@@ -101,3 +101,31 @@ export function getCashDay(date?: string): Promise<CashDaySummary> {
   const q = date ? `?date=${encodeURIComponent(date)}` : '';
   return get<CashDaySummary>(`/api/finance/cash-day${q}`);
 }
+
+
+/** 收款日结导出 CSV */
+export async function exportCashDay(date?: string): Promise<void> {
+  const baseUrl = (import.meta.env.VITE_API_BASE_URL as string) || '';
+  const token = getToken();
+  const stationId = getStationId();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (stationId) headers['x-station-id'] = stationId;
+  const q = date ? `?date=${encodeURIComponent(date)}` : '';
+  try {
+    const res = await fetch(`${baseUrl}/api/finance/cash-day/export${q}`, { headers });
+    if (!res.ok) throw new Error(`导出失败（${res.status}）`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cash-day-${date || 'today'}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    notifySuccess('收款日结已导出');
+  } catch (e: any) {
+    notifyError(e?.message || '导出失败');
+  }
+}

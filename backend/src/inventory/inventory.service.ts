@@ -298,7 +298,95 @@ export class InventoryService {
   }
 
   /** 入库日起算自然日（与滞留规则一致：向下取整） */
-  private daysSince(inboundAt?: string | null): number {
+  /**
+   * 在库调整到付/代收货款金额（改价）
+   * 仅 in_stock/overdue 且 collect_status 为 none/unpaid
+   */
+  async updateCollect(
+    stationId: string,
+    id: string,
+    dto: { freightCollectAmount?: number; codAmount?: number; note?: string },
+    operatorId: string,
+  ) {
+    const { data: parcel, error } = await this.supabase
+      .getClient()
+      .from('ss_parcels')
+      .select(
+        'id, status, freight_collect_amount, cod_amount, collect_status, tracking_number, pickup_code',
+      )
+      .eq('id', id)
+      .eq('station_id', stationId)
+      .maybeSingle();
+    if (error) throw new Error(`查询包裹失败: ${error.message}`);
+    if (!parcel) throw new NotFoundException('包裹不存在');
+    if (!['in_stock', 'overdue'].includes(String(parcel.status))) {
+      throw new BadRequestException('仅在库/滞留件可改价');
+    }
+    const st = String(parcel.collect_status || 'none');
+    if (!['none', 'unpaid'].includes(st)) {
+      throw new BadRequestException('已收款或已免收的包裹不可改价');
+    }
+
+    const freight =
+      dto.freightCollectAmount !== undefined && dto.freightCollectAmount !== null
+        ? this.normalizeMoney(dto.freightCollectAmount)
+        : Number(parcel.freight_collect_amount || 0);
+    const cod =
+      dto.codAmount !== undefined && dto.codAmount !== null
+        ? this.normalizeMoney(dto.codAmount)
+        : Number(parcel.cod_amount || 0);
+    const due = Math.round((freight + cod) * 100) / 100;
+    const collectStatus = due > 0 ? 'unpaid' : 'none';
+
+    const { error: upErr } = await this.supabase
+      .getClient()
+      .from('ss_parcels')
+      .update({
+        freight_collect_amount: freight,
+        cod_amount: cod,
+        collect_status: collectStatus,
+        collect_note: (dto.note || '').trim() || null,
+      })
+      .eq('id', id)
+      .eq('station_id', stationId);
+    if (upErr) throw new Error(`改价失败: ${upErr.message}`);
+
+    const parts: string[] = [];
+    parts.push(`到付¥${freight.toFixed(2)}`);
+    parts.push(`代收货款¥${cod.toFixed(2)}`);
+    const desc =
+      due > 0
+        ? `改价：待收款 ${parts.join(' + ')}`
+        : '改价：取消收款（金额清零）';
+
+    await this.supabase.getClient().from('ss_parcel_events').insert({
+      parcel_id: id,
+      event_type: 'note',
+      operator_id: operatorId,
+      operator_type: 'staff',
+      description: desc,
+      metadata: {
+        action: 'update_collect',
+        freightCollectAmount: freight,
+        codAmount: cod,
+        collectStatus,
+        note: (dto.note || '').trim() || null,
+      },
+    });
+
+    return this.detail(stationId, id);
+  }
+
+  private normalizeMoney(v: unknown): number {
+    if (v === undefined || v === null || v === '') return 0;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new BadRequestException('金额须为非负数');
+    }
+    return Math.round(n * 100) / 100;
+  }
+
+    private daysSince(inboundAt?: string | null): number {
     if (!inboundAt) return 0;
     const ms = new Date(inboundAt).getTime();
     if (Number.isNaN(ms)) return 0;

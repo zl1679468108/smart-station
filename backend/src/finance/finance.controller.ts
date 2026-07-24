@@ -34,6 +34,20 @@ export class FinanceController {
     return this.financeService.getCashDay(stationId, date);
   }
 
+  /** 收款日结导出 CSV */
+  @Get('cash-day/export')
+  async exportCashDay(
+    @StationId() stationId: string,
+    @Query('date') date: string | undefined,
+    @Res() res: Response,
+  ) {
+    const csv = await this.financeService.exportCashDayCsv(stationId, date);
+    const filename = `cash-day-${date || 'today'}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
+  }
+
 
   // ===== 费率配置 =====
 

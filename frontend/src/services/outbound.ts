@@ -28,6 +28,7 @@ export function manualOutbound(payload: {
   /** 待收款件必填：cash/wechat/alipay/other */
   collectPaidMethod?: 'cash' | 'wechat' | 'alipay' | 'other';
   collectNote?: string;
+  collectAction?: 'pay' | 'waive';
 }): Promise<OutboundResult> {
   return post<OutboundResult>('/api/outbound/manual', payload, { successMessage: '包裹已出库' });
 }
