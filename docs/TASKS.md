@@ -994,3 +994,14 @@
 |---|---|---|---|---|---|
 | M70.1 | P1 | 到付/货款实时合计预览 | inbound form | done | CollectDueHint |
 | M70.2 | P2 | 金额非法拦截 | inbound form | done | ≥0 数字校验 |
+
+---
+
+## M71 面单识别重试 + 工作台私信率（运营打磨）
+
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| M71.1 | P1 | OCR 失败保留预览可重试 | WaybillOcrUploader | done | 重新识别/换一张/白话错误 |
+| M71.2 | P1 | 识别结果缺字段提示补全 | WaybillOcrUploader | done | 已回填/还缺字段 |
+| M71.3 | P2 | 后端 OCR 错误白话 | backend/ocr | done | 超时/鉴权/图片 |
+| M71.4 | P2 | 工作台今日私信率 | dashboard | done | pushed/inboundNotices |

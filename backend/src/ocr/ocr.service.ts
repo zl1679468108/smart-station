@@ -174,11 +174,25 @@ export class OcrService {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`腾讯云 OCR 调用失败: ${message}`);
-      // 鉴权 / 配额类错误对外提示更友好
+      // 鉴权 / 配额 / 网络类错误对外提示更友好（店员白话）
       if (/AuthFailure|SecretId|signature/i.test(message)) {
-        throw new ServiceUnavailableException('面单识别服务鉴权失败，请检查腾讯云密钥配置');
+        throw new ServiceUnavailableException(
+          '面单识别服务鉴权失败，请检查腾讯云密钥配置；可先手动录入',
+        );
       }
-      throw new InternalServerErrorException(`面单识别失败：${message}`);
+      if (/timeout|Timeout|ETIMEDOUT|ECONN|network/i.test(message)) {
+        throw new ServiceUnavailableException(
+          '面单识别超时，请检查网络后点「重新识别」，或手动录入',
+        );
+      }
+      if (/Image|image|decode|base64|too large|过大/i.test(message)) {
+        throw new BadRequestException(
+          '图片无法识别，请换 JPG/PNG 清晰面单（≤5MB）后重试',
+        );
+      }
+      throw new InternalServerErrorException(
+        '面单识别暂时失败，请重试或手动录入',
+      );
     }
 
     const lines = (resp?.TextDetections || [])

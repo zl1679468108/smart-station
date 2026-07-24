@@ -297,10 +297,37 @@ const Dashboard: React.FC = () => {
                 看客户有没有真正收到取件码私信（点数字可筛选对应记录）
               </p>
             </div>
-            <div className="text-xs text-gray-500">
-              已绑定客户 {data.notify.activeBindings} 人
+            <div className="text-right text-xs text-gray-500">
+              <div>已绑定客户 {data.notify.activeBindings} 人</div>
+              {data.notify.inboundNotices > 0 && (
+                <div className="mt-0.5 font-medium text-gray-700">
+                  私信率{' '}
+                  {Math.round(
+                    (data.notify.customerPushed / data.notify.inboundNotices) * 100,
+                  )}
+                  %
+                  <span className="ml-1 font-normal text-gray-500">
+                    （{data.notify.customerPushed}/{data.notify.inboundNotices}）
+                  </span>
+                </div>
+              )}
             </div>
           </div>
+          {data.notify.inboundNotices > 0 && (
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/80">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-all"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    Math.round(
+                      (data.notify.customerPushed / data.notify.inboundNotices) * 100,
+                    ),
+                  )}%`,
+                }}
+              />
+            </div>
+          )}
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
             <button
               type="button"
