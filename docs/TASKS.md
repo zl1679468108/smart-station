@@ -513,7 +513,7 @@
 | ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
 |---|---|---|---|---|---|
 | M35.1 | P0 | NotifyService WxPusher 发送 | backend/notify | done | `sendWxPusher`；绑定 channel=`wxpusher` 走 UID；`WXPUSHER_APP_TOKEN` |
-| M35.2 | P0 | 扫码 start/poll API + pending 表 | backend/kiosk + SQL | done | `notify-bind/wxpusher/start|poll`；`ss_notify_bind_pending`；需执行 `migration-wxpusher-m35.sql` |
+| M35.2 | P0 | 扫码 start/poll API + pending 表 | backend/kiosk + SQL | done | `notify-bind/wxpusher/start|poll`；`ss_notify_bind_pending`；schema 已内联至 `database-init.sql` |
 | M35.3 | P0 | 查询端扫码绑定 UI | frontend NotifyBindCard | done | 验证码 → 展示二维码 → ≥12s 轮询；绑定成功提示 |
 | M35.4 | P1 | 文档与 env | docs + .env.example | done | PRD §4.13；TASKS；`WXPUSHER_APP_TOKEN` 模板 |
 
@@ -523,7 +523,7 @@
 
 | ID | 优先级 | 任务 | 模块 | 状态 | 验收 |
 |---|---|---|---|---|---|
-| M36.1 | P1 | PushPlus 发送与绑定 | backend/notify + kiosk | done | channel=`pushplus`；`POST notify-bind/pushplus`；需执行 migration-pushplus-m36.sql |
+| M36.1 | P1 | PushPlus 发送与绑定 | backend/notify + kiosk | done | channel=`pushplus`；`POST notify-bind/pushplus`；schema 已内联至 `database-init.sql` |
 | M36.2 | P1 | 绑定状态查询 | backend/kiosk | done | `POST notify-bind-status` 仅返回 bound/channels |
 | M36.3 | P1 | 查件成功转化引导 | frontend/query | done | 结果区强 CTA；未绑定兜底到店查；顶部 NotifyBindCard 支持双通道 |
 | M36.4 | P2 | 客户文案去技术词 | frontend notify | done | 对外只说微信扫一扫/专属绑定码；其他方式折叠 |
@@ -630,7 +630,7 @@
 
 | 编号 | 优先级 | 任务 | 模块 | 状态 | 说明 |
 |---|---|---|---|---|---|
-| M46.1 | P0 | 包裹收款字段 + 迁移 SQL | docs/sql | done | freight/cod/collect_status 等；migration-collect-m46.sql |
+| M46.1 | P0 | 包裹收款字段 + 迁移 SQL | docs/sql | done | freight/cod/collect_status 等；`database-init.sql`（collect 字段） |
 | M46.2 | P0 | 入库可录到付/代收货款 | inbound | done | 可选金额；>0 则 collect_status=unpaid |
 | M46.3 | P0 | 出库收款确认 + 自助拦截 | outbound | done | 待收款必选方式；自助出库禁止待收款件 |
 | M46.4 | P1 | 库存筛选/详情 + 工作台待办 | inventory/stats | done | collectStatus 筛选；待收款待办 |
@@ -652,7 +652,7 @@
 
 | 编号 | 优先级 | 任务 | 模块 | 状态 | 说明 |
 |---|---|---|---|---|---|
-| M48.1 | P0 | ss_shifts 表 + 迁移 | docs/sql | done | migration-shifts-m48.sql |
+| M48.1 | P0 | ss_shifts 表 + 迁移 | docs/sql | done | `database-init.sql`（ss_shifts） |
 | M48.2 | P0 | 开班/交班/列表 API | backend/shifts | done | current/open/close/list |
 | M48.3 | P0 | 员工绩效 API | backend/shifts | done | GET /api/shifts/performance |
 | M48.4 | P0 | 交接班前端页 | frontend/shifts | done | 我的班次/记录/绩效 |
@@ -786,7 +786,7 @@
 
 | 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
 |---|---|---|---|---|---|
-| M50.1 | P1 | 表 `ss_pickup_appointments` | SQL | done | `migration-appointments-m50.sql` 需手跑 |
+| M50.1 | P1 | 表 `ss_pickup_appointments` | SQL | done | `database-init.sql`（含 ss_pickup_appointments） |
 | M50.2 | P1 | 公开接口 slots/create/my/cancel | kiosk | done | 限流沿用 kiosk |
 | M50.3 | P1 | 店员列表 + 状态流转 | appointments | done | 确认/到店/未到/取消 |
 | M50.4 | P1 | 查件门户到店导航 + 营业状态 | query | done | 高德/腾讯/复制地址 |

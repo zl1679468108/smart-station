@@ -297,13 +297,6 @@ function makeOffice() {
   ];
 }
 
-function makeParcel() {
-  return [
-    { x: 0, y: 0.17, z: 0, w: 0.46, h: 0.34, d: 0.38, r: 0.75, g: 0.52, b: 0.32 },
-    { x: 0, y: 0.34, z: 0, w: 0.33, h: 0.02, d: 0.06, r: 0.55, g: 0.35, b: 0.18 },
-  ];
-}
-
 const jobs = [
   ['shelf-small.glb', makeShelf({ w: 2.0, h: 1.8, d: 1.0, layers: 3, accent: { r: 0.22, g: 0.74, b: 0.97 } })],
   ['shelf-medium.glb', makeShelf({ w: 2.4, h: 2.2, d: 1.2, layers: 4, accent: { r: 0.55, g: 0.36, b: 0.96 } })],
@@ -312,7 +305,6 @@ const jobs = [
   ['counter.glb', makeCounter()],
   ['locker.glb', makeLocker()],
   ['office.glb', makeOffice()],
-  ['parcel-box.glb', makeParcel()],
 ];
 
 fs.mkdirSync(outDir, { recursive: true });

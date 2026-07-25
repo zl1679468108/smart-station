@@ -2,22 +2,15 @@
 
 面向开发试验 / 门店试用。按顺序勾选即可，文案尽量白话。
 
-## 0. 先跑数据库补丁（Supabase SQL Editor）
-
-按需执行（已执行过可跳过）：
+## 0. 先跑数据库脚本（Supabase SQL Editor）
 
 | 文件 | 用途 |
 |------|------|
-| `docs/migration-notify-bind-m34.sql` | 客户通知绑定 |
-| `docs/migration-wxpusher-m35.sql` | WxPusher 扫码会话 |
-| `docs/migration-pushplus-m36.sql` | PushPlus 绑定字段 |
-| `docs/migration-collect-m46.sql` | 到付/代收货款 |
-| `docs/migration-shifts-m48.sql` | 交接班 |
-| `docs/migration-appointments-m50.sql` | 预约取件 |
+| `docs/database-init.sql` | **schema 唯一真相源**（幂等，含历史 migration 终态；新建库/补齐已部署库均执行此文件） |
+| `docs/database-seed.sql` | 可选种子（示例驿站/管理员/货架/快递公司；可重跑） |
+| `docs/schema-catchup.sql` | 已部署旧库缺表/缺列时的紧急补齐（shifts / appointments / collect 字段） |
 
 Storage 桶（拍照/签名留证）：创建 `ss-evidence`（建议 public 读）。
-
-全量初始化也可参考 `docs/database-init.sql`（新库）。
 
 ## 1. 环境变量
 
@@ -132,5 +125,5 @@ bash scripts/deploy-all.sh   # 仅本地构建
 | 入库成功但客户没收到 | 看是否绑定；未绑定引导查件绑定后补发 |
 | 企微看到取件码 | 异常，检查是否误用完整 content 进 wecom |
 | 查件不是本站数据 | 配 `VITE_KIOSK_STATION_ID` |
-| 预约表不存在 | 执行 `migration-appointments-m50.sql` |
+| 预约/交接班/收款接口报缺表或缺列 | 在 Supabase 执行 `docs/schema-catchup.sql`（或整份 `database-init.sql`）后刷新页面 |
 | OCR 突然全失败 | 看月额度是否触顶 |

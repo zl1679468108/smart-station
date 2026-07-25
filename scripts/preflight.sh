@@ -64,17 +64,17 @@ else
   fi
 fi
 
-echo "[preflight] 数据库迁移文件（需在 Supabase 手跑）"
-for m in \
-  migration-notify-bind-m34.sql \
-  migration-wxpusher-m35.sql \
-  migration-pushplus-m36.sql \
-  migration-collect-m46.sql \
-  migration-shifts-m48.sql \
-  migration-appointments-m50.sql
-do
-  if [ -f "$ROOT/docs/$m" ]; then ok "docs/$m"; else bad "缺少 docs/$m"; fi
-done
+echo "[preflight] 数据库 schema（需在 Supabase 手跑）"
+if [ -f "$ROOT/docs/database-init.sql" ]; then
+  ok "docs/database-init.sql（唯一真相源；历史 migration 已内联）"
+else
+  bad "缺少 docs/database-init.sql"
+fi
+if [ -f "$ROOT/docs/database-seed.sql" ]; then
+  ok "docs/database-seed.sql（可选种子）"
+else
+  warn "缺少 docs/database-seed.sql"
+fi
 
 echo "[preflight] 部署脚本"
 for s in deploy-backend.sh deploy-frontend.sh deploy-all.sh deploy-cvm.sh; do

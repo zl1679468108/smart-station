@@ -1009,7 +1009,7 @@ smart-station
 **占位方案**：
 - 前端入口暂用文字 logo「Smart Station」+ 一个简单 SVG 方块图标（包裹轮廓 + 箭头）作为占位
 - favicon：暂用同款占位 SVG
-- 待美术资源就位后替换为 `/public/logo.svg`
+- 品牌 Logo 使用 `frontend/src/components/brand/Logo.tsx` 内联 SVG（`favicon.svg` / `apple-touch-icon.png` 仍在 `public/`）
 
 ---
 

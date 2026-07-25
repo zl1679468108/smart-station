@@ -440,7 +440,7 @@ export class KioskService {
     if (error) {
       if (String(error.message || '').includes('ss_notify_bindings')) {
         throw new BadRequestException(
-          '通知绑定表未初始化，请管理员在 Supabase 执行 migration-wxpusher-m35.sql',
+          '通知绑定表未初始化，请管理员在 Supabase 执行 docs/database-init.sql',
         );
       }
       throw new Error(`绑定失败: ${error.message}`);
@@ -528,7 +528,7 @@ export class KioskService {
     if (pendErr) {
       if (String(pendErr.message || '').includes('ss_notify_bind_pending')) {
         throw new BadRequestException(
-          '绑定暂存表未初始化，请管理员在 Supabase 执行 migration-wxpusher-m35.sql',
+          '绑定暂存表未初始化，请管理员在 Supabase 执行 docs/database-init.sql',
         );
       }
       throw new Error(`创建绑定会话失败: ${pendErr.message}`);
@@ -566,7 +566,7 @@ export class KioskService {
     if (pErr) {
       if (String(pErr.message || '').includes('ss_notify_bind_pending')) {
         throw new BadRequestException(
-          '绑定暂存表未初始化，请管理员在 Supabase 执行 migration-wxpusher-m35.sql',
+          '绑定暂存表未初始化，请管理员在 Supabase 执行 docs/database-init.sql',
         );
       }
       throw new Error(`查询绑定会话失败: ${pErr.message}`);
@@ -642,7 +642,7 @@ export class KioskService {
     if (bErr) {
       if (String(bErr.message || '').includes('ss_notify_bindings')) {
         throw new BadRequestException(
-          '通知绑定表未初始化，请管理员在 Supabase 执行 migration-wxpusher-m35.sql',
+          '通知绑定表未初始化，请管理员在 Supabase 执行 docs/database-init.sql',
         );
       }
       throw new Error(`绑定失败: ${bErr.message}`);
@@ -733,7 +733,7 @@ export class KioskService {
     if (error) {
       if (String(error.message || '').includes('ss_notify_bindings')) {
         throw new BadRequestException(
-          '通知绑定表未初始化，请管理员在 Supabase 执行 migration-pushplus-m36.sql',
+          '通知绑定表未初始化，请管理员在 Supabase 执行 docs/database-init.sql',
         );
       }
       throw new Error(`绑定失败: ${error.message}`);
