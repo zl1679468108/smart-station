@@ -1,5 +1,5 @@
 // Warehouse3D variant 精确回归
-// - guide：取件导览，显示点击漫游提示与取件高亮
+// - guide：取件导览，显示点击漫游提示与取件位置指引
 // - screen：数字孪生大屏，显示全屏 HUD 与巡航/漫游角标
 // - editor：布局编辑，显示模型库与编辑画布，不显示只读漫游提示
 import { test, expect, type Page } from '@playwright/test';
@@ -20,7 +20,7 @@ async function queryParcel(page: Page) {
 }
 
 test.describe('Warehouse3D variant 预设', () => {
-  test('guide：查询页显示取件导览、高亮与点击漫游提示', async ({ page }) => {
+  test('guide：查询页显示取件导览、位置指引与点击漫游提示', async ({ page }) => {
     await mockBusinessApis(page);
     await mockLayoutApis(page);
 
@@ -31,10 +31,8 @@ test.describe('Warehouse3D variant 预设', () => {
     await expect(page.getByText('点击地面漫游 · 拖拽旋转 · 滚轮缩放')).toBeVisible({
       timeout: 15000,
     });
-    await expect(page.getByText(/该货架包裹（\d+）个/).first()).toBeVisible({
-      timeout: 15000,
-    });
-    await expect(page.getByText('正门').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('1-1-1001').first()).toBeVisible();
+    await expect(page.getByText(/请前往 A 区 1 号货架/)).toBeVisible();
   });
 
   test('screen：大屏显示 HUD、巡航/漫游角标和 3D 画布', async ({ page }) => {

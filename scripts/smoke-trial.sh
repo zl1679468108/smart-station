@@ -78,7 +78,7 @@ echo
 echo "[smoke] 3/5 查件公开引导  /api/kiosk/notify-guide"
 QS=""
 if [ -n "$STATION_ID" ]; then
-  QS="?stationId=$(python3 -c 'import urllib.parse,os; print(urllib.parse.quote(os.environ["S"]))' S="$STATION_ID" 2>/dev/null || echo "$STATION_ID")"
+  QS="?stationId=$(S="$STATION_ID" python3 -c 'import urllib.parse,os; print(urllib.parse.quote(os.environ["S"]))' 2>/dev/null || echo "$STATION_ID")"
   ok "使用 stationId=${STATION_ID:0:8}…"
 else
   warn "未配置 STATION_ID / VITE_KIOSK_STATION_ID，将按默认驿站探测"
@@ -137,7 +137,7 @@ if command -v curl >/dev/null 2>&1; then
   FE_RC=$?
   set -e
   if [ "$FE_RC" -ne 0 ]; then
-    warn "前端 $FE_BASE 未访问到（本地可先 npm run dev；不阻断后端冒烟）"
+    warn "前端 $FE_BASE 未访问到（本地可先 cd frontend && npm run start；不阻断后端冒烟）"
   elif echo "$FE_BODY" | grep -E '200|304' >/dev/null 2>&1; then
     ok "前端 HTTP $FE_BODY"
     if grep -E 'smart|root|vite|快递|驿站' /tmp/ss-smoke-fe.html >/dev/null 2>&1; then
@@ -199,21 +199,29 @@ if command -v curl >/dev/null 2>&1; then
   # 可选：带 token 做空 ids 业务校验（不真正发送）
   if [ -n "${SMOKE_TOKEN:-}" ] && [ -n "${STATION_ID:-}" ]; then
     echo "  · 附加：带 token 校验批量补发空 ids（应 400）"
-    set +e
-    BODY="$(curl -sS -m 10 -X POST "$API_BASE/api/admin/notify/logs/resend-batch" \
-      -H "Authorization: Bearer $SMOKE_TOKEN" \
-      -H "x-station-id: $STATION_ID" \
-      -H 'Content-Type: application/json' \
-      -d '{"ids":[]}' 2>&1)"
-    RC=$?
-    set -e
-    if [ "$RC" -ne 0 ]; then
-      warn "带 token 探测失败：$BODY"
-    elif echo "$BODY" | grep -E '请选择|至少|ids|400|Bad|message' >/dev/null 2>&1; then
-      ok "通知批量补发空 ids 被业务/校验拦截（未真实发送）"
-    else
-      warn "带 token 响应未识别：$BODY"
-    fi
+    probe_auth_empty_ids() {
+      local name="$1" path="$2"
+      local body rc
+      set +e
+      body="$(curl -sS -m 10 -X POST "$API_BASE$path" \
+        -H "Authorization: Bearer $SMOKE_TOKEN" \
+        -H "x-station-id: $STATION_ID" \
+        -H 'Content-Type: application/json' \
+        -d '{"ids":[]}' 2>&1)"
+      rc=$?
+      set -e
+      if [ "$rc" -ne 0 ]; then
+        warn "$name 带 token 探测失败：$body"
+      elif echo "$body" | grep -E '请选择|至少|ids|400|Bad|message' >/dev/null 2>&1; then
+        ok "$name 空 ids 被业务/校验拦截（未真实发送）"
+      else
+        warn "$name 带 token 响应未识别：$body"
+      fi
+    }
+
+    probe_auth_empty_ids "通知批量补发" "/api/admin/notify/logs/resend-batch"
+    probe_auth_empty_ids "到件批量补发" "/api/inbound/resend-notice-batch"
+    probe_auth_empty_ids "滞留批量提醒" "/api/overdue/remind-batch"
   else
     warn "未设 SMOKE_TOKEN+STATION_ID，跳过带鉴权空 ids 探测（可选）"
   fi

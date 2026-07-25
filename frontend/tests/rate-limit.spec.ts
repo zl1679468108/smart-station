@@ -71,10 +71,10 @@ test.describe('M14.3 取件码查询限流与锁定', () => {
     for (let i = 1; i <= 5; i++) {
       await page.getByRole('button', { name: '查询包裹' }).click();
       if (i < 5) {
-        await expect(page.getByText('取件码错误')).toBeVisible({ timeout: 5000 });
+        await expect(page.getByText('取件码错误').first()).toBeVisible({ timeout: 5000 });
       } else {
         // 第 5 次应显示锁定提示
-        await expect(page.getByText(/已锁定|锁定|10 分钟后重试/)).toBeVisible({ timeout: 5000 });
+        await expect(page.getByText(/已锁定|锁定|10 分钟后重试/).first()).toBeVisible({ timeout: 5000 });
       }
     }
   });
@@ -114,7 +114,7 @@ test.describe('M14.3 取件码查询限流与锁定', () => {
     for (let i = 1; i <= 3; i++) {
       await page.getByRole('button', { name: '查询包裹' }).click();
       if (i < 3) {
-        await expect(page.getByText('取件码错误', { exact: true })).toBeVisible({ timeout: 5000 });
+        await expect(page.getByText('取件码错误', { exact: true }).first()).toBeVisible({ timeout: 5000 });
       } else {
         await expect(page.getByText(/已锁定|锁定|10 分钟后重试/)).toBeVisible({ timeout: 5000 });
       }
@@ -168,9 +168,9 @@ test.describe('M14.3 取件码查询限流与锁定', () => {
 
     // 前 2 次错误
     await page.getByRole('button', { name: '查询包裹' }).click();
-    await expect(page.getByText('取件码错误', { exact: true })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('取件码错误', { exact: true }).first()).toBeVisible({ timeout: 5000 });
     await page.getByRole('button', { name: '查询包裹' }).click();
-    await expect(page.getByText('取件码错误', { exact: true })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('取件码错误', { exact: true }).first()).toBeVisible({ timeout: 5000 });
 
     // 第 3 次成功（不应锁定）
     await page.getByRole('button', { name: '查询包裹' }).click();

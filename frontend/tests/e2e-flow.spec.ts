@@ -1,13 +1,55 @@
 // 端到端流程测试
 // - M9.1 v1.0 核心存取件闭环：登录→入库→库存查询→Kiosk 查件→人工出库→出库记录
 // - M18.3 v1.2.0 仓库 3D 布局：管理员配置货架真实位置 → /query 查件 → 结果页 3D 视图显示货架
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
   mockLogin,
   mockBusinessApis,
   mockLayoutApis,
   setLoggedIn,
 } from './helpers/mock';
+
+async function waitForGlobalLoadingToSettle(page: Page) {
+  await expect(page.getByLabel('加载中')).toHaveCount(0, { timeout: 12000 });
+}
+
+async function clickStableButton(page: Page, name: string | RegExp) {
+  const startedAt = Date.now();
+  let lastError: unknown;
+
+  while (Date.now() - startedAt < 12000) {
+    try {
+      await waitForGlobalLoadingToSettle(page);
+      const button = page.getByRole('button', { name }).first();
+      await expect(button).toBeVisible({ timeout: 1000 });
+      await button.click({ timeout: 1500 });
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.waitForTimeout(200);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(`点击按钮失败：${String(name)}`);
+}
+
+async function expectFirstCanvasHasSize(page: Page) {
+  await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15000 });
+  await expect
+    .poll(
+      async () =>
+        page
+          .locator('canvas')
+          .first()
+          .evaluate((el) => {
+            const box = el.getBoundingClientRect();
+            return box.width > 0 && box.height > 0;
+          })
+          .catch(() => false),
+      { timeout: 15000 },
+    )
+    .toBe(true);
+}
 
 // ============ M9.1 核心存取件闭环 ============
 
@@ -39,15 +81,21 @@ test.describe('M9.1 端到端：核心存取件闭环', () => {
     await expect(page.getByRole('heading', { name: '出库管理' })).toBeVisible();
     await page.getByPlaceholder('收件人 11 位手机号').fill('13800001234');
     await page.getByRole('button', { name: '查询包裹' }).click();
-    await expect(page.getByText('找到 1 个在库包裹')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('找到 1 个可取件包裹')).toBeVisible({ timeout: 8000 });
 
     // 6. 确认出库
-    await page.getByRole('button', { name: '确认出库' }).first().click();
-    await page.getByRole('button', { name: '确认出库' }).last().click();
-    await expect(page.getByText(/已出库/)).toBeVisible({ timeout: 8000 });
+    await clickStableButton(page, '确认出库');
+    await page.getByPlaceholder('向取件人询问后填写').fill('1234');
+    await page.getByRole('button', { name: '核验并出库' }).click();
+    await expect(page.locator('main').getByText('出库成功', { exact: true })).toBeVisible({
+      timeout: 8000,
+    });
 
     // 7. 出库记录列表显示该记录
-    await page.getByRole('button', { name: '出库记录' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await waitForGlobalLoadingToSettle(page);
+    await expect(page).toHaveURL(/\/admin\/outbound/);
+    await clickStableButton(page, '出库记录');
     await expect(page.getByText('SF1234567890')).toBeVisible({ timeout: 8000 });
   });
 
@@ -148,7 +196,7 @@ test.describe('M18.3 端到端：门店 3D 布局配置 → 查询看寻路', ()
     expect(box!.height).toBeGreaterThan(0);
   });
 
-  test('查询页 3D 视图显示门口标签（正门）', async ({ page }) => {
+  test('查询页 3D 视图显示取件位置指引', async ({ page }) => {
     await mockBusinessApis(page);
     await mockLayoutApis(page);
 
@@ -159,11 +207,13 @@ test.describe('M18.3 端到端：门店 3D 布局配置 → 查询看寻路', ()
     await page.getByRole('button', { name: '查询包裹' }).click();
     await expect(page.getByText('找到 1 个包裹')).toBeVisible({ timeout: 8000 });
 
-    // drei <Html> 渲染到 DOM，门口标签文案为「正门」
-    await expect(page.getByText('正门').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('heading', { name: '货架位置 3D 视图' })).toBeVisible();
+    await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('点击地面可漫游，橙色为包裹货架')).toBeVisible();
+    await expect(page.getByText(/请前往 A 区 1 号货架/)).toBeVisible();
   });
 
-  test('查询页 3D 视图显示「该货架包裹」高亮标注 + 办公区「您在这里」起点', async ({ page }) => {
+  test('查询页 3D 视图显示取件码与高亮货架指引', async ({ page }) => {
     await mockBusinessApis(page);
     await mockLayoutApis(page);
 
@@ -174,10 +224,9 @@ test.describe('M18.3 端到端：门店 3D 布局配置 → 查询看寻路', ()
     await page.getByRole('button', { name: '查询包裹' }).click();
     await expect(page.getByText('找到 1 个包裹')).toBeVisible({ timeout: 8000 });
 
-    // 高亮货架应显示「该货架包裹（N）个」悬浮标注
-    await expect(page.getByText(/该货架包裹（\d+）个/).first()).toBeVisible({ timeout: 15000 });
-    // 办公区应显示「您在这里」寻路起点标注
-    await expect(page.getByText(/您在这里/).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('1-1-1001').first()).toBeVisible();
+    await expect(page.getByText(/请前往 A 区 1 号货架/)).toBeVisible();
   });
 });
 
@@ -268,11 +317,7 @@ test.describe('v1.2.5 工作台门店 3D 工作区', () => {
     await page.getByRole('button', { name: '调整布局' }).click();
 
     await expect(page.getByText('工作台 · 调整门店布局', { exact: true })).toBeVisible();
-    await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15000 });
-    const box = await page.locator('canvas').first().boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.width).toBeGreaterThan(0);
-    expect(box!.height).toBeGreaterThan(0);
+    await expectFirstCanvasHasSize(page);
   });
 
   test('编辑工作区初始保存按钮禁用且模型库可拖拽', async ({ page }) => {
@@ -387,8 +432,8 @@ test.describe('v1.2.2 Kiosk 端 3D 导览体验', () => {
     expect(box!.width).toBeGreaterThan(0);
     expect(box!.height).toBeGreaterThan(0);
 
-    // 办公区「您在这里」起点标注 + 货架「该货架包裹」标注依然可见（场景未崩）
-    await expect(page.getByText(/您在这里/).first()).toBeVisible({ timeout: 15000 });
+    // 用户可见的取件位置指引依然存在（场景未崩）
+    await expect(page.getByText(/请前往 A 区 1 号货架/)).toBeVisible();
   });
 
   test('相机动画 + 路径流动持续渲染不崩溃', async ({ page }) => {

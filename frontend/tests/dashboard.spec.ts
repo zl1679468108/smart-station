@@ -55,11 +55,11 @@ test.describe('待办提醒', () => {
 
   test('显示异常件未处理卡片', async ({ page }) => {
     await page.goto('/#/admin/dashboard');
-    await expect(page.getByText('异常件未处理', { exact: true })).toBeVisible();
-    const exceptionBtn = page.locator('button', { hasText: '异常件未处理' });
-    await expect(exceptionBtn.locator('.text-danger')).toHaveText(
-      DASHBOARD_DATA.todo.exceptionUnresolved.toString(),
-    );
+    const exceptionBtn = page
+      .getByRole('button', { name: /异常件未处理/ })
+      .filter({ hasText: '去处理' });
+    await expect(exceptionBtn).toBeVisible();
+    await expect(exceptionBtn).toContainText(DASHBOARD_DATA.todo.exceptionUnresolved.toString());
   });
 
   test('点击超期待提醒跳转滞留件列表', async ({ page }) => {
@@ -70,7 +70,10 @@ test.describe('待办提醒', () => {
 
   test('点击异常件跳转异常件列表', async ({ page }) => {
     await page.goto('/#/admin/dashboard');
-    await page.getByText('异常件未处理', { exact: true }).click();
+    await page
+      .getByRole('button', { name: /异常件未处理/ })
+      .filter({ hasText: '去处理' })
+      .click();
     await expect(page).toHaveURL(/\/admin\/exception/);
   });
 });

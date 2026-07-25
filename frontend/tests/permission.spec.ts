@@ -18,12 +18,14 @@ test.describe('Admin 角色', () => {
     await expect(page.getByRole('link', { name: /系统管理/ })).toBeVisible();
   });
 
-  test('系统管理显示全部 5 个 Tab', async ({ page }) => {
+  test('系统管理显示 admin 可管理的 Tab', async ({ page }) => {
     await page.goto('/#/admin/system');
     await expect(page.getByRole('button', { name: /驿站信息/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /门店布局/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /员工管理/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /货架管理/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /快递公司/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /通知记录/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /版本说明/ })).toBeVisible();
   });
 
@@ -49,11 +51,13 @@ test.describe('Clerk 角色（店员）', () => {
     await expect(page.getByRole('link', { name: /系统管理/ })).toBeVisible();
   });
 
-  test('系统管理显示 4 个 Tab（无员工管理）', async ({ page }) => {
+  test('系统管理显示 clerk 可访问的 Tab 且无员工管理', async ({ page }) => {
     await page.goto('/#/admin/system');
     await expect(page.getByRole('button', { name: /驿站信息/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /门店布局/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /货架管理/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /快递公司/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /通知记录/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /版本说明/ })).toBeVisible();
     // 员工管理 Tab 不应出现
     await expect(page.getByRole('button', { name: /^员工管理$/ })).toBeHidden();

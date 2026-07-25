@@ -41,6 +41,15 @@ import WaybillOcrUploader from '@/components/ui/WaybillOcrUploader';
 import NotifyBindHint from '@/components/NotifyBindHint';
 import NotifyReachBar from '@/components/NotifyReachBar';
 import * as shiftService from '@/services/shift';
+import Modal from '@/components/ui/Modal';
+
+type InboundConfirmState = {
+  title: string;
+  description: string;
+  confirmText: string;
+  tone?: 'primary' | 'warning';
+  onConfirm: () => Promise<void>;
+};
 
 function maybeAutoPrintInboundResult(result: InboundResult, stationName?: string): void {
   if (!isAutoPrintSlipEnabled()) return;
@@ -692,6 +701,15 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     unpaid: 0,
   });
   const [sessionResending, setSessionResending] = useState(false);
+  const [inboundConfirm, setInboundConfirm] = useState<InboundConfirmState | null>(null);
+
+  const runInboundConfirm = () => {
+    const action = inboundConfirm?.onConfirm;
+    if (!action) return;
+    setInboundConfirm(null);
+    void action();
+  };
+
   /**
    * 连续同收件人：成功后保留姓名/手机号/尺寸，只清空运单与金额
    * 晚高峰同一人多件时少打字
@@ -1185,13 +1203,12 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                           notifyError('最近 5 条里没有可补发的私信失败，请到通知页按今日筛选补发');
                           return;
                         }
-                        if (
-                          !window.confirm(
-                            `对本会话最近 ${targets.length} 条私信失败再发一次？\n\n会走自动短重试；成功后客户微信会收到取件码。`,
-                          )
-                        ) {
-                          return;
-                        }
+                        setInboundConfirm({
+                          title: '再发本会话私信失败',
+                          description: `对本会话最近 ${targets.length} 条私信失败再发一次？会走自动短重试；成功后客户微信会收到取件码。`,
+                          confirmText: '确认再发',
+                          tone: 'warning',
+                          onConfirm: async () => {
                         setSessionResending(true);
                         try {
                           const batch = await inboundService.resendInboundNoticeBatch(
@@ -1242,6 +1259,9 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                         } finally {
                           setSessionResending(false);
                         }
+                          },
+                        });
+                        return;
                       })();
                     }}
                     className="rounded-md border border-amber-300 bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-60"
@@ -1468,6 +1488,38 @@ const ScanInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           </ul>
         </div>
       )}
+      <Modal
+        open={Boolean(inboundConfirm)}
+        onClose={() => setInboundConfirm(null)}
+        title={inboundConfirm?.title}
+        description={inboundConfirm?.description}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setInboundConfirm(null)}
+              className="min-h-[40px] rounded-md border border-gray-200 bg-white px-4 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={runInboundConfirm}
+              className={`min-h-[40px] rounded-md px-4 text-sm font-medium text-white ${
+                inboundConfirm?.tone === 'warning'
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-primary hover:bg-primaryHover'
+              }`}
+            >
+              {inboundConfirm?.confirmText || '确认'}
+            </button>
+          </>
+        }
+      >
+        <div className="rounded-md bg-orange-50 px-3 py-2 text-xs text-orange-900">
+          请确认操作范围；完整取件码只会私信给已绑定客户。
+        </div>
+      </Modal>
     </div>
   );
 };
@@ -2006,6 +2058,15 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
   } | null>(null);
   const [bulkResending, setBulkResending] = useState(false);
   const [rowResendingId, setRowResendingId] = useState<string | null>(null);
+  const [inboundConfirm, setInboundConfirm] = useState<InboundConfirmState | null>(null);
+
+  const runInboundConfirm = () => {
+    const action = inboundConfirm?.onConfirm;
+    if (!action) return;
+    setInboundConfirm(null);
+    void action();
+  };
+
   /** 成功清单筛选：全部 / 未私信 / 已私信 */
   const [successFilter, setSuccessFilter] = useState<'all' | 'unpushed' | 'failed' | 'unbound' | 'pushed'>('all');
 
@@ -2406,17 +2467,7 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
       bindSum && bindSum.checked > 0
         ? `\n绑定预检：已绑 ${bindSum.bound} / 抽检 ${bindSum.checked}，未绑 ${bindSum.unbound}`
         : '';
-    if (skipCount > 0 || (bindSum && bindSum.unbound > 0)) {
-      const ok = window.confirm(
-        `${check?.staffMessage || '预检完成'}${bindTip}\n\n` +
-          (skipCount > 0
-            ? `将跳过 ${skipCount} 条重复，仅导入 ${readyFinal.length} 条。`
-            : `将导入 ${readyFinal.length} 条。`) +
-          `\n未绑定客户需当面报码。是否继续？`,
-      );
-      if (!ok) return;
-    }
-
+    const continueBatch = async () => {
     setSubmitting(true);
     try {
       const res = await inboundService.batchInbound(readyFinal);
@@ -2481,6 +2532,25 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
     } finally {
       setSubmitting(false);
     }
+    };
+
+    if (skipCount > 0 || (bindSum && bindSum.unbound > 0)) {
+      setInboundConfirm({
+        title: '确认继续批量入库',
+        description:
+          `${check?.staffMessage || '预检完成'}${bindTip}\n\n` +
+          (skipCount > 0
+            ? `将跳过 ${skipCount} 条重复，仅导入 ${readyFinal.length} 条。`
+            : `将导入 ${readyFinal.length} 条。`) +
+          `\n未绑定客户需当面报码。是否继续？`,
+        confirmText: '继续入库',
+        tone: 'warning',
+        onConfirm: continueBatch,
+      });
+      return;
+    }
+
+    await continueBatch();
   };
 
   return (
@@ -2991,10 +3061,12 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                                 !s.customerPushed,
                             );
                             if (targets.length === 0) return;
-                            const ok = window.confirm(
-                              `对本批 ${targets.length} 条「私信失败」再发一次？\n\n会走自动短重试；成功后客户微信会收到取件码。`,
-                            );
-                            if (!ok) return;
+                            setInboundConfirm({
+                              title: '再发本批私信失败',
+                              description: `对本批 ${targets.length} 条「私信失败」再发一次？会走自动短重试；成功后客户微信会收到取件码。`,
+                              confirmText: '确认再发',
+                              tone: 'warning',
+                              onConfirm: async () => {
                             setBulkResending(true);
                             try {
                               const batch = await inboundService.resendInboundNoticeBatch(
@@ -3044,6 +3116,9 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                             } finally {
                               setBulkResending(false);
                             }
+                              },
+                            });
+                            return;
                           })();
                         }}
                       >
@@ -3060,10 +3135,12 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                             (s) => s.id && s.notifyEnabled && !s.customerPushed,
                           );
                           if (targets.length === 0) return;
-                          const ok = window.confirm(
-                            `对 ${targets.length} 件未私信包裹尝试补发到件通知？\n\n已绑定会私信取件码；仍未绑定则保持到店查件。`,
-                          );
-                          if (!ok) return;
+                          setInboundConfirm({
+                            title: '补发未私信到件通知',
+                            description: `对 ${targets.length} 件未私信包裹尝试补发到件通知？已绑定会私信取件码；仍未绑定则保持到店查件。`,
+                            confirmText: '确认补发',
+                            tone: 'warning',
+                            onConfirm: async () => {
                           setBulkResending(true);
                           try {
                             const batch = await inboundService.resendInboundNoticeBatch(
@@ -3110,6 +3187,9 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
                           } finally {
                             setBulkResending(false);
                           }
+                            },
+                          });
+                          return;
                         })();
                       }}
                     >
@@ -3292,6 +3372,38 @@ const BatchInbound: React.FC<{ shelves: Shelf[] }> = ({ shelves }) => {
           )}
         </div>
       )}
+      <Modal
+        open={Boolean(inboundConfirm)}
+        onClose={() => setInboundConfirm(null)}
+        title={inboundConfirm?.title}
+        description={inboundConfirm?.description}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setInboundConfirm(null)}
+              className="min-h-[40px] rounded-md border border-gray-200 bg-white px-4 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={runInboundConfirm}
+              className={`min-h-[40px] rounded-md px-4 text-sm font-medium text-white ${
+                inboundConfirm?.tone === 'warning'
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-primary hover:bg-primaryHover'
+              }`}
+            >
+              {inboundConfirm?.confirmText || '确认'}
+            </button>
+          </>
+        }
+      >
+        <div className="rounded-md bg-orange-50 px-3 py-2 text-xs text-orange-900">
+          请确认操作范围；完整取件码只会私信给已绑定客户。
+        </div>
+      </Modal>
     </div>
   );
 };

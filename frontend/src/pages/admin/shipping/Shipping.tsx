@@ -166,6 +166,7 @@ const OrdersTab: React.FC<{
   const [items, setItems] = useState<ShippingItem[]>([]);
   const [total, setTotal] = useState(0);
   const [advancingId, setAdvancingId] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<ShippingItem | null>(null);
   const pageSize = 20;
 
   useEffect(() => {
@@ -272,13 +273,10 @@ const OrdersTab: React.FC<{
 
   const onAdvance = async (item: ShippingItem, next: ShippingStatus) => {
     if (advancingId) return;
-    if (next === 'cancelled') {
-      const ok = window.confirm(`确认取消寄件单 ${item.shippingNo}？取消后不可恢复。`);
-      if (!ok) return;
-    }
     setAdvancingId(item.id);
     try {
       await shippingService.updateShippingStatus(item.id, next);
+      if (next === 'cancelled') setCancelTarget(null);
       const tip = `寄件单 ${item.shippingNo} 已更新为「${STATUS_LABEL[next]}」`;
       setLastTip(tip);
       notifySuccess(tip);
@@ -498,7 +496,7 @@ const OrdersTab: React.FC<{
                         type="button"
                         disabled={advancingId === item.id}
                         className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-60"
-                        onClick={() => onAdvance(item, 'cancelled')}
+                        onClick={() => setCancelTarget(item)}
                       >
                         取消
                       </button>
@@ -688,6 +686,42 @@ const OrdersTab: React.FC<{
           ) : (
             <span className="text-sm text-gray-400">填写快递公司与重量后可试算</span>
           )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(cancelTarget)}
+        onClose={() => setCancelTarget(null)}
+        title="取消寄件单"
+        description={
+          cancelTarget
+            ? `确认取消寄件单 ${cancelTarget.shippingNo}？取消后不可恢复。`
+            : undefined
+        }
+        footer={
+          <>
+            <button
+              type="button"
+              className="rounded-lg px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
+              onClick={() => setCancelTarget(null)}
+            >
+              保留寄件单
+            </button>
+            <button
+              type="button"
+              disabled={Boolean(cancelTarget && advancingId === cancelTarget.id)}
+              className="rounded-lg bg-danger px-4 py-2 text-sm text-white hover:bg-danger/90 disabled:opacity-60"
+              onClick={() => {
+                if (cancelTarget) void onAdvance(cancelTarget, 'cancelled');
+              }}
+            >
+              {cancelTarget && advancingId === cancelTarget.id ? '取消中…' : '确认取消'}
+            </button>
+          </>
+        }
+      >
+        <div className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+          请先确认客户已放弃本次寄件；取消后需要重新下单才能继续寄件。
         </div>
       </Modal>
     </div>

@@ -50,7 +50,7 @@ bash scripts/smoke-trial.sh   # 环境预检 + health + 查件绑定 + 批量补
 cd backend && npm run start:dev
 
 # 终端 2
-cd frontend && npm run dev
+cd frontend && npm run start
 ```
 
 - 管理端：`http://localhost:3031/#/admin/login`

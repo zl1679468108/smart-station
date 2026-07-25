@@ -1473,3 +1473,84 @@
 | M136.2 | P0 | smoke-trial 探测三条批量补发路由 | scripts | done | 无 token 401/403 |
 | M136.3 | P1 | 试用清单补充库存再发/批量 smoke | TRIAL-CHECKLIST | done | |
 
+## M137 试用脚本与开发命令一致性（工程硬化）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M137.1 | P1 | 前端补充 `npm run dev` 别名 | frontend package | done | 与 Vite 习惯/历史文档兼容，仍保留 `npm run start` |
+| M137.2 | P1 | smoke-trial 修正前端启动提示与 stationId 编码 | scripts | done | 前端提示改为 `npm run start`；stationId URL 编码稳定传 env |
+| M137.3 | P2 | 开发/试用文档同步启动命令 | AGENTS + TRIAL-CHECKLIST | done | 本地启动指令与 package scripts 对齐 |
+
+## M138 补发失败再发回归测试（QA 硬化）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M138.1 | P1 | 库存详情补发失败显示再发入口测试 | inventory.spec | done | mock `resend-notice` 失败后断言回执 +「再发一次」 |
+| M138.2 | P1 | 异常页补发失败显示再发入口测试 | exception.spec | done | 覆盖异常卡片补发失败后的重试入口 |
+| M138.3 | P1 | 全量 Playwright 回归 | frontend/tests | done | 217 passed（2026-07-24）；批量导入未绑定确认、3D 编辑区、核心出库闭环同步稳定 |
+
+## M139 系统管理反馈一致性 + 文档漂移修正（工程硬化）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M139.1 | P1 | 员工管理编辑/启停失败去掉原生 alert | StaffTab | done | 改为统一系统提醒 + 页面内联错误 |
+| M139.2 | P1 | 员工子路由 mock 覆盖 | frontend/tests/helpers | done | 覆盖 update/status/reset-password，避免测试漏到真实后端 |
+| M139.3 | P1 | 员工状态失败反馈回归测试 | system.spec | done | 断言无原生 dialog，显示统一「操作失败」提醒 |
+| M139.4 | P2 | PRD 1.3.0 状态同步 | PRD | done | M24 已交付，版本矩阵不再标开发中 |
+| M139.5 | P2 | 大屏优化回归补齐 layout mock | optimization.spec | done | 避免 `/admin/dashboard?view=screen` 误落真实 layout-config 后回登录 |
+| M139.6 | P2 | 3D 导览测试去脆弱化 | e2e-flow + responsive + warehouse3d-variant | done | 改断言用户可见的取件位置指引，避免依赖 drei Html 投影标签 |
+| M139.7 | P1 | 全量前端回归验证 | frontend/tests | done | `npx playwright test` 218 passed；前端 `npx tsc --noEmit` + `npm run build` exit 0（2026-07-25） |
+
+## M140 通知记录补发确认一致性 + 权限测试口径同步（工程硬化）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M140.1 | P1 | 通知记录补发去掉原生 confirm | NotifyTab | done | 单条重发、本页批量、按手机号批量均改为页面内 Modal 确认 |
+| M140.2 | P1 | 通知记录/补发 mock 覆盖 | frontend/tests/helpers | done | 覆盖 logs、by-phone、单条 resend、批量 resend-batch，避免相关测试漏到真实后端 |
+| M140.3 | P1 | 通知补发确认回归测试 | system.spec | done | 断言页面内确认弹窗可见、无原生 dialog，确认后显示重发结果 |
+| M140.4 | P2 | 系统管理权限测试口径同步 | permission.spec + system.spec | done | Tab 测试从固定数量改为按权限语义，并覆盖「门店布局」「通知记录」 |
+| M140.5 | P2 | 核心 e2e 出库记录切换去抖 | e2e-flow.spec | done | 出库成功后等待弹窗卸载与全局加载结束，再切换出库记录 Tab |
+| M140.6 | P1 | 全量前端回归验证 | frontend/tests | done | `npx playwright test` 219 passed；前端 `npx tsc --noEmit` + `npm run build` exit 0（2026-07-25） |
+
+## M141 库存列表通知确认一致性（工程硬化）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M141.1 | P1 | 库存列表通知类操作去掉原生 confirm | Inventory | done | 单件补发到件、单件滞留提醒、批量补发、批量提醒、失败再发统一改为页面内 Modal |
+| M141.2 | P1 | 库存通知接口 mock 覆盖 | frontend/tests/helpers | done | 覆盖 inbound resend-notice/resend-notice-batch 与 overdue remind/remind-batch |
+| M141.3 | P1 | 库存确认回归测试 | inventory.spec | done | 新增单件/批量补发页面内确认测试，断言无原生 dialog；空异常原因断言统一提醒 |
+| M141.4 | P1 | 全量前端回归验证 | frontend/tests | done | `npx playwright test` 221 passed；前端 `npx tsc --noEmit` + `npm run build` exit 0（2026-07-25） |
+
+## M142 滞留提醒确认一致性 + 核心流稳定性（工程硬化）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M142.1 | P1 | 滞留件提醒类操作去掉原生 confirm | Overdue | done | 单件发提醒、本页发提醒、失败再发统一改为页面内 Modal |
+| M142.2 | P1 | 滞留提醒确认回归测试 | overdue.spec | done | 新增单件/本页提醒页面内确认测试，断言无原生 dialog |
+| M142.3 | P1 | 核心 e2e 出库记录 Tab 点击去抖 | e2e-flow.spec | done | 出库成功后重新获取 Tab 按钮并短重试，避免 React 重渲染导致 locator detached |
+| M142.4 | P1 | 全量前端回归验证 | frontend/tests | done | `npx playwright test` 223 passed；前端 `npx tsc --noEmit` + `npm run build` exit 0（2026-07-25） |
+
+## M143 异常件补发确认一致性（工程硬化）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M143.1 | P1 | 异常件补发到件去掉原生 confirm | Exception | done | 改为页面内 Modal，确认文案显示目标运单 |
+| M143.2 | P1 | 异常件补发请求逻辑去重 | Exception | done | 首次补发与失败再发共用 `resendInboundNotice` |
+| M143.3 | P1 | 异常件补发确认回归测试 | exception.spec | done | 断言页面内确认弹窗、无原生 dialog，失败后仍显示再发入口 |
+| M143.4 | P1 | 全量前端回归验证 | frontend/tests | done | `npx playwright test` 223 passed；前端 `npx tsc --noEmit` + `npm run build` exit 0（2026-07-25） |
+
+## M144 预约取消确认一致性（工程硬化）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M144.1 | P1 | 查件页取消预约去掉原生 confirm | PickupAppointmentCard | done | 改为页面内 Modal，确认文案展示预约日期与时段 |
+| M144.2 | P1 | 预约公开接口 mock 覆盖 | frontend/tests/helpers | done | 覆盖 slots、my、create、cancel，取消后 mock 状态同步为已取消 |
+| M144.3 | P1 | 预约取消确认回归测试 | query.spec | done | 断言页面内确认弹窗、无原生 dialog，取消后显示已取消 |
+| M144.4 | P1 | 全量前端回归验证 | frontend/tests | done | `npx playwright test` 224 passed；前端 `npx tsc --noEmit` + `npm run build` exit 0（2026-07-25） |
+
+## M145 寄件取消确认 + E2E 公共 mock 完整性（工程硬化）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M145.1 | P1 | 寄件单取消去掉原生 confirm | Shipping | done | 改为页面内 Modal，展示寄件单号与不可恢复提示 |
+| M145.2 | P1 | 寄件取消确认回归测试与状态 mock | shipping.spec + helpers | done | 断言无原生 dialog；确认后状态更新为「已取消」 |
+| M145.3 | P1 | 后台布局预取 mock + 核心出库闭环点击稳定 | helpers + e2e-flow.spec | done | 补齐 layout-config，避免真实后端 401 清除测试登录态；确认出库按钮使用稳定重试 |
+| M145.4 | P1 | 全量前端回归验证 | frontend/tests | done | `npx playwright test` 225 passed；核心闭环重复 10/10；前端 `npx tsc --noEmit` + `npm run build` exit 0（2026-07-25） |
+## M146 库存详情/入库确认一致性（工程硬化）
+| 编号 | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|------|--------|------|------|------|------|
+| M146.1 | P1 | 库存详情发滞留提醒去掉原生 confirm | inventory/Detail | done | 改为页面内 Modal |
+| M146.2 | P1 | 入库会话补发/批量预检/批量补发去掉原生 confirm | inbound/Inbound | done | 扫码会话再发、批量继续入库、本批私信失败/未私信补发统一 Modal |
+| M146.3 | P1 | 详情/入库确认回归测试 | inventory.spec + inbound.spec | done | 断言页面内确认弹窗、无原生 dialog |
+| M146.4 | P1 | 前端验证 | frontend | done | 全量 `npx playwright test` 226 passed；`npx tsc --noEmit` + `npm run build` exit 0；preflight/smoke-trial 通过（2026-07-25） |

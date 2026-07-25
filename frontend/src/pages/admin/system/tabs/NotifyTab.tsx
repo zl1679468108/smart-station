@@ -7,6 +7,7 @@ import type { NotifyBindingItem, NotifyLogItem, NotifyPhoneSummaryItem } from '@
 import { formatBeijingTimestamp } from '@/utils/date';
 import EmptyState from '@/components/ui/EmptyState';
 import Pagination from '@/components/ui/Pagination';
+import Modal from '@/components/ui/Modal';
 import { buildBindShareScript, buildUnboundFollowupScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
 import { notifyError, notifySuccess } from '@/utils/notification';
@@ -20,6 +21,14 @@ type LogFilter =
   | 'unbound'
   | 'pushed'
   | 'push_failed';
+
+type ResendConfirmState = {
+  title: string;
+  description: string;
+  confirmText: string;
+  tone?: 'primary' | 'warning';
+  onConfirm: () => Promise<void>;
+};
 
 const REACH_FILTERS: LogFilter[] = ['unbound', 'pushed', 'push_failed'];
 
@@ -87,6 +96,8 @@ const NotifyTab: React.FC = () => {
   const [phoneResending, setPhoneResending] = useState<string | null>(null);
   const [phoneBatchResending, setPhoneBatchResending] = useState(false);
   const [resendTip, setResendTip] = useState('');
+  const [batchHadFailure, setBatchHadFailure] = useState(false);
+  const [resendConfirm, setResendConfirm] = useState<ResendConfirmState | null>(null);
   const [reachToday, setReachToday] = useState<DashboardNotify | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const initialFilter = searchParams.get('filter') || '';
@@ -259,6 +270,7 @@ const NotifyTab: React.FC = () => {
   const applyLogFilter = (f: LogFilter) => {
     setLogFilter(f);
     setLogPage(1);
+    setBatchHadFailure(false);
     const next = new URLSearchParams(searchParams);
     if (f) next.set('filter', f);
     else next.delete('filter');
@@ -318,6 +330,7 @@ const NotifyTab: React.FC = () => {
   const onSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setLogPage(1);
+    setBatchHadFailure(false);
     const p = phoneInput.replace(/\D/g, '').slice(0, 11);
     setPhoneQuery(p);
     const next = new URLSearchParams(searchParams);
@@ -330,28 +343,40 @@ const NotifyTab: React.FC = () => {
     setPhoneInput('');
     setPhoneQuery('');
     setLogPage(1);
+    setBatchHadFailure(false);
     const next = new URLSearchParams(searchParams);
     next.delete('phone');
     setSearchParams(next, { replace: true });
   };
 
-  const onResend = async (log: NotifyLogItem) => {
+  const runConfirmedResend = () => {
+    const action = resendConfirm?.onConfirm;
+    if (!action) return;
+    setResendConfirm(null);
+    void action();
+  };
+
+  const onResend = (log: NotifyLogItem) => {
     if (!log.canResend || resendingId || batchResending) return;
-    const ok = window.confirm(
-      `确认向 ${log.phoneMasked} 重新发送「${log.templateLabel}」？\n\n若客户已绑定微信，将再次私信取件码；未绑定则仅通知群/管理员旁路。`,
-    );
-    if (!ok) return;
-    setResendingId(log.id);
-    setResendTip('');
-    try {
-      const r = await adminService.resendNotifyLog(log.id);
-      setResendTip(`${log.phoneMasked}：${r.staffMessage}`);
-      await load();
-    } catch (err) {
-      setResendTip(err instanceof Error ? err.message : '重发失败');
-    } finally {
-      setResendingId(null);
-    }
+    setResendConfirm({
+      title: '重新发送通知',
+      description: `确认向 ${log.phoneMasked} 重新发送「${log.templateLabel}」？若客户已绑定微信，将再次私信取件码；未绑定则仅通知群/管理员旁路。`,
+      confirmText: '确认重发',
+      onConfirm: async () => {
+        setResendingId(log.id);
+        setResendTip('');
+        setBatchHadFailure(false);
+        try {
+          const r = await adminService.resendNotifyLog(log.id);
+          setResendTip(`${log.phoneMasked}：${r.staffMessage}`);
+          await load();
+        } catch (err) {
+          setResendTip(err instanceof Error ? err.message : '重发失败');
+        } finally {
+          setResendingId(null);
+        }
+      },
+    });
   };
 
   const resendableOnPage = useMemo(
@@ -364,50 +389,63 @@ const NotifyTab: React.FC = () => {
     [logs],
   );
 
-  const onBatchResend = async () => {
+  const onBatchResend = () => {
     if (batchResending || resendingId || resendableOnPage.length === 0) return;
-    const ok = window.confirm(
-      logFilter === 'push_failed'
-        ? `确认对本页 ${resendableOnPage.length} 条「私信失败」记录重新发送？\n\n会再次走自动短重试；成功后客户微信会收到取件码。`
-        : `确认对本页 ${resendableOnPage.length} 条「未私信/私信失败」记录重新发送？\n\n已绑定的会再推取件码；仍未绑定的只会走群/管理员旁路。`,
-    );
-    if (!ok) return;
-    setBatchResending(true);
-    setResendTip('');
-    try {
-      const r = await adminService.resendNotifyLogsBatch(resendableOnPage.map((l) => l.id));
-      setResendTip(r.staffMessage);
-    } catch (err) {
-      setResendTip(err instanceof Error ? err.message : '一键补发失败');
-    } finally {
-      setBatchResending(false);
-      await load();
-    }
+    setResendConfirm({
+      title: logFilter === 'push_failed' ? '补发私信失败记录' : '批量补发通知',
+      description:
+        logFilter === 'push_failed'
+          ? `确认对本页 ${resendableOnPage.length} 条「私信失败」记录重新发送？会再次走自动短重试；成功后客户微信会收到取件码。`
+          : `确认对本页 ${resendableOnPage.length} 条「未私信/私信失败」记录重新发送？已绑定的会再推取件码；仍未绑定的只会走群/管理员旁路。`,
+      confirmText: '确认补发',
+      tone: 'warning',
+      onConfirm: async () => {
+        setBatchResending(true);
+        setResendTip('');
+        setBatchHadFailure(false);
+        try {
+          const r = await adminService.resendNotifyLogsBatch(resendableOnPage.map((l) => l.id));
+          setResendTip(r.staffMessage);
+          setBatchHadFailure((r.failed ?? 0) > 0);
+        } catch (err) {
+          setResendTip(err instanceof Error ? err.message : '一键补发失败');
+        } finally {
+          setBatchResending(false);
+          await load();
+        }
+      },
+    });
   };
 
 
-  const onResendPhoneLogs = async (logIds: string[], phoneKey?: string) => {
+  const onResendPhoneLogs = (logIds: string[], phoneKey?: string) => {
     const ids = (logIds || []).filter(Boolean);
     if (ids.length === 0 || phoneBatchResending || batchResending || resendingId || phoneResending) {
       return;
     }
-    const ok = window.confirm(
-      `对该客户 ${ids.length} 条可补发记录重新发送？\n\n已绑定会再推取件码；未绑定仍只会旁路通知。`,
-    );
-    if (!ok) return;
-    if (phoneKey) setPhoneResending(phoneKey);
-    else setPhoneBatchResending(true);
-    setResendTip('');
-    try {
-      const r = await adminService.resendNotifyLogsBatch(ids.slice(0, 40));
-      setResendTip(r.staffMessage);
-    } catch (err) {
-      setResendTip(err instanceof Error ? err.message : '补发失败');
-    } finally {
-      if (phoneKey) setPhoneResending(null);
-      else setPhoneBatchResending(false);
-      await load();
-    }
+    setResendConfirm({
+      title: phoneKey ? '补发该客户通知' : '补发本页客户通知',
+      description: `对该客户 ${Math.min(ids.length, 40)} 条可补发记录重新发送？已绑定会再推取件码；未绑定仍只会旁路通知。`,
+      confirmText: '确认补发',
+      tone: 'warning',
+      onConfirm: async () => {
+        if (phoneKey) setPhoneResending(phoneKey);
+        else setPhoneBatchResending(true);
+        setResendTip('');
+        setBatchHadFailure(false);
+        try {
+          const r = await adminService.resendNotifyLogsBatch(ids.slice(0, 40));
+          setResendTip(r.staffMessage);
+          setBatchHadFailure((r.failed ?? 0) > 0);
+        } catch (err) {
+          setResendTip(err instanceof Error ? err.message : '补发失败');
+        } finally {
+          if (phoneKey) setPhoneResending(null);
+          else setPhoneBatchResending(false);
+          await load();
+        }
+      },
+    });
   };
 
 
@@ -785,7 +823,20 @@ const NotifyTab: React.FC = () => {
 
       {resendTip && (
         <div className="rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-xs text-sky-800">
-          重发结果：{resendTip}
+          <p>重发结果：{resendTip}</p>
+          {batchHadFailure && (resendableOnPage.length > 0 || logFilter === 'push_failed') && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-sky-100 pt-2">
+              <span className="text-[11px] text-amber-800">仍有记录私信失败，可再补发一次</span>
+              <button
+                type="button"
+                onClick={() => onBatchResend()}
+                disabled={batchResending || Boolean(resendingId) || resendableOnPage.length === 0}
+                className="min-h-[32px] rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primaryHover disabled:opacity-60"
+              >
+                {batchResending ? '再补发中…' : '仍失败，再补发一次'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -853,7 +904,7 @@ const NotifyTab: React.FC = () => {
             {resendableOnPage.length > 0 && (
               <button
                 type="button"
-                onClick={() => void onBatchResend()}
+                onClick={() => onBatchResend()}
                 disabled={batchResending || Boolean(resendingId)}
                 className="min-h-[36px] rounded-md bg-primary px-3 text-xs font-medium text-white hover:bg-primaryHover disabled:opacity-60"
               >
@@ -948,7 +999,7 @@ const NotifyTab: React.FC = () => {
                     }
                     onClick={() => {
                       const ids = phoneSummaries.flatMap((r) => r.resendLogIds || []).slice(0, 40);
-                      void onResendPhoneLogs(ids);
+                      onResendPhoneLogs(ids);
                     }}
                     className="min-h-[36px] rounded-md bg-amber-600 px-3 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
                   >
@@ -1049,7 +1100,7 @@ const NotifyTab: React.FC = () => {
                                 phoneResending === row.phone
                               }
                               className="rounded-md bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-60"
-                              onClick={() => void onResendPhoneLogs(row.resendLogIds || [], row.phone)}
+                              onClick={() => onResendPhoneLogs(row.resendLogIds || [], row.phone)}
                             >
                               {phoneResending === row.phone
                                 ? '补发中…'
@@ -1190,7 +1241,7 @@ const NotifyTab: React.FC = () => {
                     {log.canResend && (
                       <button
                         type="button"
-                        onClick={() => void onResend(log)}
+                        onClick={() => onResend(log)}
                         disabled={resendingId === log.id || batchResending}
                         className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] text-gray-700 hover:border-primary hover:text-primary disabled:opacity-60"
                       >
@@ -1208,12 +1259,48 @@ const NotifyTab: React.FC = () => {
               totalPages={Math.max(1, Math.ceil(logTotal / logPageSize))}
               total={logTotal}
               pageSize={logPageSize}
-              onChange={setLogPage}
+              onChange={(p) => {
+                setLogPage(p);
+                setBatchHadFailure(false);
+              }}
               disabled={loading}
             />
           )}
         </div>
       )}
+
+      <Modal
+        open={Boolean(resendConfirm)}
+        onClose={() => setResendConfirm(null)}
+        title={resendConfirm?.title}
+        description={resendConfirm?.description}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setResendConfirm(null)}
+              className="min-h-[40px] rounded-md border border-gray-200 bg-white px-4 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={runConfirmedResend}
+              className={`min-h-[40px] rounded-md px-4 text-sm font-medium text-white ${
+                resendConfirm?.tone === 'warning'
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-primary hover:bg-primaryHover'
+              }`}
+            >
+              {resendConfirm?.confirmText || '确认'}
+            </button>
+          </>
+        }
+      >
+        <div className="rounded-md bg-orange-50 px-3 py-2 text-xs text-orange-900">
+          请确认客户信息和补发范围，避免重复打扰同一客户。
+        </div>
+      </Modal>
     </div>
   );
 };

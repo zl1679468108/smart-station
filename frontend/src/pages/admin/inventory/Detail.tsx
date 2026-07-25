@@ -17,6 +17,16 @@ import {
 import { useInvalidateDashboard } from '@/hooks/useDashboardData';
 import type { ParcelStatus } from '@/types/inventory';
 
+import Modal from '@/components/ui/Modal';
+
+type DetailConfirmState = {
+  title: string;
+  description: string;
+  confirmText: string;
+  tone?: 'primary' | 'warning';
+  onConfirm: () => Promise<void>;
+};
+
 const STATUS_META: Record<ParcelStatus, { label: string; cls: string }> = {
   in_stock: { label: '在库', cls: 'bg-info/10 text-info' },
   out_stock: { label: '已出库', cls: 'bg-success/10 text-success' },
@@ -71,11 +81,21 @@ const ParcelDetailPage: React.FC = () => {
     message: string;
     customerBound?: boolean;
     customerPushed?: boolean;
+    failed?: boolean;
   } | null>(null);
   const [remindingOverdue, setRemindingOverdue] = useState(false);
   const [lastRemindHint, setLastRemindHint] = useState<string | null>(null);
   const [lastRemindUnbound, setLastRemindUnbound] = useState(false);
   const [lastRemindPushFailed, setLastRemindPushFailed] = useState(false);
+
+  const [detailConfirm, setDetailConfirm] = useState<DetailConfirmState | null>(null);
+
+  const runDetailConfirm = () => {
+    const action = detailConfirm?.onConfirm;
+    if (!action) return;
+    setDetailConfirm(null);
+    void action();
+  };
 
   useEffect(() => {
     if (!detail) return;
@@ -220,6 +240,7 @@ const ParcelDetailPage: React.FC = () => {
                       invalidateList();
                       invalidateDashboard();
                     } catch (e: any) {
+                      setLastNotify({ message: '补发失败，可再发一次', failed: true });
                       notifyError(e?.message || '补发失败');
                     } finally {
                       setResendingNotice(false);
@@ -234,27 +255,32 @@ const ParcelDetailPage: React.FC = () => {
                     type="button"
                     disabled={remindingOverdue}
                     className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800 hover:bg-amber-100 disabled:opacity-60"
-                    onClick={async () => {
+                    onClick={() => {
                       if (remindingOverdue || !id) return;
-                      const ok = window.confirm(
-                        '向客户补发滞留提醒？\n\n已绑定微信会私信取件码；未绑定仅旁路通知（不含取件码）。',
-                      );
-                      if (!ok) return;
-                      setRemindingOverdue(true);
-                      try {
-                        const r = await overdueService.remindOverdue(id);
-                        setLastRemindHint(r.staffMessage || '提醒已发送');
-                        setLastRemindUnbound(!r.customerBound);
-                        setLastRemindPushFailed(Boolean(r.customerBound && !r.customerPushed));
-                        notifySuccess(r.staffMessage || '提醒已发送');
-                        invalidateDetail();
-                        invalidateList();
-                        invalidateDashboard();
-                      } catch (e: any) {
-                        notifyError(e?.message || '发送失败');
-                      } finally {
-                        setRemindingOverdue(false);
-                      }
+                      setDetailConfirm({
+                        title: '补发滞留提醒',
+                        description:
+                          '向客户补发滞留提醒？已绑定微信会私信取件码；未绑定仅旁路通知（不含取件码）。',
+                        confirmText: '确认发送',
+                        tone: 'warning',
+                        onConfirm: async () => {
+                          setRemindingOverdue(true);
+                          try {
+                            const r = await overdueService.remindOverdue(id);
+                            setLastRemindHint(r.staffMessage || '提醒已发送');
+                            setLastRemindUnbound(!r.customerBound);
+                            setLastRemindPushFailed(Boolean(r.customerBound && !r.customerPushed));
+                            notifySuccess(r.staffMessage || '提醒已发送');
+                            invalidateDetail();
+                            invalidateList();
+                            invalidateDashboard();
+                          } catch (e: any) {
+                            notifyError(e?.message || '发送失败');
+                          } finally {
+                            setRemindingOverdue(false);
+                          }
+                        },
+                      });
                     }}
                   >
                     {remindingOverdue ? '提醒中…' : '发滞留提醒'}
@@ -263,7 +289,13 @@ const ParcelDetailPage: React.FC = () => {
               </div>
             )}
             {lastNotify && (
-              <div className="mt-2 rounded-md border border-orange-100 bg-orange-50 px-3 py-2 text-xs text-orange-900">
+              <div
+                className={`mt-2 rounded-md border px-3 py-2 text-xs ${
+                  lastNotify.failed
+                    ? 'border-amber-200 bg-amber-50 text-amber-900'
+                    : 'border-orange-100 bg-orange-50 text-orange-900'
+                }`}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <p>到件通知回执：{lastNotify.message}</p>
                   <button
@@ -293,6 +325,7 @@ const ParcelDetailPage: React.FC = () => {
                           notifySuccess(r.staffMessage || '已再发');
                           invalidateDashboard();
                         } catch (e: any) {
+                          setLastNotify({ message: '补发失败，可再发一次', failed: true });
                           notifyError(e?.message || '再发失败');
                         } finally {
                           setResendingNotice(false);
@@ -309,6 +342,38 @@ const ParcelDetailPage: React.FC = () => {
                       }
                     >
                       看今日私信失败
+                    </button>
+                  </div>
+                )}
+                {lastNotify.failed && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      disabled={resendingNotice}
+                      className="rounded-md bg-amber-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                      onClick={async () => {
+                        if (resendingNotice || !id) return;
+                        setResendingNotice(true);
+                        try {
+                          const r = await inboundService.resendInboundNotice(id);
+                          setLastNotify({
+                            message: r.staffMessage || '已再发',
+                            customerBound: r.customerBound,
+                            customerPushed: r.customerPushed,
+                          });
+                          notifySuccess(r.staffMessage || '已再发');
+                          invalidateDetail();
+                          invalidateList();
+                          invalidateDashboard();
+                        } catch (e: any) {
+                          setLastNotify({ message: '补发失败，可再发一次', failed: true });
+                          notifyError(e?.message || '再发失败');
+                        } finally {
+                          setResendingNotice(false);
+                        }
+                      }}
+                    >
+                      {resendingNotice ? '再发中…' : '再发一次'}
                     </button>
                   </div>
                 )}
@@ -673,6 +738,38 @@ const ParcelDetailPage: React.FC = () => {
           </ol>
         )}
       </section>
+      <Modal
+        open={Boolean(detailConfirm)}
+        onClose={() => setDetailConfirm(null)}
+        title={detailConfirm?.title}
+        description={detailConfirm?.description}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setDetailConfirm(null)}
+              className="min-h-[40px] rounded-md border border-gray-200 bg-white px-4 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={runDetailConfirm}
+              className={`min-h-[40px] rounded-md px-4 text-sm font-medium text-white ${
+                detailConfirm?.tone === 'warning'
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-primary hover:bg-primaryHover'
+              }`}
+            >
+              {detailConfirm?.confirmText || '确认'}
+            </button>
+          </>
+        }
+      >
+        <div className="rounded-md bg-orange-50 px-3 py-2 text-xs text-orange-900">
+          完整取件码只会私信给已绑定客户。
+        </div>
+      </Modal>
     </div>
   );
 };

@@ -334,6 +334,91 @@ export const DASHBOARD_DATA = {
   todo: { overdueWarn: 3, exceptionUnresolved: 1 },
 };
 
+export const NOTIFY_LOGS = [
+  {
+    id: 'nl-001',
+    templateCode: 'inbound_notice',
+    templateLabel: '到件通知',
+    phone: '13800001234',
+    phoneMasked: '138****1234',
+    recipientName: '张三',
+    content: '【测试驿站一】您有包裹已到，取件码 1-1-1001，请凭码到对应货架取件。',
+    status: 'sent',
+    statusLabel: '已发送',
+    errorMessage: null,
+    channels: [
+      { key: 'customer', ok: false, label: '客户未绑定' },
+      { key: 'wecom', ok: true, label: '通知群已发脱敏公告' },
+    ],
+    channelSummary: '通知群已发脱敏公告',
+    customerReach: 'unbound' as const,
+    customerReachLabel: '未私信',
+    canResend: true,
+    parcelId: 'p-001',
+    sentAt: '2026-07-16 10:01:00.000',
+    createdAt: '2026-07-16 10:01:00.000',
+  },
+  {
+    id: 'nl-002',
+    templateCode: 'inbound_notice',
+    templateLabel: '到件通知',
+    phone: '13900005678',
+    phoneMasked: '139****5678',
+    recipientName: '李四',
+    content: '【测试驿站一】您有包裹已到，取件码 2-2-2002，请凭码到对应货架取件。',
+    status: 'sent',
+    statusLabel: '已发送',
+    errorMessage: null,
+    channels: [{ key: 'customer', ok: false, label: '客户私信失败' }],
+    channelSummary: '客户私信失败',
+    customerReach: 'push_failed' as const,
+    customerReachLabel: '私信失败',
+    canResend: true,
+    parcelId: 'p-002',
+    sentAt: '2026-07-16 10:05:00.000',
+    createdAt: '2026-07-16 10:05:00.000',
+  },
+];
+
+export const NOTIFY_PHONE_SUMMARIES = [
+  {
+    phone: '13800001234',
+    phoneMasked: '138****1234',
+    recipientName: '张三',
+    total: 1,
+    sent: 1,
+    failed: 0,
+    unbound: 1,
+    pushed: 0,
+    pushFailed: 0,
+    lastAt: '2026-07-16 10:01:00.000',
+    lastTemplateCode: 'inbound_notice',
+    lastTemplateLabel: '到件通知',
+    lastReach: 'unbound' as const,
+    lastReachLabel: '未私信',
+    hasBinding: false,
+    resendLogIds: ['nl-001'],
+  },
+  {
+    phone: '13900005678',
+    phoneMasked: '139****5678',
+    recipientName: '李四',
+    total: 1,
+    sent: 1,
+    failed: 0,
+    unbound: 0,
+    pushed: 0,
+    pushFailed: 1,
+    lastAt: '2026-07-16 10:05:00.000',
+    lastTemplateCode: 'inbound_notice',
+    lastTemplateLabel: '到件通知',
+    lastReach: 'push_failed' as const,
+    lastReachLabel: '私信失败',
+    hasBinding: true,
+    resendLogIds: ['nl-002'],
+  },
+];
+
 // ===== Mock 响应辅助 =====
 
 function ok<T>(data: T) {
@@ -416,6 +501,160 @@ export async function mockBusinessApis(page: Page) {
       contentType: 'application/json',
       body: JSON.stringify(ok(DASHBOARD_DATA)),
     });
+  });
+
+  await page.route('**/api/stats/dashboard/events**', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok([])),
+    });
+  });
+
+  await page.route('**/api/stats/bind-conversion**', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        days: 7,
+        summary: {
+          inboundNotices: 10,
+          customerPushed: 8,
+          customerUnbound: 2,
+          customerPushFailed: 0,
+          uniqueRecipients: 8,
+          uniquePushedRecipients: 6,
+          newBindings: 2,
+          activeBindings: 6,
+          pushRate: 80,
+          coverRate: 75,
+          bindRate: 25,
+        },
+        points: [],
+      })),
+    });
+  });
+
+  await page.route('**/api/shifts/current', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok(null)),
+    });
+  });
+
+  // 后台布局配置会在管理端初始化时预取，默认 mock 避免请求落到真实后端触发 401。
+  await page.route('**/api/admin/station/layout-config', (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        stationId: 'st-001',
+        stationName: '测试驿站一',
+        layoutConfig: DEFAULT_LAYOUT_CONFIG,
+      })),
+    });
+  });
+
+  await page.route('**/api/admin/notify/bindings**', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+      })),
+    });
+  });
+
+  await page.route('**/api/admin/notify/logs**', (route) => {
+    const url = new URL(route.request().url());
+    const method = route.request().method();
+    const pathname = url.pathname;
+
+    if (method === 'POST' && pathname.endsWith('/resend-batch')) {
+      const body = JSON.parse(route.request().postData() || '{}');
+      const ids = Array.isArray(body.ids) ? body.ids : [];
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({
+          total: ids.length,
+          pushed: ids.length,
+          failed: 0,
+          staffMessage: `已补发 ${ids.length} 条通知`,
+          results: ids.map((id: string) => ({
+            logId: id,
+            ok: true,
+            customerBound: true,
+            customerPushed: true,
+            phoneMasked: NOTIFY_LOGS.find((log) => log.id === id)?.phoneMasked,
+          })),
+        })),
+      });
+      return;
+    }
+
+    const resendMatch = pathname.match(/\/api\/admin\/notify\/logs\/([^/]+)\/resend$/);
+    if (method === 'POST' && resendMatch) {
+      const id = decodeURIComponent(resendMatch[1]);
+      const log = NOTIFY_LOGS.find((item) => item.id === id) || NOTIFY_LOGS[0];
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({
+          logId: id,
+          templateCode: log.templateCode,
+          templateLabel: log.templateLabel,
+          phoneMasked: log.phoneMasked,
+          attempted: true,
+          customerBound: true,
+          customerPushed: true,
+          customerChannels: ['customer'],
+          staffMessage: '取件码已私信到客户微信',
+          channelResults: [{ key: 'customer', ok: true, label: '客户微信已私信' }],
+        })),
+      });
+      return;
+    }
+
+    if (method === 'GET' && pathname.endsWith('/by-phone')) {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({
+          items: NOTIFY_PHONE_SUMMARIES,
+          total: NOTIFY_PHONE_SUMMARIES.length,
+          scanned: NOTIFY_LOGS.length,
+          days: Number(url.searchParams.get('days') || 1),
+          excludeBound: url.searchParams.get('excludeBound') === '1',
+        })),
+      });
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/admin/notify/logs') {
+      const reach = url.searchParams.get('reach');
+      const items = reach
+        ? NOTIFY_LOGS.filter((log) => log.customerReach === reach)
+        : NOTIFY_LOGS;
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({
+          items,
+          total: items.length,
+          page: Number(url.searchParams.get('page') || 1),
+          pageSize: Number(url.searchParams.get('limit') || 40),
+        })),
+      });
+      return;
+    }
+
+    route.fallback();
   });
 
   // ===== Inventory（只读接口，店员可访问） =====
@@ -533,6 +772,44 @@ export async function mockBusinessApis(page: Page) {
   });
 
   // ===== Inbound =====
+  await page.route('**/api/inbound/check-tracking', async (route) => {
+    const body = JSON.parse(route.request().postData() || '{}');
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        exists: false,
+        trackingNumber: body.trackingNumber || '',
+        message: '可入库',
+      })),
+    });
+  });
+
+  await page.route('**/api/inbound/check-tracking-batch', async (route) => {
+    const body = JSON.parse(route.request().postData() || '{}');
+    const trackingNumbers: string[] = body.trackingNumbers || [];
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        total: trackingNumbers.length,
+        ready: trackingNumbers.length,
+        blocked: 0,
+        stockDuplicate: 0,
+        batchDuplicate: 0,
+        staffMessage: `预检完成：${trackingNumbers.length} 条可导入`,
+        items: trackingNumbers.map((trackingNumber, index) => ({
+          index,
+          trackingNumber,
+          exists: false,
+          inBatchDuplicate: false,
+          blocked: false,
+          message: '可导入',
+        })),
+      })),
+    });
+  });
+
   await page.route('**/api/inbound', (route) => {
     if (route.request().method() !== 'POST') return route.continue();
     const body = JSON.parse(route.request().postData() || '{}');
@@ -554,15 +831,79 @@ export async function mockBusinessApis(page: Page) {
   });
 
   await page.route('**/api/inbound/batch', (route) => {
+    const body = JSON.parse(route.request().postData() || '{}');
+    const items = body.items || [];
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(ok({
-        total: 2,
-        succeeded: 2,
+        total: items.length,
+        succeeded: items.length,
         failed: 0,
-        results: [],
+        results: items.map((item: any, index: number) => ({
+          index,
+          result: {
+            id: `p-batch-${index + 1}`,
+            trackingNumber: item.trackingNumber,
+            recipientName: item.recipientName,
+            recipientPhone: item.recipientPhone,
+            pickupCode: `${index + 1}-1-${1001 + index}`,
+            shelfNumber: index + 1,
+            shelfLayer: 1,
+            shelfPosition: index + 1,
+            inboundAt: '2026-07-16 15:00:00.000',
+            courierCompanyCode: 'SF',
+            courierCompanyName: '顺丰速运',
+          },
+        })),
         errors: [],
+      })),
+    });
+  });
+
+  await page.route('**/api/inbound/resend-notice-batch', (route) => {
+    const body = JSON.parse(route.request().postData() || '{}');
+    const ids: string[] = Array.isArray(body.ids) ? body.ids : [];
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        total: ids.length,
+        pushed: ids.length,
+        unbound: 0,
+        failed: 0,
+        staffMessage: `已补发 ${ids.length} 件到件通知`,
+        results: ids.map((id) => ({
+          id,
+          ok: true,
+          enabled: true,
+          attempted: true,
+          customerBound: true,
+          customerPushed: true,
+          customerChannels: ['customer'],
+          staffMessage: '取件码已私信到客户微信',
+        })),
+      })),
+    });
+  });
+
+  await page.route('**/api/inbound/*/resend-notice', (route) => {
+    const url = new URL(route.request().url());
+    const id = url.pathname.split('/').slice(-2)[0];
+    const parcel = PARCELS.find((p) => p.id === id) || PARCELS[0];
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        id,
+        enabled: true,
+        attempted: true,
+        customerBound: true,
+        customerPushed: true,
+        customerChannels: ['customer'],
+        staffMessage: '取件码已私信到客户微信',
+        trackingNumber: parcel.trackingNumber,
+        pickupCode: parcel.pickupCode,
       })),
     });
   });
@@ -580,6 +921,7 @@ export async function mockBusinessApis(page: Page) {
             recipientName: '张三',
             recipientPhone: '13800001234',
             pickupCode: '1-1-1001',
+            status: 'in_stock',
             inboundAt: '2026-07-16 10:00:00.000',
             courierName: '顺丰速运',
           },
@@ -684,6 +1026,48 @@ export async function mockBusinessApis(page: Page) {
     }
   });
 
+  await page.route('**/api/admin/staff/**', (route) => {
+    const method = route.request().method();
+    const url = new URL(route.request().url());
+    const parts = url.pathname.split('/');
+    const id = parts[parts.indexOf('staff') + 1];
+    const staff = [
+      { id: 'sf-001', role: 'admin', status: 'active', joinedAt: '2026-07-01 00:00:00.000', userId: 'u-001', phone: '13800000001', email: 'admin@station.com', username: '管理员', avatarUrl: null, userStatus: 'active' },
+      { id: 'sf-002', role: 'clerk', status: 'active', joinedAt: '2026-07-02 00:00:00.000', userId: 'u-002', phone: '13800000002', email: null, username: '店员甲', avatarUrl: null, userStatus: 'active' },
+    ].find((item) => item.id === id);
+
+    if (method === 'PUT') {
+      const body = JSON.parse(route.request().postData() || '{}');
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({ ...(staff || { id }), ...body })),
+      });
+      return;
+    }
+
+    if (method === 'PATCH' && url.pathname.endsWith('/status')) {
+      const body = JSON.parse(route.request().postData() || '{}');
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({ id, status: body.status || 'active' })),
+      });
+      return;
+    }
+
+    if (method === 'PATCH' && url.pathname.endsWith('/reset-password')) {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({ id, newPassword: 'Reset1234' })),
+      });
+      return;
+    }
+
+    route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify(fail('员工不存在')) });
+  });
+
   await page.route('**/api/admin/shelves', (route) => {
     if (route.request().method() === 'GET') {
       route.fulfill({
@@ -782,6 +1166,109 @@ export async function mockBusinessApis(page: Page) {
     });
   });
 
+  let appointmentCancelled = false;
+  await page.route('**/api/kiosk/appointment**', (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    const appointment = {
+      id: '11111111-1111-1111-1111-111111111111',
+      stationId: 'st-001',
+      recipientPhone: '****1234',
+      recipientPhoneFull: '13800001234',
+      recipientName: '张三',
+      slotDate: '2026-07-25',
+      slotStart: '10:00',
+      slotEnd: '10:30',
+      slotLabel: '10:00-10:30',
+      note: null,
+      status: appointmentCancelled ? 'cancelled' as const : 'confirmed' as const,
+      statusLabel: appointmentCancelled ? '已取消' : '已确认',
+      source: 'public',
+      cancelReason: null,
+      handledBy: null,
+      handledByName: null,
+      handledAt: null,
+      createdAt: '2026-07-24 10:00:00.000',
+      updatedAt: '2026-07-24 10:00:00.000',
+      notifyHint: '预约已确认，请按时到店',
+    };
+
+    if (req.method() === 'GET' && url.pathname.endsWith('/api/kiosk/appointment/slots')) {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({
+          stationId: 'st-001',
+          stationName: '测试驿站一',
+          businessHours: '08:00-22:00',
+          address: '测试地址 100 号',
+          contactPhone: '010-12345678',
+          maxPerSlot: 6,
+          days: [
+            {
+              date: '2026-07-25',
+              weekday: '周六',
+              isToday: true,
+              slots: [
+                {
+                  start: '10:00',
+                  end: '10:30',
+                  label: '10:00-10:30',
+                  booked: 1,
+                  remaining: 5,
+                  available: true,
+                  reason: null,
+                },
+              ],
+            },
+          ],
+        })),
+      });
+      return;
+    }
+
+    if (req.method() === 'POST' && url.pathname.endsWith('/api/kiosk/appointment/my')) {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({ items: [appointment] })),
+      });
+      return;
+    }
+
+    if (req.method() === 'POST' && url.pathname.endsWith('/cancel')) {
+      appointmentCancelled = true;
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({
+          ...appointment,
+          status: 'cancelled',
+          statusLabel: '已取消',
+          cancelReason: '用户自助取消',
+          updatedAt: '2026-07-24 10:05:00.000',
+        })),
+      });
+      return;
+    }
+
+    if (req.method() === 'POST' && url.pathname.endsWith('/api/kiosk/appointment')) {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(ok({
+          ...appointment,
+          status: 'pending',
+          statusLabel: '待确认',
+          notifyHint: '预约成功，请等待店员确认',
+        })),
+      });
+      return;
+    }
+
+    route.fallback();
+  });
+
   // ===== Overdue（滞留件，M24） =====
   await page.route('**/api/overdue/scan', (route) => {
     route.fulfill({
@@ -807,6 +1294,48 @@ export async function mockBusinessApis(page: Page) {
       body: JSON.stringify(ok({
         id,
         returnStage: body.action === 'complete' ? 'returned' : 'returning',
+      })),
+    });
+  });
+
+  await page.route('**/api/overdue/remind-batch', (route) => {
+    const body = JSON.parse(route.request().postData() || '{}');
+    const ids: string[] = Array.isArray(body.ids) ? body.ids : [];
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        total: ids.length,
+        pushed: ids.length,
+        unbound: 0,
+        failed: 0,
+        staffMessage: `已发送 ${ids.length} 条滞留提醒`,
+        results: ids.map((id) => ({
+          id,
+          ok: true,
+          customerBound: true,
+          customerPushed: true,
+          staffMessage: '滞留提醒已私信到客户微信',
+        })),
+      })),
+    });
+  });
+
+  await page.route('**/api/overdue/*/remind', (route) => {
+    const url = new URL(route.request().url());
+    const id = url.pathname.split('/').slice(-2)[0];
+    const item = OVERDUE_ITEMS.find((p) => p.id === id);
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        id,
+        days: item?.days ?? 4,
+        trackingNumber: item?.trackingNumber,
+        pickupCode: item?.pickupCode,
+        customerBound: true,
+        customerPushed: true,
+        staffMessage: '滞留提醒已私信到客户微信',
       })),
     });
   });
@@ -924,9 +1453,13 @@ export async function mockBusinessApis(page: Page) {
   });
 
   // ===== Shipping（寄件，M25） =====
+  const shippingStatusById = new Map<string, string>();
   await page.route('**/api/shipping/list**', (route) => {
     const url = new URL(route.request().url());
-    let items = [...SHIPPINGS];
+    let items = SHIPPINGS.map((item) => ({
+      ...item,
+      status: (shippingStatusById.get(item.id) || item.status) as typeof item.status,
+    }));
     const status = url.searchParams.get('status');
     if (status) items = items.filter((i) => i.status === status);
     const pickupType = url.searchParams.get('pickupType');
@@ -987,6 +1520,7 @@ export async function mockBusinessApis(page: Page) {
     const url = new URL(route.request().url());
     const id = url.pathname.split('/').slice(-2)[0];
     const body = JSON.parse(route.request().postData() || '{}');
+    if (body.status) shippingStatusById.set(id, body.status);
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -1055,6 +1589,25 @@ export async function mockBusinessApis(page: Page) {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(ok(RATES)),
+    });
+  });
+
+  await page.route('**/api/finance/cash-day**', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(ok({
+        date: '2026-07-16',
+        total: 128,
+        freightTotal: 28,
+        codTotal: 100,
+        byMethod: { cash: 20, wechat: 88, alipay: 20, other: 0 },
+        paidCount: 3,
+        waivedCount: 0,
+        waivedTotal: 0,
+        unpaidInStock: 1,
+        items: [],
+      })),
     });
   });
 

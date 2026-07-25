@@ -69,6 +69,28 @@ test.describe('库存列表', () => {
     await page.getByRole('button', { name: '详情' }).first().click();
     await expect(page).toHaveURL(/\/admin\/inventory\/p-\d+/);
   });
+
+  test('补发到件使用页面内确认弹窗，不弹原生 confirm', async ({ page }) => {
+    let nativeDialogSeen = false;
+    page.on('dialog', async (dialog) => {
+      nativeDialogSeen = true;
+      await dialog.dismiss();
+    });
+
+    await page.goto('/#/admin/inventory');
+    await expect(page.getByText('SF1234567890')).toBeVisible({ timeout: 8000 });
+    const firstRow = page.getByRole('row').filter({ hasText: 'SF1234567890' });
+    await firstRow.getByRole('button', { name: '补发到件' }).click();
+
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: '补发到件通知' })).toBeVisible();
+    await expect(page.getByRole('dialog').getByText(/运单 SF1234567890/)).toBeVisible();
+    expect(nativeDialogSeen).toBe(false);
+
+    await page.getByRole('button', { name: '确认补发' }).click();
+    await expect(page.getByText('取件码已私信到客户微信').first()).toBeVisible({ timeout: 8000 });
+    expect(nativeDialogSeen).toBe(false);
+  });
 });
 
 test.describe('库存详情页', () => {
@@ -86,6 +108,44 @@ test.describe('库存详情页', () => {
     await page.goto('/#/admin/inventory/p-001');
     await expect(page.getByText('扫码入库').first()).toBeVisible({ timeout: 8000 });
     await expect(page.getByText('管理员').first()).toBeVisible();
+  });
+
+  test('补发到件失败后显示再发入口', async ({ page }) => {
+    await page.route('**/api/inbound/*/resend-notice', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: false, message: '模拟私信失败', data: null }),
+      });
+    });
+
+    await page.goto('/#/admin/inventory/p-001');
+    await expect(page.getByText('SF1234567890')).toBeVisible({ timeout: 8000 });
+    await page.getByRole('button', { name: '补发到件通知' }).click();
+
+    await expect(page.getByText('到件通知回执：补发失败，可再发一次')).toBeVisible();
+    await expect(page.getByRole('button', { name: '再发一次' })).toBeVisible();
+  });
+
+  test('发滞留提醒使用页面内确认弹窗，不弹原生 confirm', async ({ page }) => {
+    let nativeDialogSeen = false;
+    page.on('dialog', async (dialog) => {
+      nativeDialogSeen = true;
+      await dialog.dismiss();
+    });
+
+    await page.goto('/#/admin/inventory/p-002');
+    await expect(page.getByText('ZTO9876543210')).toBeVisible({ timeout: 8000 });
+    await page.getByRole('button', { name: '发滞留提醒' }).click();
+
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: '补发滞留提醒' })).toBeVisible();
+    await expect(page.getByRole('dialog').getByText(/向客户补发滞留提醒/)).toBeVisible();
+    expect(nativeDialogSeen).toBe(false);
+
+    await page.getByRole('button', { name: '确认发送' }).click();
+    await expect(page.getByText(/提醒已发送|已发送|滞留提醒/).first()).toBeVisible({ timeout: 8000 });
+    expect(nativeDialogSeen).toBe(false);
   });
 });
 
@@ -123,18 +183,20 @@ test.describe('批量操作', () => {
     await expect(page.getByRole('button', { name: '确认标记' })).toBeVisible();
   });
 
-  test('不填原因确认显示 alert', async ({ page }) => {
+  test('不填原因确认显示统一提醒', async ({ page }) => {
     await page.goto('/#/admin/inventory');
     await expect(page.getByText('SF1234567890')).toBeVisible({ timeout: 8000 });
     await page.locator('tbody input[type="checkbox"]').first().check();
     await page.getByText('批量标记异常').click();
 
-    // 监听 dialog
+    let nativeDialogSeen = false;
     page.on('dialog', async (dialog) => {
-      expect(dialog.message()).toContain('请输入异常原因');
-      await dialog.accept();
+      nativeDialogSeen = true;
+      await dialog.dismiss();
     });
     await page.getByRole('button', { name: '确认标记' }).click();
+    await expect(page.getByRole('alert').getByText('请输入异常原因')).toBeVisible();
+    expect(nativeDialogSeen).toBe(false);
   });
 
   test('填原因确认标记成功', async ({ page }) => {
@@ -155,6 +217,30 @@ test.describe('批量操作', () => {
     await page.locator('tbody input[type="checkbox"]').first().check();
     await page.getByText('清除选择').click();
     await expect(page.getByText(/已选 \d+ 项/)).toBeHidden();
+  });
+
+  test('批量补发到件使用页面内确认弹窗', async ({ page }) => {
+    let nativeDialogSeen = false;
+    page.on('dialog', async (dialog) => {
+      nativeDialogSeen = true;
+      await dialog.dismiss();
+    });
+
+    await page.goto('/#/admin/inventory');
+    await expect(page.getByText('SF1234567890')).toBeVisible({ timeout: 8000 });
+    await page.locator('tbody input[type="checkbox"]').first().check();
+    await page.getByRole('button', { name: '批量补发到件' }).click();
+
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: '批量补发到件通知' })).toBeVisible();
+    await expect(page.getByRole('dialog').getByText(/对已选 1 件/)).toBeVisible();
+    expect(nativeDialogSeen).toBe(false);
+
+    await page.getByRole('button', { name: '确认补发' }).click();
+    await expect(page.getByText('已补发 1 件到件通知', { exact: true }).first()).toBeVisible({
+      timeout: 8000,
+    });
+    expect(nativeDialogSeen).toBe(false);
   });
 });
 

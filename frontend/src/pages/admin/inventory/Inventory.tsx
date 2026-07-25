@@ -51,6 +51,14 @@ type FilterFormState = {
   endDate: string;
 };
 
+type InventoryConfirmState = {
+  title: string;
+  description: string;
+  confirmText: string;
+  tone?: 'primary' | 'warning';
+  onConfirm: () => Promise<void>;
+};
+
 const EMPTY_FILTER_FORM: FilterFormState = {
   phone: '',
   trackingNumber: '',
@@ -135,77 +143,92 @@ const Inventory: React.FC = () => {
     failed: number;
     failedIds: string[];
   } | null>(null);
+  const [inventoryConfirm, setInventoryConfirm] = useState<InventoryConfirmState | null>(null);
 
   const isRemindable = (item: ParcelListItem) =>
     item.status === 'overdue' ||
     (item.status === 'in_stock' && (item.daysInStock ?? 0) >= 3);
 
-  const onRemindOverdue = async (item: ParcelListItem) => {
+  const runInventoryConfirm = () => {
+    const action = inventoryConfirm?.onConfirm;
+    if (!action) return;
+    setInventoryConfirm(null);
+    void action();
+  };
+
+  const onRemindOverdue = (item: ParcelListItem) => {
     if (!writable || remindingId || batchReminding || resendingNoticeId || retryingFailed) return;
     if (!isRemindable(item)) {
       notifyError('仅滞留件或在库满 3 天可发提醒');
       return;
     }
-    const ok = window.confirm(
-      `向客户补发滞留提醒？\n运单 ${item.trackingNumber}\n\n已绑定微信会私信取件码；未绑定仅旁路通知（不含取件码）。`,
-    );
-    if (!ok) return;
-    setRemindingId(item.id);
-    try {
-      const r = await overdueService.remindOverdue(item.id);
-      notifySuccess(r.staffMessage || '提醒已发送');
-      setLastNotifyReach({
-        kind: 'overdue_remind',
-        title: '滞留提醒触达',
-        staffMessage: r.staffMessage || '提醒已发送',
-        pushed: r.customerPushed ? 1 : 0,
-        unbound: r.customerBound ? 0 : 1,
-        failed: r.customerBound && !r.customerPushed ? 1 : 0,
-        failedIds: r.customerBound && !r.customerPushed ? [item.id] : [],
-      });
-    } catch (e: any) {
-      notifyError(e?.message || '发送失败');
-    } finally {
-      setRemindingId(null);
-    }
+    setInventoryConfirm({
+      title: '补发滞留提醒',
+      description: `向客户补发滞留提醒？运单 ${item.trackingNumber}。已绑定微信会私信取件码；未绑定仅旁路通知（不含取件码）。`,
+      confirmText: '确认发送',
+      tone: 'warning',
+      onConfirm: async () => {
+        setRemindingId(item.id);
+        try {
+          const r = await overdueService.remindOverdue(item.id);
+          notifySuccess(r.staffMessage || '提醒已发送');
+          setLastNotifyReach({
+            kind: 'overdue_remind',
+            title: '滞留提醒触达',
+            staffMessage: r.staffMessage || '提醒已发送',
+            pushed: r.customerPushed ? 1 : 0,
+            unbound: r.customerBound ? 0 : 1,
+            failed: r.customerBound && !r.customerPushed ? 1 : 0,
+            failedIds: r.customerBound && !r.customerPushed ? [item.id] : [],
+          });
+        } catch (e: any) {
+          notifyError(e?.message || '发送失败');
+        } finally {
+          setRemindingId(null);
+        }
+      },
+    });
   };
 
   
   const canResendInboundNotice = (item: ParcelListItem) =>
     item.status === 'in_stock' || item.status === 'overdue';
 
-  const onResendInboundNotice = async (item: ParcelListItem) => {
+  const onResendInboundNotice = (item: ParcelListItem) => {
     if (!writable || resendingNoticeId || batchReminding || remindingId || retryingFailed) return;
     if (!canResendInboundNotice(item)) {
       notifyError('仅在库/滞留件可补发到件通知');
       return;
     }
-    const ok = window.confirm(
-      `补发到件通知？\n运单 ${item.trackingNumber}\n\n已绑定微信会私信取件码；未绑定请当面报码或引导绑定后再试。`,
-    );
-    if (!ok) return;
-    setResendingNoticeId(item.id);
-    try {
-      const r = await inboundService.resendInboundNotice(item.id);
-      notifySuccess(r.staffMessage || '已尝试补发');
-      setLastNotifyReach({
-        kind: 'inbound_notice',
-        title: '到件补发触达',
-        staffMessage: r.staffMessage || '已尝试补发',
-        pushed: r.customerPushed ? 1 : 0,
-        unbound: r.customerBound ? 0 : 1,
-        failed: r.customerBound && !r.customerPushed ? 1 : 0,
-        failedIds: r.customerBound && !r.customerPushed ? [item.id] : [],
-      });
-    } catch (e: any) {
-      notifyError(e?.message || '补发失败');
-    } finally {
-      setResendingNoticeId(null);
-    }
+    setInventoryConfirm({
+      title: '补发到件通知',
+      description: `补发到件通知？运单 ${item.trackingNumber}。已绑定微信会私信取件码；未绑定请当面报码或引导绑定后再试。`,
+      confirmText: '确认补发',
+      onConfirm: async () => {
+        setResendingNoticeId(item.id);
+        try {
+          const r = await inboundService.resendInboundNotice(item.id);
+          notifySuccess(r.staffMessage || '已尝试补发');
+          setLastNotifyReach({
+            kind: 'inbound_notice',
+            title: '到件补发触达',
+            staffMessage: r.staffMessage || '已尝试补发',
+            pushed: r.customerPushed ? 1 : 0,
+            unbound: r.customerBound ? 0 : 1,
+            failed: r.customerBound && !r.customerPushed ? 1 : 0,
+            failedIds: r.customerBound && !r.customerPushed ? [item.id] : [],
+          });
+        } catch (e: any) {
+          notifyError(e?.message || '补发失败');
+        } finally {
+          setResendingNoticeId(null);
+        }
+      },
+    });
   };
 
 
-  const onBatchResendInboundNotice = async () => {
+  const onBatchResendInboundNotice = () => {
     if (!writable || batchReminding || remindingId || resendingNoticeId || !data?.items?.length) return;
     const targets = data.items
       .filter((it) => selected.has(it.id) && canResendInboundNotice(it))
@@ -214,35 +237,38 @@ const Inventory: React.FC = () => {
       notifyError('所选包裹中没有可补发到件的（需在库或滞留）');
       return;
     }
-    const ok = window.confirm(
-      `对已选 ${targets.length} 件批量补发到件通知？\n\n已绑定会私信取件码；未绑定请当面报码或引导绑定后再试。最多 30 件。`,
-    );
-    if (!ok) return;
-    setResendingNoticeId('batch');
-    try {
-      const r = await inboundService.resendInboundNoticeBatch(targets.map((it) => it.id));
-      const failedIds = (r.results || [])
-        .filter((x) => !x.ok || (x.customerBound && !x.customerPushed))
-        .map((x) => x.id);
-      notifySuccess(r.staffMessage);
-      setLastNotifyReach({
-        kind: 'inbound_notice',
-        title: `批量补发到件（${r.total} 件）`,
-        staffMessage: r.staffMessage,
-        pushed: r.pushed,
-        unbound: r.unbound,
-        failed: r.failed,
-        failedIds: [...new Set(failedIds)],
-      });
-      setSelected(new Set());
-    } catch (err) {
-      notifyError(err instanceof Error ? err.message : '批量补发失败');
-    } finally {
-      setResendingNoticeId(null);
-    }
+    setInventoryConfirm({
+      title: '批量补发到件通知',
+      description: `对已选 ${targets.length} 件批量补发到件通知？已绑定会私信取件码；未绑定请当面报码或引导绑定后再试。最多 30 件。`,
+      confirmText: '确认补发',
+      onConfirm: async () => {
+        setResendingNoticeId('batch');
+        try {
+          const r = await inboundService.resendInboundNoticeBatch(targets.map((it) => it.id));
+          const failedIds = (r.results || [])
+            .filter((x) => !x.ok || (x.customerBound && !x.customerPushed))
+            .map((x) => x.id);
+          notifySuccess(r.staffMessage);
+          setLastNotifyReach({
+            kind: 'inbound_notice',
+            title: `批量补发到件（${r.total} 件）`,
+            staffMessage: r.staffMessage,
+            pushed: r.pushed,
+            unbound: r.unbound,
+            failed: r.failed,
+            failedIds: [...new Set(failedIds)],
+          });
+          setSelected(new Set());
+        } catch (err) {
+          notifyError(err instanceof Error ? err.message : '批量补发失败');
+        } finally {
+          setResendingNoticeId(null);
+        }
+      },
+    });
   };
 
-const onBatchRemindOverdue = async () => {
+  const onBatchRemindOverdue = () => {
     if (!writable || batchReminding || remindingId || resendingNoticeId || !data?.items?.length) return;
     const ids = data.items
       .filter((it) => selected.has(it.id) && isRemindable(it))
@@ -252,35 +278,39 @@ const onBatchRemindOverdue = async () => {
       notifyError('所选包裹中没有可提醒的（需滞留或在库满 3 天）');
       return;
     }
-    const ok = window.confirm(
-      `对已选 ${ids.length} 件批量发滞留提醒？\n\n已绑定会私信取件码；未绑定仅旁路通知（不含取件码）。最多 30 件。`,
-    );
-    if (!ok) return;
-    setBatchReminding(true);
-    try {
-      const r = await overdueService.remindOverdueBatch(ids);
-      const failedIds = (r.results || [])
-        .filter((x) => !x.ok || (x.customerBound && !x.customerPushed))
-        .map((x) => x.id);
-      notifySuccess(r.staffMessage || '批量提醒完成');
-      setLastNotifyReach({
-        kind: 'overdue_remind',
-        title: `批量滞留提醒（${r.total} 件）`,
-        staffMessage: r.staffMessage || '批量提醒完成',
-        pushed: r.pushed,
-        unbound: r.unbound,
-        failed: r.failed,
-        failedIds: [...new Set(failedIds)],
-      });
-      setSelected(new Set());
-    } catch (e: any) {
-      notifyError(e?.message || '批量提醒失败');
-    } finally {
-      setBatchReminding(false);
-    }
+    setInventoryConfirm({
+      title: '批量发滞留提醒',
+      description: `对已选 ${ids.length} 件批量发滞留提醒？已绑定会私信取件码；未绑定仅旁路通知（不含取件码）。最多 30 件。`,
+      confirmText: '确认发送',
+      tone: 'warning',
+      onConfirm: async () => {
+        setBatchReminding(true);
+        try {
+          const r = await overdueService.remindOverdueBatch(ids);
+          const failedIds = (r.results || [])
+            .filter((x) => !x.ok || (x.customerBound && !x.customerPushed))
+            .map((x) => x.id);
+          notifySuccess(r.staffMessage || '批量提醒完成');
+          setLastNotifyReach({
+            kind: 'overdue_remind',
+            title: `批量滞留提醒（${r.total} 件）`,
+            staffMessage: r.staffMessage || '批量提醒完成',
+            pushed: r.pushed,
+            unbound: r.unbound,
+            failed: r.failed,
+            failedIds: [...new Set(failedIds)],
+          });
+          setSelected(new Set());
+        } catch (e: any) {
+          notifyError(e?.message || '批量提醒失败');
+        } finally {
+          setBatchReminding(false);
+        }
+      },
+    });
   };
 
-  const onRetryFailedNotify = async () => {
+  const onRetryFailedNotify = () => {
     const ids = (lastNotifyReach?.failedIds || []).filter(Boolean).slice(0, 30);
     if (
       ids.length === 0 ||
@@ -292,92 +322,97 @@ const onBatchRemindOverdue = async () => {
       return;
     }
     const kind = lastNotifyReach?.kind || 'inbound_notice';
-    const ok = window.confirm(
-      kind === 'overdue_remind'
-        ? `对 ${ids.length} 条私信失败再发滞留提醒？\n\n会走自动短重试；成功后客户微信会收到取件码。`
-        : `对 ${ids.length} 条私信失败再发到件通知？\n\n会走自动短重试；成功后客户微信会收到取件码。`,
-    );
-    if (!ok) return;
-    setRetryingFailed(true);
-    try {
-      if (kind === 'overdue_remind') {
-        const r =
-          ids.length === 1
-            ? await (async () => {
-                const one = await overdueService.remindOverdue(ids[0]);
-                return {
-                  total: 1,
-                  pushed: one.customerPushed ? 1 : 0,
-                  unbound: one.customerBound ? 0 : 1,
-                  failed: one.customerBound && !one.customerPushed ? 1 : 0,
-                  staffMessage: one.staffMessage || '已再发',
-                  results: [
-                    {
-                      id: ids[0],
-                      ok: true,
-                      customerBound: one.customerBound,
-                      customerPushed: one.customerPushed,
-                      staffMessage: one.staffMessage,
-                    },
-                  ],
-                };
-              })()
-            : await overdueService.remindOverdueBatch(ids);
-        const failedIds = (r.results || [])
-          .filter((x) => !x.ok || (x.customerBound && !x.customerPushed))
-          .map((x) => x.id);
-        setLastNotifyReach({
-          kind: 'overdue_remind',
-          title: `失败再发滞留提醒（${r.total} 条）`,
-          staffMessage: r.staffMessage || '再发完成',
-          pushed: r.pushed,
-          unbound: r.unbound,
-          failed: r.failed,
-          failedIds: [...new Set(failedIds)],
-        });
-        notifySuccess(r.staffMessage || '再发完成');
-      } else {
-        const r =
-          ids.length === 1
-            ? await (async () => {
-                const one = await inboundService.resendInboundNotice(ids[0]);
-                return {
-                  total: 1,
-                  pushed: one.customerPushed ? 1 : 0,
-                  unbound: one.customerBound ? 0 : 1,
-                  failed: one.customerBound && !one.customerPushed ? 1 : 0,
-                  staffMessage: one.staffMessage || '已再发',
-                  results: [
-                    {
-                      id: ids[0],
-                      ok: true,
-                      customerBound: one.customerBound,
-                      customerPushed: one.customerPushed,
-                      staffMessage: one.staffMessage,
-                    },
-                  ],
-                };
-              })()
-            : await inboundService.resendInboundNoticeBatch(ids);
-        const failedIds = (r.results || [])
-          .filter((x) => !x.ok || (x.customerBound && !x.customerPushed))
-          .map((x) => x.id);
-        setLastNotifyReach({
-          kind: 'inbound_notice',
-          title: `失败再发到件（${r.total} 条）`,
-          staffMessage: r.staffMessage || '再发完成',
-          pushed: r.pushed,
-          unbound: r.unbound,
-          failed: r.failed,
-          failedIds: [...new Set(failedIds)],
-        });
-        notifySuccess(r.staffMessage || '再发完成');
-      }
-    } catch (e: any) {
-      notifyError(e?.message || '再发失败');
-    } finally {
-      setRetryingFailed(false);
-    }
+    setInventoryConfirm({
+      title: kind === 'overdue_remind' ? '再发滞留提醒' : '再发到件通知',
+      description:
+        kind === 'overdue_remind'
+          ? `对 ${ids.length} 条私信失败再发滞留提醒？会走自动短重试；成功后客户微信会收到取件码。`
+          : `对 ${ids.length} 条私信失败再发到件通知？会走自动短重试；成功后客户微信会收到取件码。`,
+      confirmText: '确认再发',
+      tone: 'warning',
+      onConfirm: async () => {
+        setRetryingFailed(true);
+        try {
+          if (kind === 'overdue_remind') {
+            const r =
+              ids.length === 1
+                ? await (async () => {
+                    const one = await overdueService.remindOverdue(ids[0]);
+                    return {
+                      total: 1,
+                      pushed: one.customerPushed ? 1 : 0,
+                      unbound: one.customerBound ? 0 : 1,
+                      failed: one.customerBound && !one.customerPushed ? 1 : 0,
+                      staffMessage: one.staffMessage || '已再发',
+                      results: [
+                        {
+                          id: ids[0],
+                          ok: true,
+                          customerBound: one.customerBound,
+                          customerPushed: one.customerPushed,
+                          staffMessage: one.staffMessage,
+                        },
+                      ],
+                    };
+                  })()
+                : await overdueService.remindOverdueBatch(ids);
+            const failedIds = (r.results || [])
+              .filter((x) => !x.ok || (x.customerBound && !x.customerPushed))
+              .map((x) => x.id);
+            setLastNotifyReach({
+              kind: 'overdue_remind',
+              title: `失败再发滞留提醒（${r.total} 条）`,
+              staffMessage: r.staffMessage || '再发完成',
+              pushed: r.pushed,
+              unbound: r.unbound,
+              failed: r.failed,
+              failedIds: [...new Set(failedIds)],
+            });
+            notifySuccess(r.staffMessage || '再发完成');
+          } else {
+            const r =
+              ids.length === 1
+                ? await (async () => {
+                    const one = await inboundService.resendInboundNotice(ids[0]);
+                    return {
+                      total: 1,
+                      pushed: one.customerPushed ? 1 : 0,
+                      unbound: one.customerBound ? 0 : 1,
+                      failed: one.customerBound && !one.customerPushed ? 1 : 0,
+                      staffMessage: one.staffMessage || '已再发',
+                      results: [
+                        {
+                          id: ids[0],
+                          ok: true,
+                          customerBound: one.customerBound,
+                          customerPushed: one.customerPushed,
+                          staffMessage: one.staffMessage,
+                        },
+                      ],
+                    };
+                  })()
+                : await inboundService.resendInboundNoticeBatch(ids);
+            const failedIds = (r.results || [])
+              .filter((x) => !x.ok || (x.customerBound && !x.customerPushed))
+              .map((x) => x.id);
+            setLastNotifyReach({
+              kind: 'inbound_notice',
+              title: `失败再发到件（${r.total} 条）`,
+              staffMessage: r.staffMessage || '再发完成',
+              pushed: r.pushed,
+              unbound: r.unbound,
+              failed: r.failed,
+              failedIds: [...new Set(failedIds)],
+            });
+            notifySuccess(r.staffMessage || '再发完成');
+          }
+        } catch (e: any) {
+          notifyError(e?.message || '再发失败');
+        } finally {
+          setRetryingFailed(false);
+        }
+      },
+    });
   };
 
   // URL 为筛选条件真相源（支持 Dashboard 深链 ?status=overdue 等）
@@ -996,6 +1031,39 @@ const onBatchRemindOverdue = async () => {
           onChange={(p) => setPage(p)}
         />
       )}
+
+      <Modal
+        open={Boolean(inventoryConfirm)}
+        onClose={() => setInventoryConfirm(null)}
+        title={inventoryConfirm?.title}
+        description={inventoryConfirm?.description}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setInventoryConfirm(null)}
+              className="min-h-[40px] rounded-md border border-gray-200 bg-white px-4 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={runInventoryConfirm}
+              className={`min-h-[40px] rounded-md px-4 text-sm font-medium text-white ${
+                inventoryConfirm?.tone === 'warning'
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-primary hover:bg-primaryHover'
+              }`}
+            >
+              {inventoryConfirm?.confirmText || '确认'}
+            </button>
+          </>
+        }
+      >
+        <div className="rounded-md bg-orange-50 px-3 py-2 text-xs text-orange-900">
+          请确认补发对象和范围，完整取件码只会私信给已绑定客户。
+        </div>
+      </Modal>
 
       {/* 批量标记异常弹窗（仅 admin/clerk 可触发） */}
       <Modal

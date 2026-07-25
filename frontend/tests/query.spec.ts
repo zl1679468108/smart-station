@@ -239,6 +239,35 @@ test.describe('空状态', () => {
   });
 });
 
+test.describe('预约到店', () => {
+  test('取消预约使用页面内确认弹窗，不弹原生 confirm', async ({ page }) => {
+    let nativeDialogSeen = false;
+    page.on('dialog', async (dialog) => {
+      nativeDialogSeen = true;
+      await dialog.dismiss();
+    });
+
+    await page.goto('/#/query');
+    await typeViaKeypad(page, '13800001234');
+    await page.getByRole('button', { name: '查询包裹' }).click();
+    await expect(page.getByText('找到 1 个包裹')).toBeVisible({ timeout: 8000 });
+
+    await page.getByText('预约到店取件').click();
+    await expect(page.getByText('我的预约（1）')).toBeVisible({ timeout: 8000 });
+    await page.getByRole('button', { name: '取消预约' }).click();
+
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: '取消预约' })).toBeVisible();
+    await expect(page.getByRole('dialog').getByText(/2026-07-25 10:00-10:30/)).toBeVisible();
+    expect(nativeDialogSeen).toBe(false);
+
+    await page.getByRole('button', { name: '确认取消' }).click();
+    await expect(page.getByText('已取消预约', { exact: true })).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('已取消').first()).toBeVisible();
+    expect(nativeDialogSeen).toBe(false);
+  });
+});
+
 test.describe('Toast 提示', () => {
   test('查询失败显示错误 Toast', async ({ page }) => {
     await page.route('**/api/kiosk/query-by-phone-direct', (route) => {

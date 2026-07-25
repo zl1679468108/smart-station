@@ -1,11 +1,12 @@
 // 1.2.8 稳定性优化回归（O1/O3/O5/O8 相关 UI 断言，API 走 mock）
 import { test, expect } from '@playwright/test';
-import { mockLogin, mockBusinessApis, setLoggedIn } from './helpers/mock';
+import { mockLogin, mockBusinessApis, mockLayoutApis, setLoggedIn } from './helpers/mock';
 
 test.describe('O5/O9 工作台待办与深链', () => {
   test.beforeEach(async ({ page }) => {
     await mockLogin(page, 'admin');
     await mockBusinessApis(page);
+    await mockLayoutApis(page);
     await setLoggedIn(page, 'admin');
   });
 

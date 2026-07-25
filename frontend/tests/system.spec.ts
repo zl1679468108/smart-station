@@ -1,4 +1,4 @@
-// 系统管理 E2E 测试（5 个 Tab）
+// 系统管理 E2E 测试
 import { test, expect } from '@playwright/test';
 import { mockLogin, mockBusinessApis, setLoggedIn } from './helpers/mock';
 
@@ -9,13 +9,15 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe('系统管理 Tab 结构', () => {
-  test('admin 显示 5 个 Tab', async ({ page }) => {
+  test('admin 显示关键 Tab', async ({ page }) => {
     await page.goto('/#/admin/system');
     await expect(page.getByRole('heading', { name: '系统管理' })).toBeVisible();
     await expect(page.getByRole('button', { name: /驿站信息/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /门店布局/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /员工管理/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /货架管理/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /快递公司/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /通知记录/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /版本说明/ })).toBeVisible();
   });
 });
@@ -37,6 +39,32 @@ test.describe('员工管理 Tab', () => {
     await expect(page.getByText('管理员').first()).toBeVisible({ timeout: 8000 });
     await expect(page.getByText('店员甲').first()).toBeVisible();
     await expect(page.getByText('13800000001')).toBeVisible();
+  });
+
+  test('员工状态操作失败使用统一提醒，不弹原生 alert', async ({ page }) => {
+    await page.route('**/api/admin/staff/sf-002/status', (route) => {
+      route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: false, message: '禁用失败', data: null }),
+      });
+    });
+
+    let nativeDialogSeen = false;
+    page.on('dialog', async (dialog) => {
+      nativeDialogSeen = true;
+      await dialog.dismiss();
+    });
+
+    await page.goto('/#/admin/system');
+    await page.getByRole('button', { name: /员工管理/ }).click();
+    const clerkRow = page.getByRole('row').filter({ hasText: '店员甲' });
+    await expect(clerkRow).toBeVisible({ timeout: 8000 });
+    await clerkRow.getByRole('button', { name: '禁用' }).click();
+
+    await expect(page.getByRole('alert').getByText('操作失败')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('禁用失败').first()).toBeVisible();
+    expect(nativeDialogSeen).toBe(false);
   });
 });
 
@@ -77,6 +105,31 @@ test.describe('快递公司 Tab', () => {
   });
 });
 
+test.describe('通知记录 Tab', () => {
+  test('重新发送通知使用页面内确认弹窗，不弹原生 confirm', async ({ page }) => {
+    let nativeDialogSeen = false;
+    page.on('dialog', async (dialog) => {
+      nativeDialogSeen = true;
+      await dialog.dismiss();
+    });
+
+    await page.goto('/#/admin/system?tab=notify');
+    await page.getByRole('button', { name: /发送记录/ }).click();
+    await expect(page.getByText('到件通知').first()).toBeVisible({ timeout: 8000 });
+
+    await page.getByRole('button', { name: '重新发送' }).first().click();
+
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByRole('dialog').getByText('重新发送通知')).toBeVisible();
+    await expect(page.getByRole('dialog').getByText(/确认向 138\*\*\*\*1234/)).toBeVisible();
+    expect(nativeDialogSeen).toBe(false);
+
+    await page.getByRole('button', { name: '确认重发' }).click();
+    await expect(page.getByText(/取件码已私信到客户微信/)).toBeVisible({ timeout: 8000 });
+    expect(nativeDialogSeen).toBe(false);
+  });
+});
+
 test.describe('版本说明 Tab', () => {
   test('显示系统介绍', async ({ page }) => {
     await page.goto('/#/admin/system');
@@ -95,13 +148,13 @@ test.describe('版本说明 Tab', () => {
     await expect(page.getByText('/query 门户顶部展示当前驿站信息')).toBeVisible();
   });
 
-  test('显示近 3 个版本（1.2.1 / 1.2.0 / 1.1.0）', async ({ page }) => {
+  test('显示近 3 个版本（1.2.8 / 1.2.1 / 1.2.0）', async ({ page }) => {
     await page.goto('/#/admin/system');
     await page.getByRole('button', { name: /版本说明/ }).click();
+    await expect(page.getByText('v1.2.8', { exact: true })).toBeVisible({ timeout: 8000 });
     await expect(page.getByText('v1.2.1', { exact: true })).toBeVisible({ timeout: 8000 });
     await expect(page.getByText('v1.2.0', { exact: true })).toBeVisible();
-    await expect(page.getByText('v1.1.0', { exact: true })).toBeVisible();
-    // 1.0.0 已不在近 3 个版本展示范围
+    await expect(page.getByText('v1.1.0', { exact: true })).toBeHidden();
     await expect(page.getByText('v1.0.0', { exact: true })).toBeHidden();
   });
 });

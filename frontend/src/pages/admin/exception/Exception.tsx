@@ -83,6 +83,11 @@ const ExceptionPage: React.FC = () => {
     message: string;
     customerBound?: boolean;
     customerPushed?: boolean;
+    failed?: boolean;
+  } | null>(null);
+  const [resendConfirm, setResendConfirm] = useState<{
+    parcelId: string;
+    trackingNumber?: string;
   } | null>(null);
   const [parcelKeyword, setParcelKeyword] = useState('');
   const [searching, setSearching] = useState(false);
@@ -204,6 +209,29 @@ const ExceptionPage: React.FC = () => {
       notifyError(e?.message || '更新失败');
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const resendInboundNotice = async (parcelId: string, successText = '已尝试补发') => {
+    setResendingId(parcelId);
+    try {
+      const r = await inboundService.resendInboundNotice(parcelId);
+      setLastResend({
+        parcelId,
+        message: r.staffMessage || successText,
+        customerBound: r.customerBound,
+        customerPushed: r.customerPushed,
+      });
+      notifySuccess(r.staffMessage || successText);
+    } catch (e: any) {
+      setLastResend({
+        parcelId,
+        message: '补发失败，可再发一次',
+        failed: true,
+      });
+      notifyError(e?.message || '补发失败');
+    } finally {
+      setResendingId(null);
     }
   };
 
@@ -437,28 +465,11 @@ const ExceptionPage: React.FC = () => {
                             className="rounded border border-primary/30 bg-orange-50 px-2 py-1 text-[11px] text-primary hover:bg-orange-100 disabled:opacity-60"
                             onClick={() => {
                               const pid = item.parcel?.id || item.parcelId;
-                              void (async () => {
-                                if (!pid) return;
-                                const ok = window.confirm(
-                                  '补发到件通知？\n\n已绑定会私信取件码；未绑定请当面联系。',
-                                );
-                                if (!ok) return;
-                                setResendingId(pid);
-                                try {
-                                  const r = await inboundService.resendInboundNotice(pid);
-                                  setLastResend({
-                                    parcelId: pid,
-                                    message: r.staffMessage || '已尝试补发',
-                                    customerBound: r.customerBound,
-                                    customerPushed: r.customerPushed,
-                                  });
-                                  notifySuccess(r.staffMessage || '已尝试补发');
-                                } catch (e: any) {
-                                  notifyError(e?.message || '补发失败');
-                                } finally {
-                                  setResendingId(null);
-                                }
-                              })();
+                              if (!pid) return;
+                              setResendConfirm({
+                                parcelId: pid,
+                                trackingNumber: item.parcel?.trackingNumber,
+                              });
                             }}
                           >
                             {resendingId === (item.parcel?.id || item.parcelId)
@@ -489,23 +500,7 @@ const ExceptionPage: React.FC = () => {
                               className="rounded-md bg-amber-600 px-2 py-1 font-medium text-white hover:bg-amber-700 disabled:opacity-60"
                               onClick={() => {
                                 const pid = lastResend.parcelId;
-                                void (async () => {
-                                  setResendingId(pid);
-                                  try {
-                                    const r = await inboundService.resendInboundNotice(pid);
-                                    setLastResend({
-                                      parcelId: pid,
-                                      message: r.staffMessage || '已再发',
-                                      customerBound: r.customerBound,
-                                      customerPushed: r.customerPushed,
-                                    });
-                                    notifySuccess(r.staffMessage || '已再发');
-                                  } catch (e: any) {
-                                    notifyError(e?.message || '再发失败');
-                                  } finally {
-                                    setResendingId(null);
-                                  }
-                                })();
+                                void resendInboundNotice(pid, '已再发');
                               }}
                             >
                               {resendingId === lastResend.parcelId ? '再发中…' : '再发一次'}
@@ -520,6 +515,21 @@ const ExceptionPage: React.FC = () => {
                               }
                             >
                               看今日私信失败
+                            </button>
+                          </div>
+                        )}
+                        {lastResend.failed && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              disabled={resendingId === lastResend.parcelId}
+                              className="rounded-md bg-amber-600 px-2 py-1 font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                              onClick={() => {
+                                const pid = lastResend.parcelId;
+                                void resendInboundNotice(pid, '已再发');
+                              }}
+                            >
+                              {resendingId === lastResend.parcelId ? '再发中…' : '再发一次'}
                             </button>
                           </div>
                         )}
@@ -709,6 +719,43 @@ const ExceptionPage: React.FC = () => {
           placeholder="处理说明"
           className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
         />
+      </Modal>
+
+      <Modal
+        open={Boolean(resendConfirm)}
+        onClose={() => setResendConfirm(null)}
+        title="补发到件通知"
+        description={
+          resendConfirm?.trackingNumber
+            ? `向运单 ${resendConfirm.trackingNumber} 的客户补发到件通知？`
+            : '向该客户补发到件通知？'
+        }
+        footer={
+          <>
+            <button
+              type="button"
+              className="rounded-lg px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
+              onClick={() => setResendConfirm(null)}
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              className="rounded-lg bg-primary px-4 py-2 text-sm text-white hover:bg-primary/90"
+              onClick={() => {
+                const parcelId = resendConfirm?.parcelId;
+                setResendConfirm(null);
+                if (parcelId) void resendInboundNotice(parcelId);
+              }}
+            >
+              确认补发
+            </button>
+          </>
+        }
+      >
+        <div className="rounded-md bg-orange-50 px-3 py-2 text-xs text-orange-900">
+          已绑定客户会收到取件码私信；未绑定客户请通过当面或电话联系。
+        </div>
       </Modal>
     </div>
   );

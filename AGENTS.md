@@ -100,7 +100,7 @@ cd backend && npm run start:dev      # 开发模式（watch）
 cd backend && npm run build          # 生产构建
 
 # 前端
-cd frontend && npm run dev           # 开发模式，端口 3031
+cd frontend && npm run start         # 开发模式，端口 3031
 cd frontend && npm run build         # 生产构建
 cd frontend && npm run preview       # 预览生产构建
 

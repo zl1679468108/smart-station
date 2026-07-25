@@ -39,7 +39,7 @@ test.describe('登录流程', () => {
     await page.getByPlaceholder('请输入密码').fill('wrongpassword');
     await page.getByRole('button', { name: '登录' }).click();
 
-    await expect(page.getByText('账号或密码错误')).toBeVisible();
+    await expect(page.locator('form').getByText('账号或密码错误')).toBeVisible();
   });
 
   test('登录成功跳转到工作台', async ({ page }) => {

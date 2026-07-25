@@ -65,7 +65,7 @@ test.describe('M9.2 三端响应式：admin 后台', () => {
       await expect(page.getByRole('heading', { name: '出库管理' })).toBeVisible({ timeout: 8000 });
       await page.getByPlaceholder('收件人 11 位手机号').fill('13800001234');
       await page.getByRole('button', { name: '查询包裹' }).click();
-      await expect(page.getByText('找到 1 个在库包裹')).toBeVisible({ timeout: 8000 });
+      await expect(page.getByText('找到 1 个可取件包裹')).toBeVisible({ timeout: 8000 });
     });
   }
 });
@@ -134,7 +134,7 @@ test.describe('M18.4 3D 视图三端响应式', () => {
       expect(canvasBox!.height).toBeGreaterThan(0);
     });
 
-    test(`${name} 视口下门口标注可见`, async ({ page }) => {
+    test(`${name} 视口下 3D 取件位置指引可见`, async ({ page }) => {
       await mockBusinessApis(page);
       await mockLayoutApis(page);
       await page.setViewportSize(vp);
@@ -144,7 +144,10 @@ test.describe('M18.4 3D 视图三端响应式', () => {
       }
       await page.getByRole('button', { name: '查询包裹' }).click();
       await expect(page.getByText('找到 1 个包裹')).toBeVisible({ timeout: 8000 });
-      await expect(page.getByText('正门').first()).toBeVisible({ timeout: 15000 });
+      await expect(page.getByRole('heading', { name: '货架位置 3D 视图' })).toBeVisible();
+      await expect(page.locator('canvas').first()).toBeVisible({ timeout: 15000 });
+      await expect(page.getByText('点击地面可漫游，橙色为包裹货架')).toBeVisible();
+      await expect(page.getByText(/请前往 A 区 1 号货架/)).toBeVisible();
     });
   }
 

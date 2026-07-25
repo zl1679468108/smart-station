@@ -8,6 +8,7 @@ import type {
 } from '@/types/appointment';
 import { buildAppointmentFaceScript } from '@/utils/staffScripts';
 import { copyText } from '@/utils/stationVisit';
+import Modal from '@/components/ui/Modal';
 
 type Props = {
   /** 查件成功后的手机号，预填 */
@@ -34,6 +35,7 @@ const PickupAppointmentCard: React.FC<Props> = ({ defaultPhone, onBindClick }) =
   const [mine, setMine] = useState<AppointmentItem[]>([]);
   const [mineLoading, setMineLoading] = useState(false);
   const [mineQueried, setMineQueried] = useState(false);
+  const [cancelConfirm, setCancelConfirm] = useState<AppointmentItem | null>(null);
 
   useEffect(() => {
     if (defaultPhone && /^1\d{10}$/.test(defaultPhone)) {
@@ -128,9 +130,9 @@ const PickupAppointmentCard: React.FC<Props> = ({ defaultPhone, onBindClick }) =
 
   const cancel = async (id: string) => {
     if (!/^1\d{10}$/.test(phone)) return;
-    if (!window.confirm('确定取消这条预约吗？')) return;
     try {
       await kioskService.cancelAppointment(id, phone);
+      setCancelConfirm(null);
       void loadMine();
       void loadSlots();
     } catch (e: any) {
@@ -410,7 +412,7 @@ const PickupAppointmentCard: React.FC<Props> = ({ defaultPhone, onBindClick }) =
                     {['pending', 'confirmed'].includes(m.status) && (
                       <button
                         type="button"
-                        onClick={() => void cancel(m.id)}
+                        onClick={() => setCancelConfirm(m)}
                         className="shrink-0 text-xs text-gray-500 underline hover:text-danger"
                       >
                         取消预约
@@ -427,6 +429,41 @@ const PickupAppointmentCard: React.FC<Props> = ({ defaultPhone, onBindClick }) =
           </p>
         </div>
       )}
+
+      <Modal
+        open={Boolean(cancelConfirm)}
+        onClose={() => setCancelConfirm(null)}
+        title="取消预约"
+        description={
+          cancelConfirm
+            ? `确定取消 ${cancelConfirm.slotDate} ${cancelConfirm.slotLabel} 的预约吗？`
+            : undefined
+        }
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setCancelConfirm(null)}
+              className="min-h-[40px] rounded-md border border-gray-200 bg-white px-4 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              保留预约
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (cancelConfirm) void cancel(cancelConfirm.id);
+              }}
+              className="min-h-[40px] rounded-md bg-danger px-4 text-sm font-medium text-white hover:bg-red-600"
+            >
+              确认取消
+            </button>
+          </>
+        }
+      >
+        <div className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+          取消后该时段名额会释放，需要到店时可重新预约。
+        </div>
+      </Modal>
     </div>
   );
 };

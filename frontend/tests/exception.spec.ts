@@ -1,6 +1,6 @@
 // 异常件管理 E2E 测试（M24.6）
 import { test, expect } from '@playwright/test';
-import { mockLogin, mockBusinessApis, setLoggedIn } from './helpers/mock';
+import { EXCEPTION_ITEMS, mockLogin, mockBusinessApis, setLoggedIn } from './helpers/mock';
 
 test.describe('异常件管理（admin）', () => {
   test.beforeEach(async ({ page }) => {
@@ -37,6 +37,61 @@ test.describe('异常件管理（admin）', () => {
     await expect(page.getByRole('heading', { name: '处理异常' })).toBeVisible();
     await page.getByRole('button', { name: '保存' }).click();
     await expect(page.getByRole('heading', { name: '异常件管理' })).toBeVisible();
+  });
+
+  test('补发到件使用页面内确认弹窗，失败后显示再发入口', async ({ page }) => {
+    await page.route('**/api/exception**', (route) => {
+      const req = route.request();
+      const url = new URL(req.url());
+      if (req.method() !== 'GET' || !url.pathname.endsWith('/api/exception')) {
+        return route.fallback();
+      }
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          message: 'OK',
+          data: {
+            items: [
+              {
+                ...EXCEPTION_ITEMS[0],
+                parcel: { ...EXCEPTION_ITEMS[0].parcel!, status: 'in_stock' },
+              },
+            ],
+            total: 1,
+            page: 1,
+            pageSize: 20,
+          },
+        }),
+      });
+    });
+    await page.route('**/api/inbound/*/resend-notice', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: false, message: '模拟私信失败', data: null }),
+      });
+    });
+    let nativeDialogSeen = false;
+    page.on('dialog', async (dialog) => {
+      nativeDialogSeen = true;
+      await dialog.dismiss();
+    });
+
+    await page.goto('/#/admin/exception');
+    await expect(page.getByText('外包装严重破损，内部物品可能受损')).toBeVisible();
+    await page.getByRole('button', { name: '补发到件' }).click();
+
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: '补发到件通知' })).toBeVisible();
+    await expect(page.getByRole('dialog').getByText(/运单 YTO1111222233/)).toBeVisible();
+    expect(nativeDialogSeen).toBe(false);
+
+    await page.getByRole('button', { name: '确认补发' }).click();
+    await expect(page.getByText('补发回执：补发失败，可再发一次')).toBeVisible();
+    await expect(page.getByRole('button', { name: '再发一次' })).toBeVisible();
+    expect(nativeDialogSeen).toBe(false);
   });
 });
 

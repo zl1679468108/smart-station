@@ -10,7 +10,12 @@ test.beforeEach(async ({ page }) => {
 
 // 辅助：通过 label 文本定位同容器内的 input
 function inputByLabel(page: import('@playwright/test').Page, labelText: string) {
-  return page.getByText(labelText, { exact: true }).locator('xpath=following-sibling::input');
+  return page
+    .locator('label')
+    .filter({ hasText: labelText })
+    .locator('xpath=..')
+    .locator('input')
+    .first();
 }
 
 test.describe('入库页面结构', () => {
@@ -38,7 +43,7 @@ test.describe('入库页面结构', () => {
   test('切换到批量导入 Tab', async ({ page }) => {
     await page.goto('/#/admin/inbound');
     await page.getByRole('button', { name: '批量导入' }).click();
-    await expect(page.getByText('批量导入（CSV 粘贴）')).toBeVisible();
+    await expect(page.getByText('批量导入（粘贴）')).toBeVisible();
   });
 });
 
@@ -63,7 +68,7 @@ test.describe('扫码入库', () => {
     await page.getByPlaceholder('11 位手机号').fill('13800001234');
     await page.getByRole('button', { name: '确认入库' }).click();
 
-    await expect(page.getByText('入库成功')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole('heading', { name: '入库成功' })).toBeVisible({ timeout: 8000 });
     await expect(page.getByText('取件码', { exact: true })).toBeVisible();
     // 表单应被清空
     await expect(page.getByPlaceholder('扫描或输入运单号')).toHaveValue('');
@@ -96,12 +101,12 @@ test.describe('手动录入', () => {
   test('完整手动录入成功', async ({ page }) => {
     await page.goto('/#/admin/inbound');
     await page.getByRole('button', { name: '手动录入' }).click();
-    await inputByLabel(page, '运单号 *').fill('SF9999999999');
-    await inputByLabel(page, '收件人姓名 *').fill('李四');
-    await inputByLabel(page, '收件人手机号 *').fill('13900005678');
+    await inputByLabel(page, '运单号').fill('SF9999999999');
+    await inputByLabel(page, '收件人姓名').fill('李四');
+    await inputByLabel(page, '收件人手机号').fill('13900005678');
     await page.getByRole('button', { name: '确认入库' }).click();
 
-    await expect(page.getByText('入库成功')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole('heading', { name: '入库成功' })).toBeVisible({ timeout: 8000 });
   });
 
   test('快递公司下拉显示启用中的公司', async ({ page }) => {
@@ -129,7 +134,7 @@ test.describe('批量导入', () => {
     await page.getByRole('button', { name: '批量导入' }).click();
     // 填入仅一个字段（字段不足）
     await page.locator('textarea').fill('SF1234567890');
-    await page.getByRole('button', { name: '开始导入' }).click();
+    await page.getByRole('button', { name: '预检并导入' }).click();
 
     await expect(page.getByText(/字段不足|字段不能为空/)).toBeVisible({ timeout: 8000 });
   });
@@ -138,23 +143,38 @@ test.describe('批量导入', () => {
     await page.goto('/#/admin/inbound');
     await page.getByRole('button', { name: '批量导入' }).click();
     await page.locator('textarea').fill('SF1234567890,张三,12345');
-    await page.getByRole('button', { name: '开始导入' }).click();
+    await page.getByRole('button', { name: '预检并导入' }).click();
 
     await expect(page.getByText('手机号格式不正确')).toBeVisible({ timeout: 8000 });
   });
 
   test('正确格式批量导入成功', async ({ page }) => {
+
+    let nativeDialogSeen = false;
+    page.on('dialog', async (dialog) => {
+      nativeDialogSeen = true;
+      await dialog.dismiss();
+    });
+
     await page.goto('/#/admin/inbound');
     await page.getByRole('button', { name: '批量导入' }).click();
     await page.locator('textarea').fill(
       'SF1234567890,张三,13800001234,易碎品\nZTO9876543210,李四,13900005678',
     );
-    await page.getByRole('button', { name: '开始导入' }).click();
+    await page.getByRole('button', { name: '预检并导入' }).click();
+
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: '确认继续批量入库' })).toBeVisible();
+    await expect(page.getByRole('dialog').getByText(/未绑定客户需当面报码/)).toBeVisible();
+    expect(nativeDialogSeen).toBe(false);
+
+    await page.getByRole('button', { name: '继续入库' }).click();
 
     await expect(page.getByText('导入结果')).toBeVisible({ timeout: 8000 });
     await expect(page.getByText('总计：2')).toBeVisible();
     await expect(page.getByText('成功：2')).toBeVisible();
     await expect(page.getByText('失败：0')).toBeVisible();
+    expect(nativeDialogSeen).toBe(false);
   });
 });
 
@@ -166,7 +186,7 @@ test.describe('入库成功展示', () => {
     await page.getByPlaceholder('11 位手机号').fill('13800001234');
     await page.getByRole('button', { name: '确认入库' }).click();
 
-    await expect(page.getByText('入库成功')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole('heading', { name: '入库成功' })).toBeVisible({ timeout: 8000 });
     // 取件码格式 X-X-XXXX，大字号显示
     await expect(page.locator('.font-mono.text-2xl')).toBeVisible();
   });

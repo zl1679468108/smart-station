@@ -68,11 +68,13 @@ const StaffTab: React.FC = () => {
 
   const handleToggleStatus = async (staff: Staff) => {
     const next = staff.status === 'active' ? 'disabled' : 'active';
+    setError('');
     try {
       await adminService.setStaffStatus(staff.id, next);
       invalidateStaff();
     } catch (err) {
-      alert(err instanceof Error ? err.message : '操作失败');
+      const message = err instanceof Error ? err.message : '操作失败';
+      setError(message);
     }
   };
 
@@ -83,12 +85,14 @@ const StaffTab: React.FC = () => {
   };
 
   const handleSaveEdit = async (staff: Staff) => {
+    setError('');
     try {
       await adminService.updateStaff(staff.id, { role: editRole, username: editUsername });
       setEditingId(null);
       invalidateStaff();
     } catch (err) {
-      alert(err instanceof Error ? err.message : '保存失败');
+      const message = err instanceof Error ? err.message : '保存失败';
+      setError(message);
     }
   };
 

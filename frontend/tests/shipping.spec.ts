@@ -40,6 +40,31 @@ test.describe('寄件管理（admin）', () => {
     await expect(page.getByText('北京市朝阳区测试路 1 号')).toBeVisible();
     await expect(page.getByText('上海市浦东新区示范街 2 号')).toBeVisible();
   });
+
+  test('取消寄件单使用页面内确认弹窗，不弹原生 confirm', async ({ page }) => {
+    let nativeDialogSeen = false;
+    page.on('dialog', async (dialog) => {
+      nativeDialogSeen = true;
+      await dialog.dismiss();
+    });
+
+    await page.goto('/#/admin/shipping');
+    await expect(page.getByText('JJ20260715000001')).toBeVisible({ timeout: 8000 });
+    const firstOrder = page.locator('.rounded-xl').filter({ hasText: 'JJ20260715000001' }).first();
+    await firstOrder.getByRole('button', { name: '取消' }).click();
+
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: '取消寄件单' })).toBeVisible();
+    await expect(page.getByRole('dialog').getByText(/JJ20260715000001/)).toBeVisible();
+    expect(nativeDialogSeen).toBe(false);
+
+    await page.getByRole('button', { name: '确认取消' }).click();
+    await expect(
+      page.locator('main').getByText('寄件单 JJ20260715000001 已更新为「已取消」'),
+    ).toBeVisible({ timeout: 8000 });
+    await expect(firstOrder.getByText('已取消').first()).toBeVisible({ timeout: 8000 });
+    expect(nativeDialogSeen).toBe(false);
+  });
 });
 
 test.describe('寄件管理（clerk 可写）', () => {
