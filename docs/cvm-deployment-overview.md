@@ -35,8 +35,7 @@
 |---|---|---|
 | PC 工作人员后台 | PC Web | https://zlspace.site/smart-station/ |
 | 登录页 | PC Web | https://zlspace.site/smart-station/#/admin/login |
-| 取件自助（PAD/现场） | 平板 PAD | https://zlspace.site/smart-station/#/query |
-| 远端查件 H5 | H5 | https://zlspace.site/smart-station/#/query?device=h5 |
+| 取件自助（PAD / H5 自适应） | 平板 PAD / H5 | https://zlspace.site/smart-station/#/query |
 | 出库扫描机 | Web | https://zlspace.site/smart-station/#/scan |
 | API Health | — | https://zlspace.site/smart-station/api/health |
 
@@ -52,42 +51,15 @@
 
 - 前端：React 18 + Vite + TypeScript + Tailwind（单一响应式应用）
 - 后端：NestJS 10 + Token Session + Supabase JS SDK
-- 多端：`/admin/*` 管理后台 · `/query/*` 自助查件 · `/scan/*` 扫描出库 · H5 用 `?device=h5`
+- 多端：`/admin/*` 管理后台 · `/query/*` 自助查件（视口自适应 PAD/H5，无需 `?device=`） · `/scan/*` 扫描出库
 
-## 验证结果（2026-07-25）
-
-| 检查 | 结果 |
-|---|---|
-| `https://zlspace.site/smart-station/` | 200，HTML base 为 `/smart-station/` |
-| 静态 JS/CSS | 200 |
-| `https://zlspace.site/smart-station/api/health` | 200，`success: true` |
-| `POST /smart-station/api/auth/login` | 可达（错误账号返回业务错误） |
-| `https://zlspace.site/bookkeeping/` | 200（同机未受影响） |
-| `https://zlspace.site/portfolio/` | 200（同机未受影响） |
-
-## 运维入口
-
-```bash
-# 重新部署
-bash scripts/deploy-cvm.sh
-
-# 进程 / 日志
-ssh ubuntu@121.4.84.120 'pm2 list'
-ssh ubuntu@121.4.84.120 'pm2 logs smart-station-api --lines 100'
-
-# 健康检查
-curl -sI https://zlspace.site/smart-station/ | head -5
-curl -s https://zlspace.site/smart-station/api/health
-```
-
-## portfolio 回填清单
-
-更新 `portfolio/src/data/projects.ts` 中 `id: 'smart-station'`：
-
-- [x] `status: '已上线'`
-- [x] `techStack` 增加「腾讯云 CVM」
-- [x] `access` 补 PC Web / 平板 PAD / H5 链接（见上表）
-- [x] features 增加生产部署说明（可选）
-- [ ] 业务页截图（后续补 `public/screenshots/smart-station/`）
+## 验证结果（2026-07-25 13:42）
 
 同步 `portfolio/README.md` 状态表与 `portfolio/docs/tasks.md` 访问入口待办。
+
+
+## 最近部署
+
+- 时间：2026-07-25 13:42（Asia/Shanghai）
+- 变更：`/query` 视口自适应，取消 `?device=`；作品集入口收敛为 PC Web + 取件自助
+- 验证：前端 200 · `/api/health` ok · siblings portfolio/bookkeeping 200

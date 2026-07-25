@@ -1,8 +1,9 @@
 /**
  * 查件门户链接（店员分享给客户绑定用）
- * - 优先 VITE_PUBLIC_QUERY_URL（生产完整 H5 地址）
- * - 否则用当前站点 Hash 路由 /#/query?device=h5
+ * - 优先 VITE_PUBLIC_QUERY_URL（生产完整地址）
+ * - 否则用当前站点 Hash 路由 /#/query
  * - 自动附带 stationId（当前登录驿站 / 显式传入），避免多站串站
+ * - 不再拼接 device 参数；/query 按视口自适应 Web / PAD / H5
  */
 
 import { getStationId } from '@/services/api';
@@ -11,11 +12,11 @@ function appendQueryParams(url: string, params: Record<string, string>): string 
   const entries = Object.entries(params).filter(([, v]) => Boolean(v && String(v).trim()));
   if (entries.length === 0) return url;
 
-  // 支持带 hash 的完整地址：https://x.com/app/#/query?device=h5
+  // 支持带 hash 的完整地址：https://x.com/app/#/query?stationId=xxx
   const hashIdx = url.indexOf('#');
   if (hashIdx >= 0) {
     const before = url.slice(0, hashIdx);
-    const hash = url.slice(hashIdx + 1); // /query?device=h5 或 /query
+    const hash = url.slice(hashIdx + 1); // /query?stationId=xxx 或 /query
     const qIdx = hash.indexOf('?');
     const path = qIdx >= 0 ? hash.slice(0, qIdx) : hash;
     const search = qIdx >= 0 ? hash.slice(qIdx + 1) : '';
@@ -23,6 +24,8 @@ function appendQueryParams(url: string, params: Record<string, string>): string 
     for (const [k, v] of entries) {
       if (!sp.get(k)) sp.set(k, v);
     }
+    // 历史链接可能仍带 device，统一去掉
+    sp.delete('device');
     const qs = sp.toString();
     return `${before}#${path}${qs ? `?${qs}` : ''}`;
   }
@@ -32,6 +35,7 @@ function appendQueryParams(url: string, params: Record<string, string>): string 
     for (const [k, v] of entries) {
       if (!u.searchParams.get(k)) u.searchParams.set(k, v);
     }
+    u.searchParams.delete('device');
     // 若原 url 是相对路径，尽量保留原形态
     if (!/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(url)) {
       return `${u.pathname}${u.search}${u.hash}`;
@@ -45,12 +49,10 @@ function appendQueryParams(url: string, params: Record<string, string>): string 
 }
 
 export function getQueryPortalUrl(opts?: {
-  device?: 'h5' | 'kiosk';
   stationId?: string | null;
 }): string {
-  const device = opts?.device || 'h5';
   const stationId = String(opts?.stationId ?? getStationId() ?? '').trim();
-  const extra: Record<string, string> = { device };
+  const extra: Record<string, string> = {};
   if (stationId) extra.stationId = stationId;
 
   const env = String(import.meta.env.VITE_PUBLIC_QUERY_URL || '').trim();
@@ -61,9 +63,9 @@ export function getQueryPortalUrl(opts?: {
   const path = window.location.pathname.replace(/\/$/, '') || '';
   const base = `${window.location.origin}${path}`;
   const sp = new URLSearchParams();
-  sp.set('device', device);
   if (stationId) sp.set('stationId', stationId);
-  return `${base}/#/query?${sp.toString()}`;
+  const qs = sp.toString();
+  return `${base}/#/query${qs ? `?${qs}` : ''}`;
 }
 
 /** 从当前页 URL 解析查件驿站（Hash 查询优先，兼容 ?station=） */

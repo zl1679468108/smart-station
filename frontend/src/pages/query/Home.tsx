@@ -28,7 +28,7 @@ const Warehouse3D = React.lazy(() => import('@/components/warehouse3d'));
 
 type QueryTab = 'phone' | 'tracking' | 'code';
 
-// 用户自助查询门户：无登录，三种查询方式；portal/kiosk 常驻虚拟键盘，h5 用原生键盘
+// 用户自助查询门户：无登录，三种查询方式；portal（≥768）常驻虚拟键盘，h5（<768）用原生键盘
 const Home: React.FC = () => {
   const device = useQueryDevice();
   const useNativeInput = device === 'h5';

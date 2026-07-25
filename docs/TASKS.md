@@ -3,6 +3,12 @@
 > 任务状态唯一来源。产品需求和路线见 [PRD.md](./PRD.md)。
 > 数据库 schema 见 [database-init.sql](./database-init.sql)。
 
+### 2026-07-25 /query 取消 device 参数，视口自适应
+
+| ID | 优先级 | 任务 | 范围 | 状态 | 备注 |
+|---|---|---|---|---|---|
+| Q-ADAPT-VIEWPORT | P1 | `/query` 无需 `?device=` | frontend/query + hooks + docs | done | `useQueryDevice` 按 `max-width:767` 判定 h5/portal；分享链接与作品集入口收敛为 `/#/query`；PAD/H5 同入口自适应；同步 PRD/AGENTS/portfolio |
+
 ### 2026-07-24 /m 收敛到 /query?device=h5
 
 | ID | 优先级 | 任务 | 范围 | 状态 | 说明 |
@@ -368,7 +374,7 @@
 | 库存列表/详情 | 基本正常 | 多维筛选/分页/批量异常标记可用；**URL 状态深链未接通**（见 O1） |
 | 出库（人工两步 + 记录） | 基本正常 | search + manual 有角色守卫 |
 | 扫描机自助出库 `/scan` | 可用但偏弱 | `@Public` 自助出库**无限流**；运单跨站查询（单租户可接受） |
-| 查询门户 `/query`（含 `?device=h5`） | 基本正常 | 脱敏/IP 限流已有；远端模式无虚拟键盘 |
+| 查询门户 `/query`（视口自适应 PAD/H5） | 基本正常 | 脱敏/IP 限流已有；远端模式无虚拟键盘 |
 | 工作台 Dashboard + 门店 3D | 基本可用 | 真实 stats + 3D 只读/编辑入口；WarehouseScreen 待办标题残留 `TODO` 文案；滞留/异常卡片跳库存深链失效 |
 | 滞留件 / 异常件完整流程 | **未实现** | 仅有 status 枚举与库存批量标异常；无 cron/退回/定责工作流（见 M24） |
 | 寄件 / 财务 / 独立统计报表 | **未实现** | 见 M25 / M26 |

@@ -41,9 +41,9 @@ frontend → HTTP REST /api → NestJS → Supabase JS (PostgREST) → PostgreSQ
 |---|---|---|---|
 | PC 后台 | ≥1200px | `/admin/*` | 工作人员 |
 | 平板 | 768–1200px | `/admin/*` `/query/*` | 现场操作 + 自助 |
-| 查询门户 | 768–1200px | `/query/*` | 无登录取件查询（原 kiosk 已合并） |
+| 查询门户 | 全端 | `/query/*` | 无登录取件查询；按视口自适应 PAD/H5（无需 `?device=`） |
 | 扫描机 | 全屏 | `/scan/*` | 出库扫描 |
-| H5 | <768px | `/query?device=h5` | 远端轻量查件 |
+| H5 | <768px | `/query/*` | 同一 `/query` 窄屏自适应：原生键盘、无虚拟键盘 |
 
 ### 认证与多租户（摘要）
 
@@ -149,7 +149,7 @@ config/nginx/                 多项目子路径 conf
    - `docs/tasks.md` 勾选并注明部署日期  
 3. 汇报用户时给出公网 URL + 部署时间  
 
-标准入口：`/`、`#/admin/login`、`#/query`、`#/query?device=h5`、`/api/health`（均挂在 `/smart-station` 下）。  
+标准入口：`/`、`#/admin/login`、`#/query`、`/api/health`（均挂在 `/smart-station` 下；`/query` 自适应 Web/PAD/H5）。  
 可选：用户要求时再 `portfolio` 执行 `npm run deploy`。
 
 ## 9. 数据库与时间

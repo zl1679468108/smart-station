@@ -104,7 +104,7 @@ const NotifyBindHint: React.FC<{ phone: string }> = ({ phone }) => {
           className="min-h-[36px] rounded-md border border-orange-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-orange-900 hover:bg-orange-100"
           onClick={() => {
             void (async () => {
-              const url = getQueryPortalUrl({ device: 'h5' });
+              const url = getQueryPortalUrl();
               if (!url) {
                 notifyError('暂无法生成链接，请配置 VITE_PUBLIC_QUERY_URL 或在浏览器中打开本系统');
                 return;

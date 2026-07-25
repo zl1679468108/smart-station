@@ -287,11 +287,10 @@ test.describe('Toast 提示', () => {
 });
 
 
-test.describe('H5 设备模式', () => {
-  test('device=h5 显示返回栏、隐藏虚拟键盘且可用原生输入', async ({ page }) => {
-    await page.goto('/#/query?device=h5');
-    await expect(page.getByText('远端查件')).toBeVisible();
-    await expect(page.getByRole('button', { name: '返回' })).toBeVisible();
+test.describe('查询端自适应', () => {
+  test('窄屏 H5 隐藏虚拟键盘且可用原生输入', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/#/query');
     await expect(page.getByRole('heading', { name: '手机号查询' })).toBeVisible();
     // 虚拟键盘数字键不应出现
     await expect(page.getByRole('button', { name: '1', exact: true })).toHaveCount(0);
@@ -300,7 +299,8 @@ test.describe('H5 设备模式', () => {
     await expect(phone).toHaveValue('13800001234');
   });
 
-  test('默认 portal 模式仍显示虚拟键盘', async ({ page }) => {
+  test('宽屏 portal 模式仍显示虚拟键盘', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto('/#/query');
     await expect(page.getByRole('button', { name: '1', exact: true })).toBeVisible();
   });

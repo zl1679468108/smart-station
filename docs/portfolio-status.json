@@ -2,7 +2,7 @@
   "id": "smart-station",
   "name": "智能快递驿站",
   "status": "已上线",
-  "deployedAt": "2026-07-25",
+  "deployedAt": "2026-07-25 13:42",
   "domain": "zlspace.site",
   "server": "121.4.84.120",
   "subpath": "smart-station",
@@ -10,7 +10,6 @@
     "home": "https://zlspace.site/smart-station/",
     "admin": "https://zlspace.site/smart-station/#/admin/login",
     "query": "https://zlspace.site/smart-station/#/query",
-    "queryH5": "https://zlspace.site/smart-station/#/query?device=h5",
     "scan": "https://zlspace.site/smart-station/#/scan",
     "apiBase": "https://zlspace.site/smart-station/api/",
     "health": "https://zlspace.site/smart-station/api/health"
@@ -33,7 +32,11 @@
     "PostgreSQL",
     "腾讯云 CVM"
   ],
-  "platforms": ["Web", "平板 PAD", "H5"],
+  "platforms": [
+    "Web",
+    "平板 PAD",
+    "H5"
+  ],
   "access": [
     {
       "id": "ss-web",
@@ -43,25 +46,28 @@
       "href": "https://zlspace.site/smart-station/"
     },
     {
-      "id": "ss-pad",
+      "id": "ss-query",
       "kind": "link",
       "label": "取件自助",
-      "platform": "平板 PAD",
-      "href": "https://zlspace.site/smart-station/#/query"
-    },
-    {
-      "id": "ss-h5",
-      "kind": "link",
-      "label": "H5 查件",
       "platform": "H5",
-      "href": "https://zlspace.site/smart-station/#/query?device=h5"
+      "href": "https://zlspace.site/smart-station/#/query"
     }
   ],
   "verification": {
     "frontendHttp": 200,
     "healthHttp": 200,
-    "healthBody": { "status": "ok" },
-    "siblingsOk": ["portfolio", "bookkeeping"]
+    "healthBody": {
+      "status": "ok"
+    },
+    "siblingsOk": [
+      "portfolio",
+      "bookkeeping"
+    ],
+    "verifiedAt": "2026-07-25 13:42",
+    "notes": [
+      "/query 按视口自适应，不再需要 ?device=h5",
+      "入口：PC Web + 取件自助 /#/query"
+    ]
   },
   "docs": {
     "overview": "docs/cvm-deployment-overview.md",
@@ -70,6 +76,7 @@
   "notes": [
     "HashRouter：业务路径在 hash 内",
     "API 前缀：前端 VITE_API_BASE_URL=/smart-station，服务路径已含 /api",
+    "入口两个：PC Web 后台 + /query 取件自助；/query 按视口自适应 Web/PAD/H5，无需 ?device=",
     "Nginx 多项目 conf 需与 bookkeeping/lifetracker/portfolio 保持同步"
   ]
 }

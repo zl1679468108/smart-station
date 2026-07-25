@@ -13,7 +13,7 @@ export function buildBindGuideScript(opts?: {
   queryUrl?: string | null;
 }): string {
   const station = opts?.stationName?.trim() || '本驿站';
-  const url = (opts?.queryUrl ?? getQueryPortalUrl({ device: 'h5' })).trim();
+  const url = (opts?.queryUrl ?? getQueryPortalUrl()).trim();
   const hint = opts?.queryUrlHint?.trim() || (url ? url : '驿站查件页');
   return [
     `【${station}】您好，包裹到了可微信自动提醒。`,
@@ -34,7 +34,7 @@ export function buildBindShareScript(opts?: {
   queryUrl?: string | null;
 }): string {
   const station = opts?.stationName?.trim() || '本驿站';
-  const url = (opts?.queryUrl ?? getQueryPortalUrl({ device: 'h5' })).trim();
+  const url = (opts?.queryUrl ?? getQueryPortalUrl()).trim();
   const lines = [
     `【${station}】您好，包裹到了可微信自动提醒。`,
     url ? `请点开绑定：${url}` : '请打开驿站查件页，用收件手机号绑定微信通知。',
