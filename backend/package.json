@@ -4,10 +4,11 @@
   "description": "智能快递驿站存取件管理系统 - 后端",
   "private": true,
   "scripts": {
-    "build": "nest build",
+    "build": "NODE_ENV=development nest build",
     "start": "nest start",
-    "start:dev": "nest start --watch",
-    "start:prod": "node dist/main.js"
+    "start:dev": "NODE_ENV=development NODE_OPTIONS=--dns-result-order=ipv4first nest start --watch",
+    "start:prod": "NODE_ENV=production NODE_OPTIONS=--dns-result-order=ipv4first node dist/main.js",
+    "build:prod": "NODE_ENV=production nest build"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",

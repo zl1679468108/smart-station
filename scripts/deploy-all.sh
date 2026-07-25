@@ -10,5 +10,6 @@ if [ -f "$ROOT/scripts/preflight.sh" ]; then
 fi
 "$ROOT/scripts/deploy-backend.sh"
 "$ROOT/scripts/deploy-frontend.sh"
-echo "[deploy-all] 前后端构建完成"
-echo "[deploy-all] 试用步骤见 docs/TRIAL-CHECKLIST.md"
+echo "[deploy-all] 前后端本地生产构建完成"
+echo "[deploy-all] 上传到 CVM 请执行: bash scripts/deploy-cvm.sh"
+echo "[deploy-all] 试用步骤见 docs/TRIAL-CHECKLIST.md / docs/deployment.md"

@@ -1,0 +1,75 @@
+{
+  "id": "smart-station",
+  "name": "智能快递驿站",
+  "status": "已上线",
+  "deployedAt": "2026-07-25",
+  "domain": "zlspace.site",
+  "server": "121.4.84.120",
+  "subpath": "smart-station",
+  "urls": {
+    "home": "https://zlspace.site/smart-station/",
+    "admin": "https://zlspace.site/smart-station/#/admin/login",
+    "query": "https://zlspace.site/smart-station/#/query",
+    "queryH5": "https://zlspace.site/smart-station/#/query?device=h5",
+    "scan": "https://zlspace.site/smart-station/#/scan",
+    "apiBase": "https://zlspace.site/smart-station/api/",
+    "health": "https://zlspace.site/smart-station/api/health"
+  },
+  "runtime": {
+    "frontendDir": "/var/www/smart-station",
+    "backendDir": "/opt/smart-station/backend",
+    "pm2Name": "smart-station-api",
+    "port": 3030,
+    "https": true,
+    "certificate": "Let's Encrypt (shared zlspace.site, DNS-01)"
+  },
+  "stack": [
+    "React 18",
+    "Vite",
+    "TypeScript",
+    "Tailwind",
+    "NestJS 10",
+    "Supabase",
+    "PostgreSQL",
+    "腾讯云 CVM"
+  ],
+  "platforms": ["Web", "平板 PAD", "H5"],
+  "access": [
+    {
+      "id": "ss-web",
+      "kind": "link",
+      "label": "PC Web",
+      "platform": "Web",
+      "href": "https://zlspace.site/smart-station/"
+    },
+    {
+      "id": "ss-pad",
+      "kind": "link",
+      "label": "取件自助",
+      "platform": "平板 PAD",
+      "href": "https://zlspace.site/smart-station/#/query"
+    },
+    {
+      "id": "ss-h5",
+      "kind": "link",
+      "label": "H5 查件",
+      "platform": "H5",
+      "href": "https://zlspace.site/smart-station/#/query?device=h5"
+    }
+  ],
+  "verification": {
+    "frontendHttp": 200,
+    "healthHttp": 200,
+    "healthBody": { "status": "ok" },
+    "siblingsOk": ["portfolio", "bookkeeping"]
+  },
+  "docs": {
+    "overview": "docs/cvm-deployment-overview.md",
+    "runbook": "docs/deployment.md"
+  },
+  "notes": [
+    "HashRouter：业务路径在 hash 内",
+    "API 前缀：前端 VITE_API_BASE_URL=/smart-station，服务路径已含 /api",
+    "Nginx 多项目 conf 需与 bookkeeping/lifetracker/portfolio 保持同步"
+  ]
+}

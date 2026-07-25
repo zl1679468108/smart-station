@@ -77,7 +77,7 @@ do
 done
 
 echo "[preflight] 部署脚本"
-for s in deploy-backend.sh deploy-frontend.sh deploy-all.sh; do
+for s in deploy-backend.sh deploy-frontend.sh deploy-all.sh deploy-cvm.sh; do
   if [ -x "$ROOT/scripts/$s" ] || [ -f "$ROOT/scripts/$s" ]; then ok "scripts/$s"; else bad "缺少 scripts/$s"; fi
 done
 

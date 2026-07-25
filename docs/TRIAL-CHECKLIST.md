@@ -117,7 +117,9 @@ cd frontend && npm run start
 
 ```bash
 bash scripts/preflight.sh
-bash scripts/deploy-all.sh
+bash scripts/deploy-all.sh   # 仅本地构建
+# 生产上线（CVM）：bash scripts/deploy-cvm.sh
+# 手册：docs/deployment.md
 ```
 
 - 后端：`backend/dist` → Node 进程（建议 `NODE_OPTIONS=--dns-result-order=ipv4first`）

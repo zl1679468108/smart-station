@@ -1082,10 +1082,9 @@ smart-station/
 - 图片上传前压缩（≤300KB）
 
 ### 8.6 部署约束
-- 平台：腾讯云开发 (CloudBase) 或 Vercel + Railway
-- 后端：CloudRun / Railway 容器服务
-- 前端：静态网站托管
-- 无 CI/CD，手动或脚本部署
+- 平台：腾讯云 CVM + Nginx + PM2（`zlspace.site/smart-station/`），详见 `docs/deployment.md`
+- 前端静态 + 后端 NestJS 同机子路径反代（`/smart-station/api/` → :3030）
+- 无 CI/CD，手动执行 `scripts/deploy-cvm.sh`
 
 ---
 

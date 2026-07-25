@@ -11,8 +11,9 @@ else
   npm install
 fi
 
-echo "[deploy-backend] build..."
-npm run build
+echo "[deploy-backend] build:prod..."
+npm run build:prod
 
 echo "[deploy-backend] 产物目录: $ROOT/backend/dist"
-echo "[deploy-backend] 启动示例: NODE_ENV=production NODE_OPTIONS=--dns-result-order=ipv4first node dist/main.js"
+echo "[deploy-backend] 生产上线请用: bash scripts/deploy-cvm.sh"
+echo "[deploy-backend] 本地启动示例: NODE_ENV=production NODE_OPTIONS=--dns-result-order=ipv4first node dist/main.js"

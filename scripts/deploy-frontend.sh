@@ -11,8 +11,16 @@ else
   npm install
 fi
 
-echo "[deploy-frontend] build..."
-npm run build
+# 默认按 CVM 子路径构建；本地纯构建可用 SUBPATH= 覆盖
+SUBPATH="${SUBPATH:-smart-station}"
+if [ -n "$SUBPATH" ]; then
+  echo "[deploy-frontend] 子路径构建: base=/$SUBPATH/  API_PREFIX=/$SUBPATH"
+  VITE_API_BASE_URL="/$SUBPATH" VITE_BASE="/$SUBPATH/" npm run build:prod
+else
+  echo "[deploy-frontend] 根路径构建"
+  npm run build
+fi
 
 echo "[deploy-frontend] 产物目录: $ROOT/frontend/dist"
-echo "[deploy-frontend] 请将 dist/ 上传到静态网站托管，并配置 API 反向代理 /api -> 后端"
+echo "[deploy-frontend] 生产上线请用: bash scripts/deploy-cvm.sh"
+echo "[deploy-frontend] 访问预期: https://zlspace.site/${SUBPATH:-}/  API: /${SUBPATH:-}/api/"
